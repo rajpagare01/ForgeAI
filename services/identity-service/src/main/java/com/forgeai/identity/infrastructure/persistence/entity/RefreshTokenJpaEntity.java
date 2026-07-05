@@ -1,27 +1,18 @@
-﻿package com.forgeai.identity.infrastructure.persistence.entity;
+package com.forgeai.identity.infrastructure.persistence.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * JPA Entity mapping for the RefreshToken domain entity.
- */
 @Entity
 @Table(name = "refresh_tokens")
-public class RefreshTokenJpaEntity {
+public class RefreshTokenJpaEntity extends BaseJpaEntity {
 
     @Id
-    private UUID id;
+    @Column(name = "token_id", updatable = false, nullable = false)
+    private UUID tokenId;
 
-    @Column(name = "session_id", nullable = false)
-    private UUID sessionId;
-
-    @Column(name = "token_hash", nullable = false, unique = true)
+    @Column(name = "token_hash", nullable = false)
     private String tokenHash;
 
     @Column(name = "expires_at", nullable = false)
@@ -30,30 +21,32 @@ public class RefreshTokenJpaEntity {
     @Column(name = "replaced_by")
     private UUID replacedBy;
 
-    @Column(nullable = false)
+    @Column(name = "revoked", nullable = false)
     private boolean revoked;
 
-    @Version
-    private Long version;
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "session_id", nullable = false)
+    private SessionJpaEntity session;
 
     protected RefreshTokenJpaEntity() {
         // JPA constructor
     }
 
-    public RefreshTokenJpaEntity(UUID id, UUID sessionId, String tokenHash, Instant expiresAt, UUID replacedBy, boolean revoked) {
-        this.id = id;
-        this.sessionId = sessionId;
-        this.tokenHash = tokenHash;
-        this.expiresAt = expiresAt;
-        this.replacedBy = replacedBy;
-        this.revoked = revoked;
-    }
+    public UUID getTokenId() { return tokenId; }
+    public void setTokenId(UUID tokenId) { this.tokenId = tokenId; }
 
-    public UUID getId() { return id; }
-    public UUID getSessionId() { return sessionId; }
     public String getTokenHash() { return tokenHash; }
+    public void setTokenHash(String tokenHash) { this.tokenHash = tokenHash; }
+
     public Instant getExpiresAt() { return expiresAt; }
+    public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
+
     public UUID getReplacedBy() { return replacedBy; }
+    public void setReplacedBy(UUID replacedBy) { this.replacedBy = replacedBy; }
+
     public boolean isRevoked() { return revoked; }
-    public Long getVersion() { return version; }
+    public void setRevoked(boolean revoked) { this.revoked = revoked; }
+
+    public SessionJpaEntity getSession() { return session; }
+    public void setSession(SessionJpaEntity session) { this.session = session; }
 }

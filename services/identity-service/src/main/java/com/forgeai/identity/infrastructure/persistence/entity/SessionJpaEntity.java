@@ -1,10 +1,7 @@
-﻿package com.forgeai.identity.infrastructure.persistence.entity;
+package com.forgeai.identity.infrastructure.persistence.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
+import com.forgeai.identity.domain.aggregate.SessionStatus;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -13,9 +10,10 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "sessions")
-public class SessionJpaEntity {
+public class SessionJpaEntity extends BaseJpaEntity {
 
     @Id
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
     @Column(name = "user_id", nullable = false)
@@ -30,40 +28,41 @@ public class SessionJpaEntity {
     @Column(name = "user_agent")
     private String userAgent;
 
-    @Column(nullable = false, length = 20)
-    private String status;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private SessionStatus status;
 
     @Column(name = "last_accessed", nullable = false)
     private Instant lastAccessed;
 
-    @Version
-    private Long version;
+    @OneToOne(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    private RefreshTokenJpaEntity refreshToken;
 
     protected SessionJpaEntity() {
         // JPA constructor
     }
 
-    public SessionJpaEntity(UUID id, UUID userId, String deviceInfo, String ipAddress, String userAgent, String status, Instant createdAt, Instant lastAccessed) {
-        this.id = id;
-        this.userId = userId;
-        this.deviceInfo = deviceInfo;
-        this.ipAddress = ipAddress;
-        this.userAgent = userAgent;
-        this.status = status;
-        this.createdAt = createdAt;
-        this.lastAccessed = lastAccessed;
-    }
-
     public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+
     public UUID getUserId() { return userId; }
+    public void setUserId(UUID userId) { this.userId = userId; }
+
     public String getDeviceInfo() { return deviceInfo; }
+    public void setDeviceInfo(String deviceInfo) { this.deviceInfo = deviceInfo; }
+
     public String getIpAddress() { return ipAddress; }
+    public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
+
     public String getUserAgent() { return userAgent; }
-    public String getStatus() { return status; }
-    public Instant getCreatedAt() { return createdAt; }
+    public void setUserAgent(String userAgent) { this.userAgent = userAgent; }
+
+    public SessionStatus getStatus() { return status; }
+    public void setStatus(SessionStatus status) { this.status = status; }
+
     public Instant getLastAccessed() { return lastAccessed; }
-    public Long getVersion() { return version; }
+    public void setLastAccessed(Instant lastAccessed) { this.lastAccessed = lastAccessed; }
+
+    public RefreshTokenJpaEntity getRefreshToken() { return refreshToken; }
+    public void setRefreshToken(RefreshTokenJpaEntity refreshToken) { this.refreshToken = refreshToken; }
 }

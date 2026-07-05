@@ -1,44 +1,32 @@
-﻿package com.forgeai.identity.infrastructure.persistence.entity;
+package com.forgeai.identity.infrastructure.persistence.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "password_reset_tokens")
-public class PasswordResetTokenJpaEntity {
+public class PasswordResetTokenJpaEntity extends BaseJpaEntity {
 
     @Id
-    private UUID id;
-
-    @Column(name = "user_id", nullable = false)
-    private UUID userId;
-
-    @Column(nullable = false, unique = true)
+    @Column(name = "token", updatable = false, nullable = false)
     private String token;
 
-    @Column(name = "expires_at", nullable = false)
-    private Instant expiresAt;
+    @Column(name = "expiration", nullable = false)
+    private Instant expiration;
 
-    @Column(nullable = false)
+    @Column(name = "used", nullable = false)
     private boolean used;
 
-    protected PasswordResetTokenJpaEntity() {}
-
-    public PasswordResetTokenJpaEntity(UUID id, UUID userId, String token, Instant expiresAt, boolean used) {
-        this.id = id;
-        this.userId = userId;
-        this.token = token;
-        this.expiresAt = expiresAt;
-        this.used = used;
+    protected PasswordResetTokenJpaEntity() {
+        // JPA constructor
     }
 
-    public UUID getId() { return id; }
-    public UUID getUserId() { return userId; }
     public String getToken() { return token; }
-    public Instant getExpiresAt() { return expiresAt; }
+    public void setToken(String token) { this.token = token; }
+
+    public Instant getExpiration() { return expiration; }
+    public void setExpiration(Instant expiration) { this.expiration = expiration; }
+
     public boolean isUsed() { return used; }
+    public void setUsed(boolean used) { this.used = used; }
 }

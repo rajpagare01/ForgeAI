@@ -1,4 +1,4 @@
-﻿package com.forgeai.identity.infrastructure.audit;
+package com.forgeai.identity.infrastructure.audit;
 
 import com.forgeai.identity.application.port.AuditLoggerPort;
 import org.slf4j.Logger;
@@ -14,6 +14,6 @@ public class AuditLoggerAdapter implements AuditLoggerPort {
 
     @Override
     public void log(UUID userId, String action, String detail) {
-        auditLog.info("AUDIT | USER: {} | ACTION: {} | DETAIL: {}", userId, action, detail);
+        auditLog.info("{\"userId\": \"{}\", \"action\": \"{}\", \"detail\": \"{}\"}", userId, action, detail);
     }
 }

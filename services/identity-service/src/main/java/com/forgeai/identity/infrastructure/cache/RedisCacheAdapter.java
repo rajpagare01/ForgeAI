@@ -1,35 +1,41 @@
-﻿package com.forgeai.identity.infrastructure.cache;
+package com.forgeai.identity.infrastructure.cache;
 
 import com.forgeai.identity.application.port.CachePort;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
 
-/**
- * Adapter for Redis cache.
- * Note: Temporarily using in-memory map to allow compilation without Spring Data Redis dependency,
- * but fully conforms to the interface expected by the application.
- */
 @Component
 public class RedisCacheAdapter implements CachePort {
 
-    private final Map<String, String> mockRedis = new ConcurrentHashMap<>();
+    private final StringRedisTemplate redisTemplate;
+
+    public RedisCacheAdapter(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
 
     @Override
     public void put(String key, String value, Duration ttl) {
-        mockRedis.put(key, value);
+        redisTemplate.opsForValue().set(key, value, ttl);
     }
 
     @Override
     public Optional<String> get(String key) {
-        return Optional.ofNullable(mockRedis.get(key));
+        return Optional.ofNullable(redisTemplate.opsForValue().get(key));
     }
 
     @Override
     public void evict(String key) {
-        mockRedis.remove(key);
+        redisTemplate.delete(key);
+    }
+
+    public boolean allowRequest(String key, int limit, Duration window) {
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1) {
+            redisTemplate.expire(key, window);
+        }
+        return count != null && count <= limit;
     }
 }
