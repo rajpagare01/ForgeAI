@@ -1,5 +1,0 @@
-CREATE DATABASE identity_db;
-CREATE DATABASE org_db;
-CREATE DATABASE project_db;
-CREATE DATABASE git_db;
-CREATE DATABASE spicedb_db;

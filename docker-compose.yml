@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forgeai-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: forgeai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: forgeai_identity
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # identity-service:
+  #   build:
+  #     context: ./services/identity-service
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/forgeai_identity
+  #     - SPRING_DATASOURCE_USERNAME=forgeai
+  #     - SPRING_DATASOURCE_PASSWORD=password
+
+volumes:
+  postgres_data:

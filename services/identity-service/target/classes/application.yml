@@ -1,31 +1,30 @@
 spring:
   application:
     name: identity-service
-  profiles:
-    active: local
+  
+  # Commented out until we implement the actual database configuration.
+  # datasource:
+  #   url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgeai_identity}
+  #   username: ${SPRING_DATASOURCE_USERNAME:forgeai}
+  #   password: ${SPRING_DATASOURCE_PASSWORD:password}
+  #   driver-class-name: org.postgresql.Driver
+  
+  # jpa:
+  #   hibernate:
+  #     ddl-auto: validate
+  #   show-sql: true
+  
+  # flyway:
+  #   enabled: false # Disabled until we have our first real migration
 
 server:
-  port: 8081
+  port: 8080
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info
   endpoint:
     health:
       show-details: always
-  metrics:
-    tags:
-      application: ${spring.application.name}
-
-springdoc:
-  api-docs:
-    path: /api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-
-logging:
-  level:
-    root: INFO
-    com.forgeai: DEBUG

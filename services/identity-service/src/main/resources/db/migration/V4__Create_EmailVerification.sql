@@ -1,8 +1,0 @@
-CREATE TABLE email_verification_tokens (
-    token VARCHAR(255) PRIMARY KEY,
-    expiration TIMESTAMP WITH TIME ZONE NOT NULL,
-    used BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    version BIGINT NOT NULL DEFAULT 0
-);
