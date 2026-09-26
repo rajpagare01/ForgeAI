@@ -3,15 +3,18 @@ package com.forgeai.identity.domain.model;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.UUID;
 import java.time.Instant;
+import java.util.UUID;
 
 @Getter
 @Setter
 public class SecurityEvent {
     private UUID id;
     private UUID userId;
-    private String eventType; // e.g. LOGIN_SUCCESS, LOGIN_FAILURE
-    private Instant timestamp;
+    private UUID organizationId;
+    private String eventType;
+    private Instant createdAt;
     private String ipAddress;
+    private String userAgent;
+    private String details;
 }

@@ -10,10 +10,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     // Dependencies will be injected here (e.g., AuthenticationUseCase)
-
+  
     @PostMapping("/login")
     public ResponseEntity<Void> login() {
-        // Placeholder for login implementation
+        
         return ResponseEntity.status(501).build(); // 501 Not Implemented
     }
 

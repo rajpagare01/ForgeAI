@@ -1,21 +1,24 @@
 spring:
   application:
     name: identity-service
-  
-  # Commented out until we implement the actual database configuration.
-  # datasource:
-  #   url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgeai_identity}
-  #   username: ${SPRING_DATASOURCE_USERNAME:forgeai}
-  #   password: ${SPRING_DATASOURCE_PASSWORD:password}
-  #   driver-class-name: org.postgresql.Driver
-  
-  # jpa:
-  #   hibernate:
-  #     ddl-auto: validate
-  #   show-sql: true
-  
-  # flyway:
-  #   enabled: false # Disabled until we have our first real migration
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgeai_identity}
+    username: ${SPRING_DATASOURCE_USERNAME:forgeai}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate  # Flyway manages the schema; Hibernate only validates
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
 
 server:
   port: 8080
@@ -28,3 +31,8 @@ management:
   endpoint:
     health:
       show-details: always
+
+logging:
+  level:
+    com.forgeai: DEBUG
+    org.flywaydb: INFO

@@ -3,15 +3,17 @@ package com.forgeai.identity.domain.model;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.UUID;
 import java.time.Instant;
+import java.util.UUID;
 
 @Getter
 @Setter
 public class RefreshToken {
     private UUID id;
-    private UUID userId;
-    private String token;
+    private UUID sessionId;
+    private String tokenHash;
+    private Instant issuedAt;
     private Instant expiresAt;
-    private boolean revoked;
+    private Instant revokedAt;
+    private UUID replacedBy;
 }

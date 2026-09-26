@@ -9,5 +9,8 @@ import java.util.UUID;
 @Setter
 public class Permission {
     private UUID id;
-    private String name; // e.g. PROJECT_READ, TASK_CREATE
+    private String resource;
+    private String action;
+    private String code;
+    private String description;
 }

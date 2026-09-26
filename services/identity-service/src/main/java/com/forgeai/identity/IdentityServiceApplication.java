@@ -2,18 +2,26 @@ package com.forgeai.identity;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 
-// Excluding Security and JPA auto-configuration for now as we are not implementing them yet, 
-// to avoid startup errors without proper setup.
+/**
+ * Identity Service Application
+ *
+ * This service is responsible for:
+ * - User identity management
+ * - Organization and team management
+ * - Authentication (login, sessions, tokens)
+ * - Authorization (RBAC: roles and permissions)
+ * - Security event auditing
+ *
+ * Spring Security is on the classpath but its auto-configuration is excluded
+ * until we implement the security configuration explicitly.
+ * DataSource and Flyway are active and connected to PostgreSQL.
+ */
 @SpringBootApplication(exclude = {
     SecurityAutoConfiguration.class,
-    ManagementWebSecurityAutoConfiguration.class,
-    DataSourceAutoConfiguration.class,
-    HibernateJpaAutoConfiguration.class
+    ManagementWebSecurityAutoConfiguration.class
 })
 public class IdentityServiceApplication {
 
