@@ -29,5 +29,11 @@ public class SessionRepositoryAdapter implements SessionRepository {
         return mapper.toDomain(jpaRepository.save(mapper.toEntity(entity)));
     }
 
-    // Placeholder for other methods based on interfaces...
+    
+    @Override
+    public List<Session> findActiveByUserId(UUID userId) {
+        return jpaRepository.findByUserIdAndRevokedAtIsNull(userId).stream().map(mapper::toDomain).collect(Collectors.toList());
+    }
+
 }
+

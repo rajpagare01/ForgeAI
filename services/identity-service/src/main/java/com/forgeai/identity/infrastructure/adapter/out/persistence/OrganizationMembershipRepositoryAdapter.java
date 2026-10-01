@@ -29,5 +29,31 @@ public class OrganizationMembershipRepositoryAdapter implements OrganizationMemb
         return mapper.toDomain(jpaRepository.save(mapper.toEntity(entity)));
     }
 
-    // Placeholder for other methods based on interfaces...
+    
+    @Override
+    public java.util.Optional<OrganizationMembership> findByUserIdAndOrganizationId(UUID userId, UUID organizationId) {
+        return jpaRepository.findByUserIdAndOrganizationId(userId, organizationId).map(mapper::toDomain);
+    }
+    
+    @Override
+    public List<OrganizationMembership> findByOrganizationId(UUID organizationId) {
+        return jpaRepository.findByOrganizationId(organizationId).stream().map(mapper::toDomain).collect(Collectors.toList());
+    }
+    
+    @Override
+    public List<OrganizationMembership> findByUserId(UUID userId) {
+        return jpaRepository.findByUserId(userId).stream().map(mapper::toDomain).collect(Collectors.toList());
+    }
+
+    @Override
+    public void deleteById(UUID id) {
+        jpaRepository.deleteById(id);
+    }
+
+    @Override
+    public long countByOrganizationIdAndRoleId(UUID organizationId, UUID roleId) {
+        return jpaRepository.countByOrganizationIdAndRoleId(organizationId, roleId);
+    }
+
 }
+

@@ -29,5 +29,23 @@ public class TeamMembershipRepositoryAdapter implements TeamMembershipRepository
         return mapper.toDomain(jpaRepository.save(mapper.toEntity(entity)));
     }
 
-    // Placeholder for other methods based on interfaces...
+    
+    @Override
+    public java.util.Optional<TeamMembership> findByTeamIdAndUserId(UUID teamId, UUID userId) {
+        return jpaRepository.findByTeamIdAndUserId(teamId, userId).map(mapper::toDomain);
+    }
+    @Override
+    public List<TeamMembership> findByTeamId(UUID teamId) {
+        return jpaRepository.findByTeamId(teamId).stream().map(mapper::toDomain).collect(Collectors.toList());
+    }
+    @Override
+    public List<TeamMembership> findByUserId(UUID userId) {
+        return jpaRepository.findByUserId(userId).stream().map(mapper::toDomain).collect(Collectors.toList());
+    }
+    @Override
+    public void deleteById(UUID id) {
+        jpaRepository.deleteById(id);
+    }
+
 }
+

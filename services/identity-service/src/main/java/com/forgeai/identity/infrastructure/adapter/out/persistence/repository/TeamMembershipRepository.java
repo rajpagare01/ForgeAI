@@ -8,4 +8,8 @@ import java.util.UUID;
 
 @Repository
 public interface TeamMembershipRepository extends JpaRepository<TeamMembershipJpaEntity, UUID> {
+    java.util.Optional<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.TeamMembershipJpaEntity> findByTeamIdAndUserId(java.util.UUID teamId, java.util.UUID userId);
+    java.util.List<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.TeamMembershipJpaEntity> findByTeamId(java.util.UUID teamId);
+    java.util.List<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.TeamMembershipJpaEntity> findByUserId(java.util.UUID userId);
 }
+

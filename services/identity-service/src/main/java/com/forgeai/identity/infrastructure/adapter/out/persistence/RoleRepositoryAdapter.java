@@ -29,5 +29,23 @@ public class RoleRepositoryAdapter implements RoleRepository {
         return mapper.toDomain(jpaRepository.save(mapper.toEntity(entity)));
     }
 
-    // Placeholder for other methods based on interfaces...
+    
+    @Override
+    public List<Role> findByOrganizationId(UUID organizationId) {
+        return jpaRepository.findByOrganizationId(organizationId).stream().map(mapper::toDomain).collect(Collectors.toList());
+    }
+    @Override
+    public java.util.Optional<Role> findSystemRoleByName(String name) {
+        return jpaRepository.findByOrganizationIdIsNullAndName(name).map(mapper::toDomain);
+    }
+    @Override
+    public java.util.Optional<Role> findByOrganizationIdAndName(UUID organizationId, String name) {
+        return jpaRepository.findByOrganizationIdAndName(organizationId, name).map(mapper::toDomain);
+    }
+    @Override
+    public void deleteById(UUID id) {
+        jpaRepository.deleteById(id);
+    }
+
 }
+

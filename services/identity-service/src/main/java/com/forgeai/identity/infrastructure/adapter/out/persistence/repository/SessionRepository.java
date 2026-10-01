@@ -8,4 +8,6 @@ import java.util.UUID;
 
 @Repository
 public interface SessionRepository extends JpaRepository<SessionJpaEntity, UUID> {
+    java.util.List<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.SessionJpaEntity> findByUserIdAndRevokedAtIsNull(java.util.UUID userId);
 }
+

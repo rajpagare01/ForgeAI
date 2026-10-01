@@ -8,4 +8,7 @@ import java.util.UUID;
 
 @Repository
 public interface SecurityEventRepository extends JpaRepository<SecurityEventJpaEntity, UUID> {
+    java.util.List<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.SecurityEventJpaEntity> findByUserId(java.util.UUID userId);
+    java.util.List<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.SecurityEventJpaEntity> findByOrganizationId(java.util.UUID organizationId);
 }
+

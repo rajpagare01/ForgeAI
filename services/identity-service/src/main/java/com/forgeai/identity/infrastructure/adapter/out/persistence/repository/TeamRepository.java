@@ -8,4 +8,7 @@ import java.util.UUID;
 
 @Repository
 public interface TeamRepository extends JpaRepository<TeamJpaEntity, UUID> {
+    java.util.List<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.TeamJpaEntity> findByOrganizationId(java.util.UUID organizationId);
+    java.util.Optional<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.TeamJpaEntity> findByOrganizationIdAndName(java.util.UUID organizationId, String name);
 }
+

@@ -8,4 +8,6 @@ import java.util.UUID;
 
 @Repository
 public interface PermissionRepository extends JpaRepository<PermissionJpaEntity, UUID> {
+    java.util.Optional<com.forgeai.identity.infrastructure.adapter.out.persistence.entity.PermissionJpaEntity> findByCode(String code);
 }
+

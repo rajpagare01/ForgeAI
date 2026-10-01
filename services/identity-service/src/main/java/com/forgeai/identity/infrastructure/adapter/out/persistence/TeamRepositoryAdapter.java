@@ -29,5 +29,19 @@ public class TeamRepositoryAdapter implements TeamRepository {
         return mapper.toDomain(jpaRepository.save(mapper.toEntity(entity)));
     }
 
-    // Placeholder for other methods based on interfaces...
+    
+    @Override
+    public List<Team> findByOrganizationId(UUID organizationId) {
+        return jpaRepository.findByOrganizationId(organizationId).stream().map(mapper::toDomain).collect(Collectors.toList());
+    }
+    @Override
+    public java.util.Optional<Team> findByOrganizationIdAndName(UUID organizationId, String name) {
+        return jpaRepository.findByOrganizationIdAndName(organizationId, name).map(mapper::toDomain);
+    }
+    @Override
+    public void deleteById(UUID id) {
+        jpaRepository.deleteById(id);
+    }
+
 }
+

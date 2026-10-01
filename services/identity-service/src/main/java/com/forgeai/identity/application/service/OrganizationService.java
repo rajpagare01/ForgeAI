@@ -50,7 +50,7 @@ public class OrganizationService {
         membership.setUserId(creatorId);
         membership.setOrganizationId(savedOrg.getId());
         membership.setRoleId(ownerRole.getId());
-        membership.setStatus("ACTIVE");
+        membership.setStatus(com.forgeai.identity.domain.model.MembershipStatus.ACTIVE);
         membership.setCreatedAt(Instant.now());
         membership.setUpdatedAt(Instant.now());
 
@@ -84,7 +84,7 @@ public class OrganizationService {
         membership.setUserId(userId);
         membership.setOrganizationId(organizationId);
         membership.setRoleId(roleId);
-        membership.setStatus("ACTIVE");
+        membership.setStatus(com.forgeai.identity.domain.model.MembershipStatus.ACTIVE);
         membership.setCreatedAt(Instant.now());
         membership.setUpdatedAt(Instant.now());
 

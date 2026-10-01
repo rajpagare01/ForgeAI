@@ -74,7 +74,7 @@ public class TeamService {
         membership.setTeamId(teamId);
         membership.setUserId(userId);
         membership.setRoleId(roleId);
-        membership.setStatus("ACTIVE");
+        membership.setStatus(com.forgeai.identity.domain.model.MembershipStatus.ACTIVE);
         membership.setCreatedAt(Instant.now());
         membership.setUpdatedAt(Instant.now());
 
