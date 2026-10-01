@@ -11,8 +11,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.UUID;
 
+import com.forgeai.identity.application.port.out.TokenProvider;
+
 @Service
-public class JwtService {
+public class JwtService implements TokenProvider {
 
     private final SecretKey key;
     private final long expirationMs;
