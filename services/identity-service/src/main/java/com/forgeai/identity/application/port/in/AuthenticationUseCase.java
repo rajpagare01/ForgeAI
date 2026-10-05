@@ -6,4 +6,7 @@ import com.forgeai.identity.domain.model.User;
 public interface AuthenticationUseCase {
     User register(String email, String username, String password, String firstName, String lastName);
     LoginResponse login(String identifier, String password);
+    com.forgeai.identity.api.dto.RefreshTokenResponse refresh(String rawRefreshToken);
+    void logout(java.util.UUID userId, String rawRefreshToken);
+    void logoutAll(java.util.UUID userId);
 }

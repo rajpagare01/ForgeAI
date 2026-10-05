@@ -144,4 +144,92 @@ public class AuthService implements AuthenticationUseCase {
             throw new RuntimeException("Failed to hash refresh token", e);
         }
     }
+
+    @Override
+    @Transactional
+    public com.forgeai.identity.api.dto.RefreshTokenResponse refresh(String rawRefreshToken) {
+        String tokenHash = hashWithSHA256(rawRefreshToken);
+        RefreshToken refreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid refresh token"));
+
+        if (refreshToken.getRevokedAt() != null) {
+            // REUSE DETECTED
+            securityEventService.recordEvent(null, null, "REFRESH_TOKEN_REUSE_DETECTED", null, null, "{}");
+            sessionService.revokeSession(refreshToken.getSessionId());
+            refreshTokenRepository.revokeBySessionId(refreshToken.getSessionId());
+            throw new InvalidCredentialsException("Invalid refresh token");
+        }
+
+        if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
+            throw new InvalidCredentialsException("Invalid refresh token");
+        }
+
+        Session session = sessionService.getSession(refreshToken.getSessionId());
+        if (session == null || session.getRevokedAt() != null || session.getExpiresAt().isBefore(Instant.now())) {
+            throw new InvalidCredentialsException("Invalid refresh token");
+        }
+
+        User user = userRepository.findById(session.getUserId())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid refresh token"));
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new InvalidCredentialsException("Invalid refresh token");
+        }
+
+        // Rotate token
+        refreshToken.setRevokedAt(Instant.now());
+        
+        String newRawRefreshToken = generateSecureRandomString();
+        String newHashedRefreshToken = hashWithSHA256(newRawRefreshToken);
+        
+        RefreshToken newRefreshToken = new RefreshToken();
+        newRefreshToken.setSessionId(session.getId());
+        newRefreshToken.setTokenHash(newHashedRefreshToken);
+        newRefreshToken.setIssuedAt(Instant.now());
+        newRefreshToken.setExpiresAt(session.getExpiresAt());
+        RefreshToken savedNewToken = refreshTokenRepository.save(newRefreshToken);
+
+        refreshToken.setReplacedBy(savedNewToken.getId());
+        refreshTokenRepository.save(refreshToken);
+        
+        session.setLastUsedAt(Instant.now());
+        sessionService.updateSession(session);
+        
+        securityEventService.recordEvent(user.getId(), null, "REFRESH_SUCCESS", null, null, "{}");
+        
+        String accessToken = tokenProvider.generateToken(user.getId());
+        
+        return new com.forgeai.identity.api.dto.RefreshTokenResponse(
+                accessToken,
+                newRawRefreshToken,
+                "Bearer",
+                tokenProvider.getExpirationSeconds()
+        );
+    }
+
+    @Override
+    @Transactional
+    public void logout(UUID userId, String rawRefreshToken) {
+        if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
+            String tokenHash = hashWithSHA256(rawRefreshToken);
+            refreshTokenRepository.findByTokenHash(tokenHash).ifPresent(refreshToken -> {
+                Session session = sessionService.getSession(refreshToken.getSessionId());
+                if (session != null && session.getUserId().equals(userId)) {
+                    sessionService.revokeSession(session.getId());
+                    refreshTokenRepository.revokeBySessionId(session.getId());
+                }
+            });
+        }
+        securityEventService.recordEvent(userId, null, "LOGOUT", null, null, "{}");
+    }
+
+    @Override
+    @Transactional
+    public void logoutAll(UUID userId) {
+        sessionService.revokeAllUserSessions(userId);
+        // Note: active refresh tokens tied to those sessions will effectively be invalidated because
+        // the session is revoked. However, to explicitly revoke them:
+        sessionService.getUserSessions(userId).forEach(s -> refreshTokenRepository.revokeBySessionId(s.getId()));
+        securityEventService.recordEvent(userId, null, "LOGOUT_ALL_SESSIONS", null, null, "{}");
+    }
 }

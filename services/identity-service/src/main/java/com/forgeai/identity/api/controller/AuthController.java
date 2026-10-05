@@ -49,4 +49,30 @@ public class AuthController {
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<com.forgeai.identity.api.dto.RefreshTokenResponse> refresh(@Valid @RequestBody com.forgeai.identity.api.dto.RefreshTokenRequest request) {
+        var response = authenticationUseCase.refresh(request.refreshToken());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<com.forgeai.identity.api.dto.LogoutResponse> logout(
+            @RequestBody(required = false) com.forgeai.identity.api.dto.RefreshTokenRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof java.util.UUID userId) {
+            String refreshToken = request != null ? request.refreshToken() : null;
+            authenticationUseCase.logout(userId, refreshToken);
+        }
+        return ResponseEntity.ok(new com.forgeai.identity.api.dto.LogoutResponse("Successfully logged out"));
+    }
+
+    @PostMapping("/logout-all")
+    public ResponseEntity<com.forgeai.identity.api.dto.LogoutResponse> logoutAll(
+            org.springframework.security.core.Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof java.util.UUID userId) {
+            authenticationUseCase.logoutAll(userId);
+        }
+        return ResponseEntity.ok(new com.forgeai.identity.api.dto.LogoutResponse("Successfully logged out from all sessions"));
+    }
 }

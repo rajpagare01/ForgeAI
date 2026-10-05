@@ -51,4 +51,14 @@ public class SessionService {
             sessionRepository.save(session);
         }
     }
+
+    @Transactional(readOnly = true)
+    public Session getSession(UUID sessionId) {
+        return sessionRepository.findById(sessionId).orElse(null);
+    }
+
+    @Transactional
+    public void updateSession(Session session) {
+        sessionRepository.save(session);
+    }
 }

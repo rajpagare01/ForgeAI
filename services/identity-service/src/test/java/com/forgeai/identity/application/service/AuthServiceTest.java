@@ -13,8 +13,10 @@ import com.forgeai.identity.domain.exception.UserAlreadyExistsException;
 import com.forgeai.identity.domain.model.User;
 import com.forgeai.identity.domain.model.UserStatus;
 import com.forgeai.identity.domain.model.Session;
+import com.forgeai.identity.domain.model.RefreshToken;
 import com.forgeai.identity.domain.valueobject.Email;
 import com.forgeai.identity.domain.valueobject.Username;
+import com.forgeai.identity.domain.model.SecurityEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -207,5 +209,93 @@ class AuthServiceTest {
 
         assertThrows(InvalidUserStateException.class, () -> authService.login("test@example.com", "StrongP@ss1"));
         verify(securityEventRepository).save(any()); // LOGIN_BLOCKED
+    }
+
+    @Test
+    void refresh_Success() {
+        Session session = new Session();
+        session.setId(UUID.randomUUID());
+        session.setUserId(activeUser.getId());
+        session.setExpiresAt(java.time.Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS));
+
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setId(UUID.randomUUID());
+        refreshToken.setSessionId(session.getId());
+        refreshToken.setExpiresAt(java.time.Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS));
+        
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(refreshToken));
+        when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
+        when(userRepository.findById(any())).thenReturn(Optional.of(activeUser));
+        when(refreshTokenRepository.save(any())).thenAnswer(i -> {
+            RefreshToken r = i.getArgument(0);
+            if (r.getId() == null) r.setId(UUID.randomUUID());
+            return r;
+        });
+        when(tokenProvider.generateToken(any())).thenReturn("new_access_token");
+
+        var response = authService.refresh("some_raw_token");
+
+        assertNotNull(response);
+        assertEquals("new_access_token", response.accessToken());
+        assertNotNull(response.refreshToken());
+        verify(refreshTokenRepository, times(2)).save(any()); // Save new token and update old token replacedBy
+        verify(sessionRepository).save(any()); // Update lastUsedAt
+        verify(securityEventRepository).save(any()); // REFRESH_SUCCESS
+    }
+
+    @Test
+    void refresh_ReuseDetected() {
+        UUID sessionId = UUID.randomUUID();
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setId(UUID.randomUUID());
+        refreshToken.setSessionId(sessionId);
+        refreshToken.setRevokedAt(java.time.Instant.now()); // ALREADY REVOKED!
+
+        Session existingSession = new Session();
+        existingSession.setId(sessionId);
+        existingSession.setUserId(UUID.randomUUID());
+
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(refreshToken));
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(existingSession));
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.refresh("some_raw_token"));
+
+        verify(securityEventRepository).save(argThat((SecurityEvent e) -> e.getEventType().equals("REFRESH_TOKEN_REUSE_DETECTED")));
+        verify(sessionRepository).save(argThat(s -> s.getRevokedAt() != null));
+        verify(refreshTokenRepository).revokeBySessionId(sessionId);
+    }
+
+    @Test
+    void logout_Success() {
+        Session session = new Session();
+        session.setId(UUID.randomUUID());
+        session.setUserId(activeUser.getId());
+
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setId(UUID.randomUUID());
+        refreshToken.setSessionId(session.getId());
+
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(refreshToken));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+        authService.logout(activeUser.getId(), "some_raw_token");
+
+        verify(sessionRepository).save(argThat(s -> s.getRevokedAt() != null));
+        verify(refreshTokenRepository).revokeBySessionId(session.getId());
+        verify(securityEventRepository).save(argThat((SecurityEvent e) -> e.getEventType().equals("LOGOUT")));
+    }
+
+    @Test
+    void logoutAll_Success() {
+        Session session1 = new Session();
+        session1.setId(UUID.randomUUID());
+        
+        when(sessionRepository.findActiveByUserId(activeUser.getId())).thenReturn(java.util.List.of(session1));
+
+        authService.logoutAll(activeUser.getId());
+
+        verify(sessionRepository).save(argThat(s -> s.getRevokedAt() != null));
+        verify(refreshTokenRepository).revokeBySessionId(session1.getId());
+        verify(securityEventRepository).save(argThat((SecurityEvent e) -> e.getEventType().equals("LOGOUT_ALL_SESSIONS")));
     }
 }

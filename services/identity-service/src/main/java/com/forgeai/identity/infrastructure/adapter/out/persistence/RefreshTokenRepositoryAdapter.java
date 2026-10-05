@@ -26,4 +26,14 @@ public class RefreshTokenRepositoryAdapter implements com.forgeai.identity.appli
     public Optional<RefreshToken> findById(UUID id) {
         return jpaRepository.findById(id).map(mapper::toDomain);
     }
+
+    @Override
+    public Optional<RefreshToken> findByTokenHash(String tokenHash) {
+        return jpaRepository.findByTokenHash(tokenHash).map(mapper::toDomain);
+    }
+
+    @Override
+    public void revokeBySessionId(UUID sessionId) {
+        jpaRepository.revokeBySessionId(sessionId, java.time.Instant.now());
+    }
 }

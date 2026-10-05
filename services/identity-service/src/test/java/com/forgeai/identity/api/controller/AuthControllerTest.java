@@ -203,4 +203,42 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.code").value("CONFLICT"))
                 .andExpect(jsonPath("$.message").value("A record with this identifier already exists"));
     }
+
+    // --- Refresh Tests ---
+    @Test
+    void refresh_Success() throws Exception {
+        com.forgeai.identity.api.dto.RefreshTokenResponse mockResponse = new com.forgeai.identity.api.dto.RefreshTokenResponse(
+            "new_access", "new_refresh", "Bearer", 900
+        );
+        when(authenticationUseCase.refresh("raw_token")).thenReturn(mockResponse);
+
+        com.forgeai.identity.api.dto.RefreshTokenRequest request = new com.forgeai.identity.api.dto.RefreshTokenRequest("raw_token");
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new_access"))
+                .andExpect(jsonPath("$.refreshToken").value("new_refresh"));
+    }
+
+    // --- Logout Tests ---
+    @Test
+    void logout_Success() throws Exception {
+        com.forgeai.identity.api.dto.RefreshTokenRequest request = new com.forgeai.identity.api.dto.RefreshTokenRequest("raw_token");
+        // We mock a user for the SecurityContext
+        
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Successfully logged out"));
+    }
+
+    @Test
+    void logoutAll_Success() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout-all"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Successfully logged out from all sessions"));
+    }
 }
