@@ -2,7 +2,7 @@ package com.forgeai.identity.domain.model;
 
 public enum UserStatus {
     ACTIVE,
-    INACTIVE,
+    DEACTIVATED,
     SUSPENDED,
     LOCKED
 }

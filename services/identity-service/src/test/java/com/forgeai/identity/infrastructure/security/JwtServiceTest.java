@@ -19,6 +19,7 @@ class JwtServiceTest {
         assertNotNull(token);
         assertTrue(jwtService.validateToken(token));
         assertEquals(id, jwtService.extractUserId(token));
+        assertEquals(3600L, jwtService.getExpirationSeconds());
     }
     
     @Test
@@ -37,5 +38,22 @@ class JwtServiceTest {
         String token = jwtService.generateToken(UUID.randomUUID());
         
         assertFalse(otherJwt.validateToken(token));
+    }
+    
+    @Test
+    void verifyClaims() {
+        UUID id = UUID.randomUUID();
+        String token = jwtService.generateToken(id);
+        
+        io.jsonwebtoken.Claims claims = io.jsonwebtoken.Jwts.parser()
+                .setSigningKey("12345678901234567890123456789012".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+                
+        assertEquals(id.toString(), claims.getSubject());
+        assertNotNull(claims.getIssuedAt());
+        assertNotNull(claims.getExpiration());
+        assertTrue(claims.getExpiration().after(claims.getIssuedAt()));
     }
 }

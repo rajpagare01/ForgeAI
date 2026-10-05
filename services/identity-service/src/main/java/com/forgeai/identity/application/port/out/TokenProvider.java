@@ -4,4 +4,5 @@ import java.util.UUID;
 
 public interface TokenProvider {
     String generateToken(UUID userId);
+    long getExpirationSeconds();
 }

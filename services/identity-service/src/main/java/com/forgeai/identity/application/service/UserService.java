@@ -15,6 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -52,7 +56,20 @@ public class UserService {
 
         User savedUser = userRepository.save(user);
         
-        securityEventService.recordEvent(savedUser.getId(), null, "USER_REGISTERED", null, null, "{}");
+        String ipAddress = null;
+        String userAgent = null;
+        var attrs = RequestContextHolder.getRequestAttributes();
+        if (attrs instanceof ServletRequestAttributes servletAttrs) {
+            HttpServletRequest req = servletAttrs.getRequest();
+            ipAddress = req.getRemoteAddr();
+            String forwardedFor = req.getHeader("X-Forwarded-For");
+            if (forwardedFor != null && !forwardedFor.isBlank()) {
+                ipAddress = forwardedFor.split(",")[0].trim();
+            }
+            userAgent = req.getHeader("User-Agent");
+        }
+
+        securityEventService.recordEvent(savedUser.getId(), null, "USER_REGISTERED", ipAddress, userAgent, "{}");
 
         return savedUser;
     }
@@ -160,7 +177,7 @@ public class UserService {
     @Transactional
     public User deactivateUser(UUID id) {
         User user = getUser(id);
-        user.setStatus(UserStatus.INACTIVE);
+        user.setStatus(UserStatus.DEACTIVATED);
         user.setUpdatedAt(Instant.now());
         User savedUser = userRepository.save(user);
         

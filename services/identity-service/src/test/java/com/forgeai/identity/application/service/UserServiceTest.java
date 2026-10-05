@@ -149,7 +149,7 @@ public class UserServiceTest {
 
         userService.deactivateUser(activeUser.getId());
         
-        assertEquals(UserStatus.INACTIVE, activeUser.getStatus());
+        assertEquals(UserStatus.DEACTIVATED, activeUser.getStatus());
         verify(sessionRepository).findActiveByUserId(activeUser.getId());
         verify(securityEventRepository).save(any());
     }

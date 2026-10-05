@@ -41,6 +41,11 @@ public class JwtService implements TokenProvider {
                 .compact();
     }
 
+    @Override
+    public long getExpirationSeconds() {
+        return expirationMs / 1000;
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parser()
