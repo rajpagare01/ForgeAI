@@ -42,3 +42,5 @@ build/
 *.log
 *.class
 .env
+postman/
+generate_postman.py

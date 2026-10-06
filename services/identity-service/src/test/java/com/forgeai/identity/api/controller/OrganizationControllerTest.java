@@ -29,7 +29,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
+import org.springframework.context.annotation.Import;
+import com.forgeai.identity.infrastructure.security.SecurityConfig;
+import com.forgeai.identity.infrastructure.security.JwtAuthenticationFilter;
+
 @WebMvcTest(OrganizationController.class)
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class})
 @AutoConfigureMockMvc
 class OrganizationControllerTest {
 
@@ -45,8 +50,7 @@ class OrganizationControllerTest {
     @MockBean
     private com.forgeai.identity.infrastructure.security.JwtService jwtService;
 
-    @MockBean
-    private com.forgeai.identity.infrastructure.security.JwtAuthenticationFilter jwtAuthenticationFilter;
+
 
     private UUID userId;
     private UsernamePasswordAuthenticationToken auth;
@@ -77,6 +81,7 @@ class OrganizationControllerTest {
         mockMvc.perform(post("/api/v1/organizations")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request))
+                .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
                 .with(authentication(auth)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("Test Org"))
