@@ -8,4 +8,5 @@ import java.util.UUID;
 
 @Repository
 public interface OrganizationRepository extends JpaRepository<OrganizationJpaEntity, UUID> {
+    java.util.Optional<OrganizationJpaEntity> findBySlug(String slug);
 }

@@ -63,7 +63,7 @@ class AuthServiceTest {
 
         SessionService sessionService = new SessionService(sessionRepository);
         SecurityEventService securityEventService = new SecurityEventService(securityEventRepository);
-        UserService userService = new UserService(userRepository, sessionService, securityEventService, passwordHasher);
+        UserService userService = new UserService(userRepository, sessionService, securityEventService, passwordHasher, refreshTokenRepository);
 
         authService = new AuthService(userService, userRepository, passwordHasher, tokenProvider, sessionService, securityEventService, refreshTokenRepository);
 

@@ -8,6 +8,7 @@ import com.forgeai.identity.domain.valueobject.Email;
 import com.forgeai.identity.domain.valueobject.Username;
 import com.forgeai.identity.domain.valueobject.RawPassword;
 import com.forgeai.identity.application.port.out.PasswordHasher;
+import com.forgeai.identity.application.port.out.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ public class UserService {
     private final SessionService sessionService;
     private final SecurityEventService securityEventService;
     private final PasswordHasher passwordHasher;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     @Transactional
     public User createUser(String email, String username, String rawPassword, String firstName, String lastName) {
@@ -95,10 +97,12 @@ public class UserService {
     @Transactional
     public User updateUser(UUID id, String firstName, String lastName) {
         User user = getUser(id);
-        user.setFirstName(firstName);
-        user.setLastName(lastName);
+        if (firstName != null) user.setFirstName(firstName.strip());
+        if (lastName != null) user.setLastName(lastName.strip());
         user.setUpdatedAt(Instant.now());
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        securityEventService.recordEvent(saved.getId(), null, "PROFILE_UPDATED", null, null, "{}");
+        return saved;
     }
 
     @Transactional
@@ -112,7 +116,9 @@ public class UserService {
 
         user.setUsername(usernameObj);
         user.setUpdatedAt(Instant.now());
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        securityEventService.recordEvent(saved.getId(), null, "USERNAME_CHANGED", null, null, "{}");
+        return saved;
     }
 
     @Transactional
@@ -180,10 +186,37 @@ public class UserService {
         user.setStatus(UserStatus.DEACTIVATED);
         user.setUpdatedAt(Instant.now());
         User savedUser = userRepository.save(user);
-        
+
+        // Revoke all sessions and their associated refresh tokens
+        sessionService.getUserSessions(id).forEach(s -> refreshTokenRepository.revokeBySessionId(s.getId()));
         sessionService.revokeAllUserSessions(id);
-        securityEventService.recordEvent(savedUser.getId(), null, "USER_DEACTIVATED", null, null, "{}");
-        
+        securityEventService.recordEvent(savedUser.getId(), null, "ACCOUNT_DEACTIVATED", null, null, "{}");
+
         return savedUser;
+    }
+
+    /**
+     * Change password after verifying the current password.
+     * Revokes all sessions and refresh tokens to force re-authentication.
+     */
+    @Transactional
+    public void changePassword(UUID id, String currentPassword, String newPassword) {
+        User user = getUser(id);
+
+        if (!passwordHasher.matches(currentPassword, user.getPasswordHash())) {
+            throw new InvalidCredentialsException("Current password is incorrect");
+        }
+
+        RawPassword newPwd = new RawPassword(newPassword); // validates policy
+        user.setPasswordHash(passwordHasher.hash(newPwd.value()));
+        user.setUpdatedAt(Instant.now());
+        userRepository.save(user);
+
+        // Revoke all sessions and refresh tokens — force re-authentication
+        sessionService.getUserSessions(id).forEach(s -> refreshTokenRepository.revokeBySessionId(s.getId()));
+        sessionService.revokeAllUserSessions(id);
+
+        securityEventService.recordEvent(id, null, "PASSWORD_CHANGED", null, null, "{}");
+        securityEventService.recordEvent(id, null, "ALL_SESSIONS_REVOKED_AFTER_PASSWORD_CHANGE", null, null, "{}");
     }
 }
