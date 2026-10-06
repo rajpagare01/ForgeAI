@@ -43,4 +43,11 @@ public class UserRepositoryAdapter implements com.forgeai.identity.application.p
         UserJpaEntity saved = userRepository.save(entity);
         return userMapper.toDomain(saved);
     }
+
+    @Override
+    public java.util.List<User> findAllById(java.util.List<UUID> ids) {
+        return userRepository.findAllById(ids).stream()
+                .map(userMapper::toDomain)
+                .toList();
+    }
 }

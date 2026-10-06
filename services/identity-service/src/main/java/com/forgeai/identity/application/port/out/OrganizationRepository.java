@@ -10,4 +10,5 @@ public interface OrganizationRepository {
     Optional<Organization> findBySlug(OrganizationSlug slug);
     Organization save(Organization entity);
     void deleteById(UUID id);
+    Optional<Organization> findByIdForUpdate(UUID id);
 }

@@ -3,10 +3,15 @@ package com.forgeai.identity.application.service;
 import com.forgeai.identity.application.port.out.OrganizationMembershipRepository;
 import com.forgeai.identity.application.port.out.OrganizationRepository;
 import com.forgeai.identity.application.port.out.RoleRepository;
+import com.forgeai.identity.application.port.out.UserRepository;
 import com.forgeai.identity.domain.exception.InvalidOwnershipOperationException;
+import com.forgeai.identity.domain.exception.OrganizationAccessDeniedException;
+import com.forgeai.identity.domain.model.MembershipStatus;
 import com.forgeai.identity.domain.model.Organization;
 import com.forgeai.identity.domain.model.OrganizationMembership;
+import com.forgeai.identity.domain.model.OrganizationStatus;
 import com.forgeai.identity.domain.model.Role;
+import com.forgeai.identity.domain.model.RoleScope;
 import com.forgeai.identity.domain.valueobject.OrganizationSlug;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -33,6 +39,12 @@ public class OrganizationServiceTest {
 
     @Mock
     private RoleRepository roleRepository;
+    
+    @Mock
+    private UserRepository userRepository;
+    
+    @Mock
+    private SecurityEventService securityEventService;
 
     @InjectMocks
     private OrganizationService organizationService;
@@ -40,20 +52,29 @@ public class OrganizationServiceTest {
     private Organization activeOrg;
     private Role ownerRole;
     private Role memberRole;
+    private Role adminRole;
 
     @BeforeEach
     void setUp() {
         activeOrg = new Organization();
         activeOrg.setId(UUID.randomUUID());
         activeOrg.setSlug(new OrganizationSlug("test-org"));
+        activeOrg.setStatus(OrganizationStatus.ACTIVE);
 
         ownerRole = new Role();
         ownerRole.setId(UUID.randomUUID());
         ownerRole.setName("OWNER");
+        ownerRole.setScope(RoleScope.ORGANIZATION);
         
         memberRole = new Role();
         memberRole.setId(UUID.randomUUID());
         memberRole.setName("MEMBER");
+        memberRole.setScope(RoleScope.ORGANIZATION);
+        
+        adminRole = new Role();
+        adminRole.setId(UUID.randomUUID());
+        adminRole.setName("ADMIN");
+        adminRole.setScope(RoleScope.ORGANIZATION);
     }
 
     @Test
@@ -74,18 +95,22 @@ public class OrganizationServiceTest {
         UUID userId = UUID.randomUUID();
         OrganizationMembership membership = new OrganizationMembership();
         membership.setRoleId(ownerRole.getId());
+        membership.setStatus(MembershipStatus.ACTIVE);
+        
+        when(organizationRepository.findByIdForUpdate(activeOrg.getId())).thenReturn(Optional.of(activeOrg));
+        when(organizationRepository.findById(activeOrg.getId())).thenReturn(Optional.of(activeOrg));
         
         when(membershipRepository.findByUserIdAndOrganizationId(userId, activeOrg.getId()))
             .thenReturn(Optional.of(membership));
+            
+        when(roleRepository.findById(ownerRole.getId())).thenReturn(Optional.of(ownerRole));
         when(roleRepository.findSystemRoleByName("OWNER")).thenReturn(Optional.of(ownerRole));
-        when(membershipRepository.countByOrganizationIdAndRoleId(activeOrg.getId(), ownerRole.getId()))
-            .thenReturn(1L); // Only 1 owner
+        
+        when(membershipRepository.findByOrganizationId(activeOrg.getId())).thenReturn(List.of(membership));
             
         assertThrows(InvalidOwnershipOperationException.class, () -> 
-            organizationService.removeOrganizationMember(activeOrg.getId(), userId)
+            organizationService.removeOrganizationMember(activeOrg.getId(), userId, userId)
         );
-        
-        verify(membershipRepository, never()).deleteById(any());
     }
 
     @Test
@@ -95,12 +120,17 @@ public class OrganizationServiceTest {
         
         OrganizationMembership currentOwnerMembership = new OrganizationMembership();
         currentOwnerMembership.setRoleId(ownerRole.getId());
+        currentOwnerMembership.setStatus(MembershipStatus.ACTIVE);
         
         OrganizationMembership newOwnerMembership = new OrganizationMembership();
         newOwnerMembership.setRoleId(memberRole.getId());
+        newOwnerMembership.setStatus(MembershipStatus.ACTIVE);
+        
+        when(organizationRepository.findByIdForUpdate(activeOrg.getId())).thenReturn(Optional.of(activeOrg));
+        when(organizationRepository.findById(activeOrg.getId())).thenReturn(Optional.of(activeOrg));
         
         when(roleRepository.findSystemRoleByName("OWNER")).thenReturn(Optional.of(ownerRole));
-        when(roleRepository.findSystemRoleByName("MEMBER")).thenReturn(Optional.of(memberRole));
+        when(roleRepository.findSystemRoleByName("ADMIN")).thenReturn(Optional.of(adminRole));
         
         when(membershipRepository.findByUserIdAndOrganizationId(currentOwnerId, activeOrg.getId()))
             .thenReturn(Optional.of(currentOwnerMembership));
@@ -110,7 +140,7 @@ public class OrganizationServiceTest {
         organizationService.transferOrganizationOwnership(activeOrg.getId(), currentOwnerId, newOwnerId);
         
         verify(membershipRepository, times(2)).save(any());
-        assertEquals(memberRole.getId(), currentOwnerMembership.getRoleId());
+        assertEquals(adminRole.getId(), currentOwnerMembership.getRoleId());
         assertEquals(ownerRole.getId(), newOwnerMembership.getRoleId());
     }
 }

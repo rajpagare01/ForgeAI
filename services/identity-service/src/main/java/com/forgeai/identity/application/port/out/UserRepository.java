@@ -12,4 +12,5 @@ public interface UserRepository {
     Optional<User> findByEmail(Email email);
     Optional<User> findByUsername(Username username);
     User save(User user);
+    java.util.List<User> findAllById(java.util.List<UUID> ids);
 }

@@ -1,20 +1,22 @@
 package com.forgeai.identity.application.service;
 
+import com.forgeai.identity.api.dto.OrganizationMemberResponse;
 import com.forgeai.identity.application.port.out.OrganizationMembershipRepository;
 import com.forgeai.identity.application.port.out.OrganizationRepository;
 import com.forgeai.identity.application.port.out.RoleRepository;
+import com.forgeai.identity.application.port.out.UserRepository;
 import com.forgeai.identity.domain.exception.*;
-import com.forgeai.identity.domain.model.Organization;
-import com.forgeai.identity.domain.model.OrganizationMembership;
-import com.forgeai.identity.domain.model.OrganizationStatus;
-import com.forgeai.identity.domain.model.Role;
+import com.forgeai.identity.domain.model.*;
 import com.forgeai.identity.domain.valueobject.OrganizationSlug;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +25,8 @@ public class OrganizationService {
     private final OrganizationRepository organizationRepository;
     private final OrganizationMembershipRepository membershipRepository;
     private final RoleRepository roleRepository;
+    private final UserRepository userRepository;
+    private final SecurityEventService securityEventService;
 
     @Transactional
     public Organization createOrganization(String name, String slug, String description, UUID creatorId) {
@@ -42,118 +46,288 @@ public class OrganizationService {
         
         Organization savedOrg = organizationRepository.save(org);
 
-        // Find system owner role
-        Role ownerRole = roleRepository.findSystemRoleByName("OWNER")
-                .orElseThrow(() -> new RoleNotFoundException("System OWNER role not found"));
+        Role ownerRole = getSystemRole("OWNER");
 
         OrganizationMembership membership = new OrganizationMembership();
         membership.setUserId(creatorId);
         membership.setOrganizationId(savedOrg.getId());
         membership.setRoleId(ownerRole.getId());
-        membership.setStatus(com.forgeai.identity.domain.model.MembershipStatus.ACTIVE);
+        membership.setStatus(MembershipStatus.ACTIVE);
         membership.setCreatedAt(Instant.now());
         membership.setUpdatedAt(Instant.now());
 
         membershipRepository.save(membership);
 
+        securityEventService.recordEvent(creatorId, savedOrg.getId(), "ORGANIZATION_CREATED", null, null, "{\"message\": \"Organization created\"}");
+
         return savedOrg;
     }
 
     @Transactional(readOnly = true)
-    public Organization getOrganization(UUID id) {
-        return organizationRepository.findById(id)
-                .orElseThrow(() -> new OrganizationNotFoundException("Organization not found"));
+    public List<Organization> getUserOrganizations(UUID currentUserId) {
+        List<OrganizationMembership> memberships = membershipRepository.findByUserId(currentUserId).stream()
+                .filter(m -> m.getStatus() == MembershipStatus.ACTIVE)
+                .toList();
+
+        return memberships.stream()
+                .map(m -> organizationRepository.findById(m.getOrganizationId()).orElse(null))
+                .filter(o -> o != null && o.getStatus() == OrganizationStatus.ACTIVE)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Organization getOrganization(UUID organizationId, UUID currentUserId) {
+        Organization org = findActiveOrganization(organizationId);
+        verifyActiveMembership(currentUserId, organizationId);
+        return org;
     }
 
     @Transactional
-    public Organization updateOrganization(UUID id, String name, String description) {
-        Organization org = getOrganization(id);
+    public Organization updateOrganization(UUID organizationId, String name, String description, UUID currentUserId) {
+        Organization org = findActiveOrganization(organizationId);
+        verifyAuthority(currentUserId, organizationId, "OWNER");
+
         org.setName(name);
-        org.setDescription(description);
+        if (description != null) {
+            org.setDescription(description);
+        }
         org.setUpdatedAt(Instant.now());
-        return organizationRepository.save(org);
+        
+        Organization saved = organizationRepository.save(org);
+        
+        securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_UPDATED", null, null, "{\"message\": \"Organization updated\"}");
+        return saved;
     }
 
     @Transactional
-    public OrganizationMembership addOrganizationMember(UUID organizationId, UUID userId, UUID roleId) {
-        if (membershipRepository.findByUserIdAndOrganizationId(userId, organizationId).isPresent()) {
+    public void deactivateOrganization(UUID organizationId, UUID currentUserId) {
+        Organization org = findActiveOrganization(organizationId);
+        verifyAuthority(currentUserId, organizationId, "OWNER");
+
+        org.setStatus(OrganizationStatus.INACTIVE);
+        org.setUpdatedAt(Instant.now());
+        organizationRepository.save(org);
+
+        securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_DEACTIVATED", null, null, "{\"message\": \"Organization deactivated\"}");
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrganizationMemberResponse> getOrganizationMembers(UUID organizationId, UUID currentUserId) {
+        findActiveOrganization(organizationId);
+        verifyActiveMembership(currentUserId, organizationId);
+
+        List<OrganizationMembership> memberships = membershipRepository.findByOrganizationId(organizationId);
+        List<UUID> userIds = memberships.stream().map(OrganizationMembership::getUserId).toList();
+        
+        Map<UUID, User> users = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        Map<UUID, Role> roles = roleRepository.findByOrganizationId(organizationId).stream()
+                .collect(Collectors.toMap(Role::getId, r -> r));
+        
+        // Add system roles to the map
+        List<Role> systemRoles = List.of(
+                getSystemRole("OWNER"), getSystemRole("ADMIN"), getSystemRole("PROJECT_MANAGER"),
+                getSystemRole("DEVELOPER"), getSystemRole("TESTER"), getSystemRole("VIEWER"),
+                getSystemRole("TEAM_LEAD"), getSystemRole("TEAM_MEMBER")
+        );
+        for (Role r : systemRoles) {
+            roles.putIfAbsent(r.getId(), r);
+        }
+
+        return memberships.stream().map(m -> {
+            User user = users.get(m.getUserId());
+            Role role = roles.get(m.getRoleId());
+            return new OrganizationMemberResponse(
+                    m.getId(),
+                    m.getUserId(),
+                    user != null ? user.getUsername().value() : "Unknown",
+                    user != null ? user.getEmail().value() : "Unknown",
+                    role != null ? role.getName() : "Unknown",
+                    m.getStatus().name()
+            );
+        }).toList();
+    }
+
+    @Transactional
+    public OrganizationMembership addOrganizationMember(UUID organizationId, UUID currentUserId, UUID targetUserId, String roleName) {
+        findActiveOrganization(organizationId);
+        verifyAuthority(currentUserId, organizationId, "OWNER");
+
+        if (membershipRepository.findByUserIdAndOrganizationId(targetUserId, organizationId).isPresent()) {
             throw new DuplicateMembershipException("User is already a member of this organization");
         }
 
+        userRepository.findById(targetUserId).orElseThrow(() -> new UserNotFoundException("Target user not found"));
+
+        Role targetRole = getSystemRole(roleName);
+        if (targetRole.getScope() != RoleScope.ORGANIZATION) {
+            throw new InvalidMembershipRoleException("Role must be organization-scoped");
+        }
+        if (roleName.equals("OWNER")) {
+            throw new InvalidMembershipRoleException("Cannot directly assign OWNER role. Use ownership transfer.");
+        }
+
         OrganizationMembership membership = new OrganizationMembership();
-        membership.setUserId(userId);
+        membership.setUserId(targetUserId);
         membership.setOrganizationId(organizationId);
-        membership.setRoleId(roleId);
-        membership.setStatus(com.forgeai.identity.domain.model.MembershipStatus.ACTIVE);
+        membership.setRoleId(targetRole.getId());
+        membership.setStatus(MembershipStatus.ACTIVE);
         membership.setCreatedAt(Instant.now());
         membership.setUpdatedAt(Instant.now());
 
-        return membershipRepository.save(membership);
+        OrganizationMembership saved = membershipRepository.save(membership);
+
+        securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_ADDED", null, null, "{\"targetUserId\": \"" + targetUserId + "\"}");
+        return saved;
     }
 
     @Transactional
-    public void removeOrganizationMember(UUID organizationId, UUID userId) {
-        OrganizationMembership membership = membershipRepository.findByUserIdAndOrganizationId(userId, organizationId)
+    public void removeOrganizationMember(UUID organizationId, UUID currentUserId, UUID targetUserId) {
+        organizationRepository.findByIdForUpdate(organizationId).orElseThrow(() -> new OrganizationNotFoundException("Organization not found"));
+        findActiveOrganization(organizationId);
+        verifyAuthority(currentUserId, organizationId, "OWNER");
+
+        OrganizationMembership membership = membershipRepository.findByUserIdAndOrganizationId(targetUserId, organizationId)
                 .orElseThrow(() -> new MembershipNotFoundException("Membership not found"));
 
-        Role ownerRole = roleRepository.findSystemRoleByName("OWNER")
-                .orElseThrow(() -> new RoleNotFoundException("System OWNER role not found"));
-
-        if (membership.getRoleId().equals(ownerRole.getId())) {
-            long ownerCount = membershipRepository.countByOrganizationIdAndRoleId(organizationId, ownerRole.getId());
-            if (ownerCount <= 1) {
-                throw new InvalidOwnershipOperationException("Cannot remove the last owner of the organization");
+        Role ownerRole = getSystemRole("OWNER");
+        if (membership.getRoleId().equals(ownerRole.getId()) && membership.getStatus() == MembershipStatus.ACTIVE) {
+            long activeOwnerCount = getActiveOwnerCount(organizationId, ownerRole.getId());
+            if (activeOwnerCount <= 1) {
+                throw new InvalidOwnershipOperationException("Cannot remove the last active owner of the organization");
             }
         }
 
-        membershipRepository.deleteById(membership.getId());
-    }
-
-    @Transactional
-    public OrganizationMembership changeOrganizationMemberRole(UUID organizationId, UUID userId, UUID newRoleId) {
-        OrganizationMembership membership = membershipRepository.findByUserIdAndOrganizationId(userId, organizationId)
-                .orElseThrow(() -> new MembershipNotFoundException("Membership not found"));
-
-        Role ownerRole = roleRepository.findSystemRoleByName("OWNER")
-                .orElseThrow(() -> new RoleNotFoundException("System OWNER role not found"));
-
-        if (membership.getRoleId().equals(ownerRole.getId()) && !newRoleId.equals(ownerRole.getId())) {
-            long ownerCount = membershipRepository.countByOrganizationIdAndRoleId(organizationId, ownerRole.getId());
-            if (ownerCount <= 1) {
-                throw new InvalidOwnershipOperationException("Cannot downgrade the last owner of the organization");
-            }
-        }
-
-        membership.setRoleId(newRoleId);
+        membership.setStatus(MembershipStatus.INACTIVE);
         membership.setUpdatedAt(Instant.now());
-        return membershipRepository.save(membership);
+        membershipRepository.save(membership);
+
+        securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_REMOVED", null, null, "{\"targetUserId\": \"" + targetUserId + "\"}");
+    }
+
+    @Transactional
+    public OrganizationMembership changeOrganizationMemberRole(UUID organizationId, UUID currentUserId, UUID targetUserId, String newRoleName) {
+        organizationRepository.findByIdForUpdate(organizationId).orElseThrow(() -> new OrganizationNotFoundException("Organization not found"));
+        findActiveOrganization(organizationId);
+        verifyAuthority(currentUserId, organizationId, "OWNER");
+
+        OrganizationMembership membership = membershipRepository.findByUserIdAndOrganizationId(targetUserId, organizationId)
+                .orElseThrow(() -> new MembershipNotFoundException("Membership not found"));
+
+        Role newRole = getSystemRole(newRoleName);
+        if (newRole.getScope() != RoleScope.ORGANIZATION) {
+            throw new InvalidMembershipRoleException("Role must be organization-scoped");
+        }
+
+        Role ownerRole = getSystemRole("OWNER");
+        if (membership.getRoleId().equals(ownerRole.getId()) && !newRole.getId().equals(ownerRole.getId()) && membership.getStatus() == MembershipStatus.ACTIVE) {
+            long activeOwnerCount = getActiveOwnerCount(organizationId, ownerRole.getId());
+            if (activeOwnerCount <= 1) {
+                throw new InvalidOwnershipOperationException("Cannot downgrade the last active owner of the organization");
+            }
+        }
+
+        membership.setRoleId(newRole.getId());
+        membership.setUpdatedAt(Instant.now());
+        OrganizationMembership saved = membershipRepository.save(membership);
+
+        securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_ROLE_CHANGED", null, null, "{\"targetUserId\": \"" + targetUserId + "\", \"newRole\": \"" + newRoleName + "\"}");
+        return saved;
     }
 
     @Transactional
     public void transferOrganizationOwnership(UUID organizationId, UUID currentOwnerId, UUID newOwnerId) {
-        Role ownerRole = roleRepository.findSystemRoleByName("OWNER")
-                .orElseThrow(() -> new RoleNotFoundException("System OWNER role not found"));
-
+        organizationRepository.findByIdForUpdate(organizationId).orElseThrow(() -> new OrganizationNotFoundException("Organization not found"));
+        findActiveOrganization(organizationId);
+        
         OrganizationMembership currentOwnerMembership = membershipRepository.findByUserIdAndOrganizationId(currentOwnerId, organizationId)
                 .orElseThrow(() -> new MembershipNotFoundException("Current owner membership not found"));
+        if (currentOwnerMembership.getStatus() != MembershipStatus.ACTIVE) {
+            throw new OrganizationAccessDeniedException("Current user is not active in this organization");
+        }
 
+        Role ownerRole = getSystemRole("OWNER");
         if (!currentOwnerMembership.getRoleId().equals(ownerRole.getId())) {
             throw new InvalidOwnershipOperationException("Current user is not an owner");
         }
 
         OrganizationMembership newOwnerMembership = membershipRepository.findByUserIdAndOrganizationId(newOwnerId, organizationId)
                 .orElseThrow(() -> new MembershipNotFoundException("New owner membership not found"));
+        if (newOwnerMembership.getStatus() != MembershipStatus.ACTIVE) {
+            throw new InvalidOwnershipOperationException("New owner is not an active member");
+        }
 
-        // Make the new user an owner
         newOwnerMembership.setRoleId(ownerRole.getId());
         newOwnerMembership.setUpdatedAt(Instant.now());
         membershipRepository.save(newOwnerMembership);
 
-        // Downgrade the current owner to MEMBER (assuming a MEMBER role exists, otherwise just keep as is, but ownership transfer implies downgrade)
-        Role memberRole = roleRepository.findSystemRoleByName("MEMBER")
-                .orElseThrow(() -> new RoleNotFoundException("System MEMBER role not found"));
-        currentOwnerMembership.setRoleId(memberRole.getId());
+        Role adminRole = getSystemRole("ADMIN");
+        currentOwnerMembership.setRoleId(adminRole.getId());
         currentOwnerMembership.setUpdatedAt(Instant.now());
         membershipRepository.save(currentOwnerMembership);
+
+        securityEventService.recordEvent(currentOwnerId, organizationId, "ORGANIZATION_OWNERSHIP_TRANSFERRED", null, null, "{\"newOwnerUserId\": \"" + newOwnerId + "\"}");
+    }
+
+    @Transactional
+    public void leaveOrganization(UUID organizationId, UUID currentUserId) {
+        organizationRepository.findByIdForUpdate(organizationId).orElseThrow(() -> new OrganizationNotFoundException("Organization not found"));
+        findActiveOrganization(organizationId);
+
+        OrganizationMembership membership = membershipRepository.findByUserIdAndOrganizationId(currentUserId, organizationId)
+                .orElseThrow(() -> new MembershipNotFoundException("Membership not found"));
+
+        Role ownerRole = getSystemRole("OWNER");
+        if (membership.getRoleId().equals(ownerRole.getId()) && membership.getStatus() == MembershipStatus.ACTIVE) {
+            long activeOwnerCount = getActiveOwnerCount(organizationId, ownerRole.getId());
+            if (activeOwnerCount <= 1) {
+                throw new InvalidOwnershipOperationException("Cannot leave as the last active owner of the organization");
+            }
+        }
+
+        membership.setStatus(MembershipStatus.INACTIVE);
+        membership.setUpdatedAt(Instant.now());
+        membershipRepository.save(membership);
+
+        securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_LEFT", null, null, "{}");
+    }
+
+    private Organization findActiveOrganization(UUID organizationId) {
+        Organization org = organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new OrganizationNotFoundException("Organization not found"));
+        if (org.getStatus() != OrganizationStatus.ACTIVE) {
+            throw new OrganizationNotFoundException("Organization is not active");
+        }
+        return org;
+    }
+
+    private OrganizationMembership verifyActiveMembership(UUID userId, UUID organizationId) {
+        OrganizationMembership membership = membershipRepository.findByUserIdAndOrganizationId(userId, organizationId)
+                .orElseThrow(() -> new OrganizationAccessDeniedException("User is not a member of this organization"));
+        if (membership.getStatus() != MembershipStatus.ACTIVE) {
+            throw new OrganizationAccessDeniedException("Membership is not active");
+        }
+        return membership;
+    }
+
+    private void verifyAuthority(UUID userId, UUID organizationId, String requiredRoleName) {
+        OrganizationMembership membership = verifyActiveMembership(userId, organizationId);
+        Role role = roleRepository.findById(membership.getRoleId())
+                .orElseThrow(() -> new RoleNotFoundException("Role not found"));
+        if (!role.getName().equals(requiredRoleName)) {
+            throw new OrganizationAccessDeniedException("Insufficient organization permissions");
+        }
+    }
+
+    private Role getSystemRole(String roleName) {
+        return roleRepository.findSystemRoleByName(roleName)
+                .orElseThrow(() -> new RoleNotFoundException("System role " + roleName + " not found"));
+    }
+
+    private long getActiveOwnerCount(UUID organizationId, UUID ownerRoleId) {
+        return membershipRepository.findByOrganizationId(organizationId).stream()
+                .filter(m -> m.getRoleId().equals(ownerRoleId) && m.getStatus() == MembershipStatus.ACTIVE)
+                .count();
     }
 }
