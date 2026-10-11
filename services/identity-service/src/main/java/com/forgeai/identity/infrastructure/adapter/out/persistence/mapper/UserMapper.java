@@ -31,6 +31,9 @@ public class UserMapper {
         }
         
         user.setEmailVerified(entity.isEmailVerified());
+        user.setFailedLoginCount(entity.getFailedLoginCount());
+        user.setLockedUntil(entity.getLockedUntil());
+        user.setPasswordChangedAt(entity.getPasswordChangedAt());
         user.setCreatedAt(entity.getCreatedAt());
         user.setUpdatedAt(entity.getUpdatedAt());
 
@@ -62,8 +65,12 @@ public class UserMapper {
         }
         
         entity.setEmailVerified(domain.isEmailVerified());
+        entity.setFailedLoginCount(domain.getFailedLoginCount());
+        entity.setLockedUntil(domain.getLockedUntil());
+        entity.setPasswordChangedAt(domain.getPasswordChangedAt());
         entity.setCreatedAt(domain.getCreatedAt());
         entity.setUpdatedAt(domain.getUpdatedAt());
+
 
         return entity;
     }

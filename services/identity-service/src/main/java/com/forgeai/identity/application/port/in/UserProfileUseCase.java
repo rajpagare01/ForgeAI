@@ -21,10 +21,16 @@ public interface UserProfileUseCase {
     UserProfileResponse changeUsername(UUID userId, String newUsername);
 
     /**
-     * Stage an email change by storing {@code newEmail} as {@code pendingEmail}.
-     * Does NOT change the live email or mark the new address as verified.
+     * Stage an email change by storing {@code newEmail} as {@code pendingEmail},
+     * generating a 64-character verification token and emitting an outbox event.
      */
     UserProfileResponse requestEmailChange(UUID userId, String newEmail);
+
+    /**
+     * Verify email change token, update active email, mark email_verified = true,
+     * and emit UserUpdatedEvent to outbox.
+     */
+    UserProfileResponse verifyEmailChange(UUID userId, String token);
 
     /**
      * Change password after verifying the current password.

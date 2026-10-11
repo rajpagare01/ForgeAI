@@ -5,9 +5,6 @@ import com.forgeai.identity.api.dto.*;
 import com.forgeai.identity.application.port.in.UserProfileUseCase;
 import com.forgeai.identity.domain.exception.InvalidCredentialsException;
 import com.forgeai.identity.domain.exception.UserAlreadyExistsException;
-import com.forgeai.identity.infrastructure.security.JwtAuthenticationFilter;
-import com.forgeai.identity.infrastructure.security.JwtAuthenticationToken;
-import com.forgeai.identity.infrastructure.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +15,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.context.annotation.Import;
 import com.forgeai.identity.infrastructure.security.SecurityConfig;
+import com.forgeai.identity.infrastructure.security.RsaKeyPropertiesConfig;
+import com.forgeai.identity.infrastructure.security.JwtService;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -31,7 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class})
+@Import({SecurityConfig.class, RsaKeyPropertiesConfig.class})
 public class UserControllerTest {
 
     @Autowired

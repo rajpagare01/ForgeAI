@@ -8,6 +8,9 @@ import com.forgeai.identity.application.port.out.UserRepository;
 import com.forgeai.identity.domain.exception.*;
 import com.forgeai.identity.domain.model.*;
 import com.forgeai.identity.domain.valueobject.OrganizationSlug;
+import com.forgeai.identity.domain.event.MemberRoleChangedEvent;
+import com.forgeai.identity.domain.event.OrganizationCreatedEvent;
+import com.forgeai.identity.infrastructure.outbox.OutboxService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,7 @@ public class OrganizationService {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final SecurityEventService securityEventService;
+    private final OutboxService outboxService;
 
     @Transactional
     public Organization createOrganization(String name, String slug, String description, UUID creatorId) {
@@ -59,6 +63,14 @@ public class OrganizationService {
         membershipRepository.save(membership);
 
         securityEventService.recordEvent(creatorId, savedOrg.getId(), "ORGANIZATION_CREATED", null, null, "{\"message\": \"Organization created\"}");
+
+        if (outboxService != null) {
+            outboxService.publish(OrganizationCreatedEvent.builder()
+                    .organizationId(savedOrg.getId())
+                    .slug(savedOrg.getSlug().value())
+                    .name(savedOrg.getName())
+                    .build(), null);
+        }
 
         return savedOrg;
     }
@@ -233,6 +245,16 @@ public class OrganizationService {
         OrganizationMembership saved = membershipRepository.save(membership);
 
         securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_ROLE_CHANGED", null, null, "{\"targetUserId\": \"" + targetUserId + "\", \"newRole\": \"" + newRoleName + "\"}");
+
+        if (outboxService != null) {
+            outboxService.publish(MemberRoleChangedEvent.builder()
+                    .organizationId(organizationId)
+                    .userId(targetUserId)
+                    .roleName(newRoleName)
+                    .status(saved.getStatus() != null ? saved.getStatus().name() : null)
+                    .build(), null);
+        }
+
         return saved;
     }
 

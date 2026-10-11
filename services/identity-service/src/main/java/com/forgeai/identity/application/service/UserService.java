@@ -9,6 +9,9 @@ import com.forgeai.identity.domain.valueobject.Username;
 import com.forgeai.identity.domain.valueobject.RawPassword;
 import com.forgeai.identity.application.port.out.PasswordHasher;
 import com.forgeai.identity.application.port.out.RefreshTokenRepository;
+import com.forgeai.identity.domain.event.UserCreatedEvent;
+import com.forgeai.identity.domain.event.UserUpdatedEvent;
+import com.forgeai.identity.infrastructure.outbox.OutboxService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +32,8 @@ public class UserService {
     private final SecurityEventService securityEventService;
     private final PasswordHasher passwordHasher;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final OutboxService outboxService;
+    private final com.forgeai.identity.infrastructure.adapter.out.persistence.repository.EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     @Transactional
     public User createUser(String email, String username, String rawPassword, String firstName, String lastName) {
@@ -73,6 +78,15 @@ public class UserService {
 
         securityEventService.recordEvent(savedUser.getId(), null, "USER_REGISTERED", ipAddress, userAgent, "{}");
 
+        if (outboxService != null) {
+            outboxService.publish(UserCreatedEvent.builder()
+                    .userId(savedUser.getId())
+                    .email(savedUser.getEmail().value())
+                    .firstName(savedUser.getFirstName())
+                    .lastName(savedUser.getLastName())
+                    .build(), null);
+        }
+
         return savedUser;
     }
 
@@ -102,6 +116,16 @@ public class UserService {
         user.setUpdatedAt(Instant.now());
         User saved = userRepository.save(user);
         securityEventService.recordEvent(saved.getId(), null, "PROFILE_UPDATED", null, null, "{}");
+
+        if (outboxService != null) {
+            outboxService.publish(UserUpdatedEvent.builder()
+                    .userId(saved.getId())
+                    .firstName(saved.getFirstName())
+                    .lastName(saved.getLastName())
+                    .status(saved.getStatus() != null ? saved.getStatus().name() : null)
+                    .build(), null);
+        }
+
         return saved;
     }
 
@@ -133,11 +157,109 @@ public class UserService {
         user.setPendingEmail(emailObj);
         user.setUpdatedAt(Instant.now());
         User savedUser = userRepository.save(user);
+
+        // Generate cryptographically secure 64-character verification token
+        String rawToken = generateSecureToken(64);
+        String tokenHash = hashSha256(rawToken);
+
+        if (emailVerificationTokenRepository != null) {
+            com.forgeai.identity.infrastructure.adapter.out.persistence.entity.EmailVerificationTokenJpaEntity tokenEntity =
+                    new com.forgeai.identity.infrastructure.adapter.out.persistence.entity.EmailVerificationTokenJpaEntity();
+            tokenEntity.setUserId(savedUser.getId());
+            tokenEntity.setNewEmail(newEmail);
+            tokenEntity.setTokenHash(tokenHash);
+            tokenEntity.setExpiresAt(Instant.now().plus(24, java.time.temporal.ChronoUnit.HOURS));
+            tokenEntity.setCreatedAt(Instant.now());
+            emailVerificationTokenRepository.save(tokenEntity);
+        }
+
+        if (outboxService != null) {
+            outboxService.publish(com.forgeai.identity.domain.event.EmailVerificationRequestedEvent.builder()
+                    .userId(savedUser.getId())
+                    .newEmail(newEmail)
+                    .verificationToken(rawToken)
+                    .build(), null);
+        }
         
         securityEventService.recordEvent(savedUser.getId(), null, "EMAIL_CHANGE_REQUESTED", null, null, "{\"newEmail\": \"" + newEmail + "\"}");
 
         return savedUser;
     }
+
+    @Transactional
+    public User verifyEmailChange(UUID id, String token) {
+        User user = getUser(id);
+        String tokenHash = hashSha256(token);
+
+        com.forgeai.identity.infrastructure.adapter.out.persistence.entity.EmailVerificationTokenJpaEntity tokenEntity =
+                emailVerificationTokenRepository.findByTokenHash(tokenHash)
+                        .orElseThrow(() -> new IllegalArgumentException("Invalid verification token"));
+
+        if (!tokenEntity.getUserId().equals(id)) {
+            throw new IllegalArgumentException("Token does not belong to the current user");
+        }
+
+        if (tokenEntity.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Verification token has expired");
+        }
+
+        if (tokenEntity.getUsedAt() != null) {
+            throw new IllegalArgumentException("Verification token has already been used");
+        }
+
+        Email newEmailObj = new Email(tokenEntity.getNewEmail());
+        if (userRepository.findByEmail(newEmailObj).isPresent()) {
+            throw new UserAlreadyExistsException("Email already in use");
+        }
+
+        user.setEmail(newEmailObj);
+        user.setPendingEmail(null);
+        user.setEmailVerified(true);
+        user.setUpdatedAt(Instant.now());
+        User savedUser = userRepository.save(user);
+
+        tokenEntity.setUsedAt(Instant.now());
+        emailVerificationTokenRepository.save(tokenEntity);
+
+        if (outboxService != null) {
+            outboxService.publish(com.forgeai.identity.domain.event.UserUpdatedEvent.builder()
+                    .userId(savedUser.getId())
+                    .firstName(savedUser.getFirstName())
+                    .lastName(savedUser.getLastName())
+                    .status(savedUser.getStatus() != null ? savedUser.getStatus().name() : null)
+                    .build(), null);
+        }
+
+        securityEventService.recordEvent(savedUser.getId(), null, "EMAIL_VERIFIED_AND_CHANGED", null, null,
+                "{\"newEmail\": \"" + savedUser.getEmail().value() + "\"}");
+
+        return savedUser;
+    }
+
+    private String generateSecureToken(int length) {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
+    }
+
+    private String hashSha256(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("SHA-256 error", e);
+        }
+    }
+
 
     @Transactional
     public User suspendUser(UUID id) {

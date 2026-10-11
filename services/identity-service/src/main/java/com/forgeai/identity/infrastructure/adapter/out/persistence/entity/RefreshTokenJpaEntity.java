@@ -20,6 +20,9 @@ public class RefreshTokenJpaEntity {
     @Column(name = "session_id", nullable = false)
     private UUID sessionId;
 
+    @Column(name = "family_id", nullable = false)
+    private UUID familyId;
+
     @Column(name = "token_hash", nullable = false, length = 64)
     private String tokenHash;
 
@@ -32,6 +35,24 @@ public class RefreshTokenJpaEntity {
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
+    @Column(name = "grace_period_until")
+    private Instant gracePeriodUntil;
+
     @Column(name = "replaced_by")
     private UUID replacedBy;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt = Instant.now();
+
+    public boolean isExpired() {
+        return expiresAt != null && expiresAt.isBefore(Instant.now());
+    }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public boolean isInGracePeriod() {
+        return isRevoked() && gracePeriodUntil != null && Instant.now().isBefore(gracePeriodUntil);
+    }
 }

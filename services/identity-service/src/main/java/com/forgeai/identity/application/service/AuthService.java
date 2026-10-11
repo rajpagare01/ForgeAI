@@ -6,6 +6,7 @@ import com.forgeai.identity.application.port.out.PasswordHasher;
 import com.forgeai.identity.application.port.out.TokenProvider;
 import com.forgeai.identity.application.port.out.UserRepository;
 import com.forgeai.identity.application.port.out.RefreshTokenRepository;
+import com.forgeai.identity.domain.exception.AccountLockedException;
 import com.forgeai.identity.domain.exception.InvalidCredentialsException;
 import com.forgeai.identity.domain.exception.InvalidUserStateException;
 import com.forgeai.identity.domain.model.User;
@@ -39,6 +40,7 @@ public class AuthService implements AuthenticationUseCase {
     private final SessionService sessionService;
     private final SecurityEventService securityEventService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final TokenRotationService tokenRotationService;
 
     @Override
     @Transactional
@@ -64,9 +66,27 @@ public class AuthService implements AuthenticationUseCase {
             userAgent = req.getHeader("User-Agent");
         }
 
+        if (user != null && user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
+            securityEventService.recordEvent(user.getId(), null, "LOGIN_BLOCKED_ACCOUNT_LOCKED", ipAddress, userAgent,
+                    "{\"lockedUntil\":\"" + user.getLockedUntil() + "\"}");
+            throw new AccountLockedException("Account is locked due to multiple failed login attempts. Please try again later.");
+        }
+
         if (user == null || !passwordHasher.matches(password, user.getPasswordHash())) {
             if (user != null) {
-                securityEventService.recordEvent(user.getId(), null, "LOGIN_FAILURE", ipAddress, userAgent, "{}");
+                int newCount = user.getFailedLoginCount() + 1;
+                user.setFailedLoginCount(newCount);
+                if (newCount >= 5) {
+                    Instant lockoutTime = Instant.now().plus(15, ChronoUnit.MINUTES);
+                    user.setLockedUntil(lockoutTime);
+                    userRepository.save(user);
+                    securityEventService.recordEvent(user.getId(), null, "ACCOUNT_LOCKED_BRUTE_FORCE", ipAddress, userAgent,
+                            "{\"failedAttempts\":" + newCount + ",\"lockedUntil\":\"" + lockoutTime + "\"}");
+                } else {
+                    userRepository.save(user);
+                    securityEventService.recordEvent(user.getId(), null, "LOGIN_FAILURE", ipAddress, userAgent,
+                            "{\"failedAttempts\":" + newCount + "}");
+                }
             } else {
                 securityEventService.recordEvent(null, null, "LOGIN_FAILURE", ipAddress, userAgent, "{\"identifier\":\"" + identifier + "\"}");
             }
@@ -76,6 +96,13 @@ public class AuthService implements AuthenticationUseCase {
         if (user.getStatus() != UserStatus.ACTIVE) {
             securityEventService.recordEvent(user.getId(), null, "LOGIN_BLOCKED", ipAddress, userAgent, "{\"status\":\"" + user.getStatus().name() + "\"}");
             throw new InvalidUserStateException("User account is not active");
+        }
+
+        // Reset failed login count and clear lockout on successful authentication
+        if (user.getFailedLoginCount() > 0 || user.getLockedUntil() != null) {
+            user.setFailedLoginCount(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
         }
 
         // Create session
@@ -88,9 +115,11 @@ public class AuthService implements AuthenticationUseCase {
 
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setSessionId(session.getId());
+        refreshToken.setFamilyId(UUID.randomUUID());
         refreshToken.setTokenHash(hashedRefreshToken);
         refreshToken.setIssuedAt(Instant.now());
         refreshToken.setExpiresAt(sessionExpiry);
+        refreshToken.setCreatedAt(Instant.now());
         refreshTokenRepository.save(refreshToken);
 
         securityEventService.recordEvent(user.getId(), null, "LOGIN_SUCCESS", ipAddress, userAgent, "{}");
@@ -148,63 +177,7 @@ public class AuthService implements AuthenticationUseCase {
     @Override
     @Transactional
     public com.forgeai.identity.api.dto.RefreshTokenResponse refresh(String rawRefreshToken) {
-        String tokenHash = hashWithSHA256(rawRefreshToken);
-        RefreshToken refreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid refresh token"));
-
-        if (refreshToken.getRevokedAt() != null) {
-            // REUSE DETECTED
-            securityEventService.recordEvent(null, null, "REFRESH_TOKEN_REUSE_DETECTED", null, null, "{}");
-            sessionService.revokeSession(refreshToken.getSessionId());
-            refreshTokenRepository.revokeBySessionId(refreshToken.getSessionId());
-            throw new InvalidCredentialsException("Invalid refresh token");
-        }
-
-        if (refreshToken.getExpiresAt().isBefore(Instant.now())) {
-            throw new InvalidCredentialsException("Invalid refresh token");
-        }
-
-        Session session = sessionService.getSession(refreshToken.getSessionId());
-        if (session == null || session.getRevokedAt() != null || session.getExpiresAt().isBefore(Instant.now())) {
-            throw new InvalidCredentialsException("Invalid refresh token");
-        }
-
-        User user = userRepository.findById(session.getUserId())
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid refresh token"));
-
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new InvalidCredentialsException("Invalid refresh token");
-        }
-
-        // Rotate token
-        refreshToken.setRevokedAt(Instant.now());
-        
-        String newRawRefreshToken = generateSecureRandomString();
-        String newHashedRefreshToken = hashWithSHA256(newRawRefreshToken);
-        
-        RefreshToken newRefreshToken = new RefreshToken();
-        newRefreshToken.setSessionId(session.getId());
-        newRefreshToken.setTokenHash(newHashedRefreshToken);
-        newRefreshToken.setIssuedAt(Instant.now());
-        newRefreshToken.setExpiresAt(session.getExpiresAt());
-        RefreshToken savedNewToken = refreshTokenRepository.save(newRefreshToken);
-
-        refreshToken.setReplacedBy(savedNewToken.getId());
-        refreshTokenRepository.save(refreshToken);
-        
-        session.setLastUsedAt(Instant.now());
-        sessionService.updateSession(session);
-        
-        securityEventService.recordEvent(user.getId(), null, "REFRESH_SUCCESS", null, null, "{}");
-        
-        String accessToken = tokenProvider.generateToken(user.getId());
-        
-        return new com.forgeai.identity.api.dto.RefreshTokenResponse(
-                accessToken,
-                newRawRefreshToken,
-                "Bearer",
-                tokenProvider.getExpirationSeconds()
-        );
+        return tokenRotationService.rotateToken(rawRefreshToken);
     }
 
     @Override

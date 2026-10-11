@@ -7,6 +7,7 @@ import com.forgeai.identity.infrastructure.adapter.out.persistence.mapper.Sessio
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,11 +30,13 @@ public class SessionRepositoryAdapter implements SessionRepository {
         return mapper.toDomain(jpaRepository.save(mapper.toEntity(entity)));
     }
 
-    
     @Override
     public List<Session> findActiveByUserId(UUID userId) {
         return jpaRepository.findByUserIdAndRevokedAtIsNull(userId).stream().map(mapper::toDomain).collect(Collectors.toList());
     }
 
+    @Override
+    public void revokeById(UUID sessionId) {
+        jpaRepository.revokeById(sessionId, Instant.now());
+    }
 }
-

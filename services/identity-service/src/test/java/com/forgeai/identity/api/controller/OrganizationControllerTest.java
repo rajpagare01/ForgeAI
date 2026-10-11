@@ -31,10 +31,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 
 import org.springframework.context.annotation.Import;
 import com.forgeai.identity.infrastructure.security.SecurityConfig;
-import com.forgeai.identity.infrastructure.security.JwtAuthenticationFilter;
+import com.forgeai.identity.infrastructure.security.RsaKeyPropertiesConfig;
 
 @WebMvcTest(OrganizationController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class})
+@Import({SecurityConfig.class, RsaKeyPropertiesConfig.class})
 @AutoConfigureMockMvc
 class OrganizationControllerTest {
 

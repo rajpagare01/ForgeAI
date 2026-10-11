@@ -8,5 +8,7 @@ public interface RefreshTokenRepository {
     RefreshToken save(RefreshToken refreshToken);
     Optional<RefreshToken> findById(UUID id);
     Optional<RefreshToken> findByTokenHash(String tokenHash);
+    Optional<RefreshToken> findByTokenHashWithLock(String tokenHash);
     void revokeBySessionId(UUID sessionId);
+    void revokeByFamilyId(UUID familyId);
 }

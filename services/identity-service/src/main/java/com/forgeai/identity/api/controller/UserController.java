@@ -59,17 +59,31 @@ public class UserController {
     }
 
     /**
-     * POST /api/v1/users/me/email-change
-     * Stages an email change (sets pendingEmail). Does NOT verify or swap the email.
+     * POST /api/v1/users/me/email/request
+     * Stages an email change (sets pendingEmail), generates verification token and emits outbox event.
      * Requires authentication.
      */
-    @PostMapping("/me/email-change")
+    @PostMapping(value = {"/me/email/request", "/me/email-change"})
     public ResponseEntity<UserProfileResponse> requestEmailChange(
             @Valid @RequestBody EmailChangeRequest request,
             Authentication authentication) {
         UUID userId = extractUserId(authentication);
         return ResponseEntity.ok(userProfileUseCase.requestEmailChange(userId, request.newEmail()));
     }
+
+    /**
+     * POST /api/v1/users/me/email/verify
+     * Verifies token, swaps email = pendingEmail, clears pendingEmail, sets emailVerified = true, and emits outbox event.
+     * Requires authentication.
+     */
+    @PostMapping("/me/email/verify")
+    public ResponseEntity<UserProfileResponse> verifyEmailChange(
+            @Valid @RequestBody VerifyEmailRequest request,
+            Authentication authentication) {
+        UUID userId = extractUserId(authentication);
+        return ResponseEntity.ok(userProfileUseCase.verifyEmailChange(userId, request.token()));
+    }
+
 
     /**
      * POST /api/v1/users/me/password
@@ -101,11 +115,24 @@ public class UserController {
     // Security: derive user identity strictly from the JWT principal
     // -------------------------------------------------------------------------
     private UUID extractUserId(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof UUID)) {
-            // Should never reach here because SecurityConfig requires authentication,
-            // but guard defensively.
+        if (authentication == null) {
             throw new com.forgeai.identity.domain.exception.InvalidCredentialsException("Authentication required");
         }
-        return (UUID) authentication.getPrincipal();
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof UUID uuid) {
+            return uuid;
+        }
+        if (principal instanceof String str) {
+            try {
+                return UUID.fromString(str);
+            } catch (IllegalArgumentException ignored) {}
+        }
+        if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+            try {
+                return UUID.fromString(jwt.getSubject());
+            } catch (IllegalArgumentException ignored) {}
+        }
+        throw new com.forgeai.identity.domain.exception.InvalidCredentialsException("Authentication required");
     }
+
 }

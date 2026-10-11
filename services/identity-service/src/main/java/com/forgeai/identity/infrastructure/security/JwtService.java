@@ -1,44 +1,71 @@
 package com.forgeai.identity.infrastructure.security;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
+import com.forgeai.identity.application.port.out.TokenProvider;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
-import java.nio.charset.StandardCharsets;
-import java.util.Date;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
-import com.forgeai.identity.application.port.out.TokenProvider;
-
 @Service
+@RequiredArgsConstructor
 public class JwtService implements TokenProvider {
 
-    private final SecretKey key;
-    private final long expirationMs;
+    private final JwtEncoder jwtEncoder;
+    private final JwtDecoder jwtDecoder;
 
-    public JwtService(
-            @Value("${security.jwt.secret-key}") String secretKey,
-            @Value("${security.jwt.expiration-ms:900000}") long expirationMs) {
-        if (secretKey == null || secretKey.isBlank()) {
-            throw new IllegalStateException("JWT secret key is not configured. Application cannot start securely.");
-        }
-        if (secretKey.length() < 32) {
-            throw new IllegalStateException("JWT secret key must be at least 256 bits (32 characters).");
-        }
-        this.key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
-        this.expirationMs = expirationMs;
+    @Value("${security.jwt.rsa.key-id:forgeai-identity-key-v1}")
+    private String keyId;
+
+    @Value("${security.jwt.expiration-ms:900000}")
+    private long expirationMs;
+
+    @Value("${security.jwt.issuer:https://forgeai.internal/identity}")
+    private String issuer;
+
+    @Override
+    public String generateToken(UUID userId) {
+        return generateToken(userId, null, null, Collections.emptyList());
     }
 
-    public String generateToken(UUID userId) {
-        return Jwts.builder()
+    @Override
+    public String generateToken(UUID userId, UUID orgId, String role, List<String> permissions) {
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusMillis(expirationMs);
+
+        JwsHeader jwsHeader = JwsHeader.with(() -> "RS256")
+                .keyId(keyId)
+                .build();
+
+        JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
+                .issuer(issuer)
                 .subject(userId.toString())
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + expirationMs))
-                .signWith(key)
-                .compact();
+                .issuedAt(now)
+                .expiresAt(expiresAt)
+                .id(UUID.randomUUID().toString());
+
+        if (orgId != null) {
+            claimsBuilder.claim("org_id", orgId.toString());
+        }
+
+        if (role != null && !role.isBlank()) {
+            claimsBuilder.claim("role", role);
+        }
+
+        if (permissions != null && !permissions.isEmpty()) {
+            claimsBuilder.claim("permissions", permissions);
+        }
+
+        JwtClaimsSet claims = claimsBuilder.build();
+        return jwtEncoder.encode(JwtEncoderParameters.from(jwsHeader, claims)).getTokenValue();
     }
 
     @Override
@@ -48,10 +75,7 @@ public class JwtService implements TokenProvider {
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(token);
+            jwtDecoder.decode(token);
             return true;
         } catch (Exception e) {
             return false;
@@ -59,11 +83,7 @@ public class JwtService implements TokenProvider {
     }
 
     public UUID extractUserId(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        return UUID.fromString(claims.getSubject());
+        var jwt = jwtDecoder.decode(token);
+        return UUID.fromString(jwt.getSubject());
     }
 }

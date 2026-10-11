@@ -5,6 +5,7 @@ import com.forgeai.identity.infrastructure.adapter.out.persistence.mapper.Refres
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,7 +34,17 @@ public class RefreshTokenRepositoryAdapter implements com.forgeai.identity.appli
     }
 
     @Override
+    public Optional<RefreshToken> findByTokenHashWithLock(String tokenHash) {
+        return jpaRepository.findByTokenHashWithLock(tokenHash).map(mapper::toDomain);
+    }
+
+    @Override
     public void revokeBySessionId(UUID sessionId) {
-        jpaRepository.revokeBySessionId(sessionId, java.time.Instant.now());
+        jpaRepository.revokeBySessionId(sessionId, Instant.now());
+    }
+
+    @Override
+    public void revokeByFamilyId(UUID familyId) {
+        jpaRepository.revokeByFamilyId(familyId, Instant.now());
     }
 }

@@ -50,6 +50,14 @@ public class UserProfileService implements UserProfileUseCase {
 
     @Override
     @Transactional
+    public UserProfileResponse verifyEmailChange(UUID userId, String token) {
+        User user = userService.verifyEmailChange(userId, token);
+        return toResponse(user);
+    }
+
+
+    @Override
+    @Transactional
     public void changePassword(UUID userId, String currentPassword, String newPassword) {
         userService.changePassword(userId, currentPassword, newPassword);
     }

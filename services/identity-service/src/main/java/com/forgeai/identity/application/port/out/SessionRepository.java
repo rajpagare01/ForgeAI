@@ -9,4 +9,5 @@ public interface SessionRepository {
     Optional<Session> findById(UUID id);
     List<Session> findActiveByUserId(UUID userId);
     Session save(Session entity);
+    void revokeById(UUID sessionId);
 }

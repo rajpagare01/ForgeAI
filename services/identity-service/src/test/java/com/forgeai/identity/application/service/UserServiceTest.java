@@ -45,6 +45,12 @@ public class UserServiceTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Mock
+    private com.forgeai.identity.infrastructure.outbox.OutboxService outboxService;
+
+    @Mock
+    private com.forgeai.identity.infrastructure.adapter.out.persistence.repository.EmailVerificationTokenRepository emailVerificationTokenRepository;
+
     private UserService userService;
 
     private User activeUser;
@@ -53,7 +59,7 @@ public class UserServiceTest {
     void setUp() {
         SessionService sessionService = new SessionService(sessionRepository);
         SecurityEventService securityEventService = new SecurityEventService(securityEventRepository);
-        userService = new UserService(userRepository, sessionService, securityEventService, passwordHasher, refreshTokenRepository);
+        userService = new UserService(userRepository, sessionService, securityEventService, passwordHasher, refreshTokenRepository, outboxService, emailVerificationTokenRepository);
 
         activeUser = new User();
         activeUser.setId(UUID.randomUUID());

@@ -29,6 +29,7 @@
         <module>services/project-service</module>
         <module>services/source-control-service</module>
         <module>services/testing-service</module>
+        <module>infrastructure/api-gateway</module>
     </modules>
 
     <dependencyManagement>

@@ -25,15 +25,21 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), request);
     }
 
-    @ExceptionHandler(InvalidCredentialsException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex, WebRequest request) {
+    @ExceptionHandler({InvalidCredentialsException.class, CompromisedTokenException.class})
+    public ResponseEntity<ApiErrorResponse> handleInvalidCredentials(DomainException ex, WebRequest request) {
         return buildErrorResponse(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccountLocked(AccountLockedException ex, WebRequest request) {
+        return buildErrorResponse(HttpStatus.LOCKED, "ACCOUNT_LOCKED", ex.getMessage(), request);
     }
 
     @ExceptionHandler(InvalidUserStateException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidUserState(InvalidUserStateException ex, WebRequest request) {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "FORBIDDEN", ex.getMessage(), request);
     }
+
 
     @ExceptionHandler({IllegalArgumentException.class, MethodArgumentNotValidException.class, org.springframework.http.converter.HttpMessageNotReadableException.class})
     public ResponseEntity<ApiErrorResponse> handleBadRequest(Exception ex, WebRequest request) {

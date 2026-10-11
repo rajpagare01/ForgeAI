@@ -18,9 +18,16 @@ import java.util.UUID;
 public interface RefreshTokenRepository extends JpaRepository<RefreshTokenJpaEntity, UUID> {
     
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM RefreshTokenJpaEntity r WHERE r.tokenHash = :tokenHash")
+    Optional<RefreshTokenJpaEntity> findByTokenHashWithLock(@Param("tokenHash") String tokenHash);
+
     Optional<RefreshTokenJpaEntity> findByTokenHash(String tokenHash);
 
     @Modifying
     @Query("UPDATE RefreshTokenJpaEntity r SET r.revokedAt = :revokedAt WHERE r.sessionId = :sessionId AND r.revokedAt IS NULL")
     void revokeBySessionId(@Param("sessionId") UUID sessionId, @Param("revokedAt") Instant revokedAt);
+
+    @Modifying
+    @Query("UPDATE RefreshTokenJpaEntity r SET r.revokedAt = :revokedAt WHERE r.familyId = :familyId AND r.revokedAt IS NULL")
+    void revokeByFamilyId(@Param("familyId") UUID familyId, @Param("revokedAt") Instant revokedAt);
 }

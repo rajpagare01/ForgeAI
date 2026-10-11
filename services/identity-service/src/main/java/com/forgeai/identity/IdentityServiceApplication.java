@@ -19,6 +19,7 @@ import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfi
  * until we implement the security configuration explicitly.
  * DataSource and Flyway are active and connected to PostgreSQL.
  */
+@org.springframework.scheduling.annotation.EnableScheduling
 @SpringBootApplication(exclude = {
     SecurityAutoConfiguration.class,
     ManagementWebSecurityAutoConfiguration.class

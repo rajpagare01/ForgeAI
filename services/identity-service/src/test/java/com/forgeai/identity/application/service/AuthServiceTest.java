@@ -49,6 +49,8 @@ class AuthServiceTest {
     private TokenProvider tokenProvider;
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
+    @Mock
+    private TokenRotationService tokenRotationService;
 
     private AuthService authService;
 
@@ -63,9 +65,11 @@ class AuthServiceTest {
 
         SessionService sessionService = new SessionService(sessionRepository);
         SecurityEventService securityEventService = new SecurityEventService(securityEventRepository);
-        UserService userService = new UserService(userRepository, sessionService, securityEventService, passwordHasher, refreshTokenRepository);
+        com.forgeai.identity.infrastructure.outbox.OutboxService outboxService = mock(com.forgeai.identity.infrastructure.outbox.OutboxService.class);
+        var emailTokenRepo = mock(com.forgeai.identity.infrastructure.adapter.out.persistence.repository.EmailVerificationTokenRepository.class);
+        UserService userService = new UserService(userRepository, sessionService, securityEventService, passwordHasher, refreshTokenRepository, outboxService, emailTokenRepo);
 
-        authService = new AuthService(userService, userRepository, passwordHasher, tokenProvider, sessionService, securityEventService, refreshTokenRepository);
+        authService = new AuthService(userService, userRepository, passwordHasher, tokenProvider, sessionService, securityEventService, refreshTokenRepository, tokenRotationService);
 
         activeUser = new User();
         activeUser.setId(UUID.randomUUID());
@@ -212,57 +216,21 @@ class AuthServiceTest {
     }
 
     @Test
-    void refresh_Success() {
-        Session session = new Session();
-        session.setId(UUID.randomUUID());
-        session.setUserId(activeUser.getId());
-        session.setExpiresAt(java.time.Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS));
-
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setId(UUID.randomUUID());
-        refreshToken.setSessionId(session.getId());
-        refreshToken.setExpiresAt(java.time.Instant.now().plus(1, java.time.temporal.ChronoUnit.DAYS));
-        
-        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(refreshToken));
-        when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
-        when(userRepository.findById(any())).thenReturn(Optional.of(activeUser));
-        when(refreshTokenRepository.save(any())).thenAnswer(i -> {
-            RefreshToken r = i.getArgument(0);
-            if (r.getId() == null) r.setId(UUID.randomUUID());
-            return r;
-        });
-        when(tokenProvider.generateToken(any())).thenReturn("new_access_token");
+    void refresh_DelegatesToTokenRotationService() {
+        var expectedResponse = new com.forgeai.identity.api.dto.RefreshTokenResponse(
+                "new_access_token",
+                "new_refresh_token",
+                "Bearer",
+                900L
+        );
+        when(tokenRotationService.rotateToken("some_raw_token")).thenReturn(expectedResponse);
 
         var response = authService.refresh("some_raw_token");
 
         assertNotNull(response);
         assertEquals("new_access_token", response.accessToken());
-        assertNotNull(response.refreshToken());
-        verify(refreshTokenRepository, times(2)).save(any()); // Save new token and update old token replacedBy
-        verify(sessionRepository).save(any()); // Update lastUsedAt
-        verify(securityEventRepository).save(any()); // REFRESH_SUCCESS
-    }
-
-    @Test
-    void refresh_ReuseDetected() {
-        UUID sessionId = UUID.randomUUID();
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setId(UUID.randomUUID());
-        refreshToken.setSessionId(sessionId);
-        refreshToken.setRevokedAt(java.time.Instant.now()); // ALREADY REVOKED!
-
-        Session existingSession = new Session();
-        existingSession.setId(sessionId);
-        existingSession.setUserId(UUID.randomUUID());
-
-        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(refreshToken));
-        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(existingSession));
-
-        assertThrows(InvalidCredentialsException.class, () -> authService.refresh("some_raw_token"));
-
-        verify(securityEventRepository).save(argThat((SecurityEvent e) -> e.getEventType().equals("REFRESH_TOKEN_REUSE_DETECTED")));
-        verify(sessionRepository).save(argThat(s -> s.getRevokedAt() != null));
-        verify(refreshTokenRepository).revokeBySessionId(sessionId);
+        assertEquals("new_refresh_token", response.refreshToken());
+        verify(tokenRotationService).rotateToken("some_raw_token");
     }
 
     @Test
