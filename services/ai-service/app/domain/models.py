@@ -1,0 +1,64 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+from uuid import UUID, uuid4
+from datetime import datetime
+from enum import Enum
+
+
+class SymbolType(str, Enum):
+    CLASS = "CLASS"
+    FUNCTION = "FUNCTION"
+    METHOD = "METHOD"
+    MODULE = "MODULE"
+
+
+class EdgeType(str, Enum):
+    CALLS = "CALLS"
+    IMPORTS = "IMPORTS"
+    EXTENDS = "EXTENDS"
+
+
+class RiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class CodeChunk(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    organization_id: UUID
+    repository_id: UUID
+    commit_sha: str
+    file_path: str
+    symbol_name: Optional[str] = None
+    symbol_type: Optional[str] = None
+    content: str
+    content_hash: str
+    embedding: Optional[List[float]] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class GraphEdge(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    organization_id: UUID
+    repository_id: UUID
+    source_symbol: str
+    target_symbol: str
+    edge_type: str
+    valid_at_sha: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Analysis(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    organization_id: UUID
+    entity_type: str
+    entity_id: str
+    model_version: str
+    prompt_version: str
+    summary: str
+    risk_level: Optional[str] = None
+    retrieved_chunks: Optional[List[Dict[str, Any]]] = None
+    execution_duration_ms: int = 0
+    created_at: datetime = Field(default_factory=datetime.utcnow)
