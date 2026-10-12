@@ -60,6 +60,7 @@ app.include_router(ai_router.router)
 
 
 @app.get("/health", tags=["Health"])
+@app.get("/healthz", tags=["Health"])
 async def health_check():
     return {
         "status": "UP",

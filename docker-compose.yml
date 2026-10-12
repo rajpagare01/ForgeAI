@@ -14,18 +14,17 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
 
-  # identity-service:
-  #   build:
-  #     context: ./services/identity-service
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     - postgres
-  #   environment:
-  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/forgeai_identity
-  #     - SPRING_DATASOURCE_USERNAME=forgeai
-  #     - SPRING_DATASOURCE_PASSWORD=password
+  redis:
+    image: redis:7-alpine
+    container_name: forgeai-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  redis_data:
+

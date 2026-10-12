@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query
-from app.presentation.dependencies import get_tenant_org_id, get_trace_id
+from app.presentation.dependencies import get_tenant_org_id, get_trace_id, check_ai_quota
 from app.presentation.dtos import (
     EnqueueIndexJobRequest,
     EnqueueIndexJobResponse,
@@ -108,6 +108,7 @@ async def analyze_pull_request(
     req: PRAnalysisRequest,
     org_id: UUID = Depends(get_tenant_org_id),
     trace_id: str = Depends(get_trace_id),
+    _quota: None = Depends(check_ai_quota),
 ):
     """
     Generates an executive impact review for a PR using Hybrid RAG (graph + vectors + Gemini)

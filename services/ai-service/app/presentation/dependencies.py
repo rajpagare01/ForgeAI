@@ -1,10 +1,14 @@
 import logging
 from typing import Optional
 from uuid import UUID, uuid4
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Depends
 from app.core.config import settings
+from app.infrastructure.resilience.redis_rate_limiter import RedisAiRateLimiter
 
 logger = logging.getLogger(__name__)
+
+# Global rate limiter instance
+ai_rate_limiter = RedisAiRateLimiter()
 
 
 def get_tenant_org_id(request: Request) -> UUID:
@@ -58,3 +62,22 @@ def get_trace_id(request: Request) -> str:
 
     # Generate W3C 32-hex trace ID
     return uuid4().hex
+
+
+async def check_ai_quota(org_id: UUID = Depends(get_tenant_org_id)):
+    """
+    FastAPI dependency enforcing daily token quota and rate limiting.
+    Rejects with HTTP 429 Too Many Requests and Retry-After header if exceeded.
+    """
+    allowed, retry_after = await ai_rate_limiter.check_and_consume_quota(
+        org_id=org_id,
+        estimated_tokens=500,
+        max_requests_per_minute=60,
+        daily_token_limit=100_000,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="AI organizational quota or rate limit exceeded",
+            headers={"Retry-After": str(retry_after or 60)},
+        )

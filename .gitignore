@@ -38,9 +38,37 @@ build/
 ### Mac OS ###
 .DS_Store
 
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+### Security & Secrets ###
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pkcs12
+*.p12
+*.pfx
+*.jks
+*.keystore
+
 ### Others ###
 *.log
 *.class
-.env
 postman/
 generate_postman.py
+Thumbs.db
+
