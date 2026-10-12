@@ -23,7 +23,7 @@ COPY requirements.txt .
 
 # Pre-compile wheels & packages into isolated /install prefix
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --prefix=/install -r requirements.txt
+    pip install --no-cache-dir --default-timeout=100 --retries=5 --prefix=/install -r requirements.txt
 
 # Copy source and verify tree-sitter bindings pre-compilation
 COPY . .
