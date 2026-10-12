@@ -50,9 +50,6 @@ jobs:
 
       - name: Build and Run Tests
         env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/forgeai_test
-          SPRING_DATASOURCE_USERNAME: forge
-          SPRING_DATASOURCE_PASSWORD: forge
           SPRING_DATA_REDIS_HOST: localhost
           SPRING_DATA_REDIS_PORT: 6379
           DB_HOST: localhost
