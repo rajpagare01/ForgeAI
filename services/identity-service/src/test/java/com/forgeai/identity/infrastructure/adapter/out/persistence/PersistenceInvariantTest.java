@@ -160,8 +160,8 @@ class PersistenceInvariantTest {
     // -----------------------------------------------------------------------
     @Test
     void systemRole_duplicateName_fails() {
-        roleRepository.saveAndFlush(systemRole("OWNER"));
-        assertThatThrownBy(() -> roleRepository.saveAndFlush(systemRole("OWNER")))
+        roleRepository.saveAndFlush(systemRole("TEST_DUP_SYSTEM_ROLE"));
+        assertThatThrownBy(() -> roleRepository.saveAndFlush(systemRole("TEST_DUP_SYSTEM_ROLE")))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -231,6 +231,7 @@ class PersistenceInvariantTest {
         SessionJpaEntity session = sessionRepository.saveAndFlush(session(user.getId()));
         RefreshTokenJpaEntity rt = new RefreshTokenJpaEntity();
         rt.setSessionId(session.getId());
+        rt.setFamilyId(UUID.randomUUID());
         // SHA-256 produces 64 hex chars
         rt.setTokenHash("a".repeat(64));
         rt.setIssuedAt(Instant.now());

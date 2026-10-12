@@ -79,7 +79,6 @@ public class RoleServiceTest {
         UUID userId = UUID.randomUUID();
         systemRole.setOrganizationId(orgId);
         when(authorizationService.hasOrganizationPermission(any(), any(), eq("ROLE_ADMINISTER"))).thenReturn(true);
-        when(authorizationService.hasOrganizationPermission(any(), any(), eq("ROLE_ASSIGN"))).thenReturn(true);
         when(roleRepository.findById(systemRole.getId())).thenReturn(Optional.of(systemRole));
         
         assertThrows(InvalidRoleScopeException.class, () -> 
