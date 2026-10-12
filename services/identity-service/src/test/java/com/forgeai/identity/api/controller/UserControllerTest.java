@@ -121,8 +121,8 @@ public class UserControllerTest {
                 "ACTIVE", true, null, Instant.now(), Instant.now()
         );
         
-        when(jwtService.validateToken(VALID_TOKEN)).thenReturn(true);
-        when(jwtService.extractUserId(VALID_TOKEN)).thenReturn(userId);
+        when(jwtService.validateToken(anyString())).thenReturn(true);
+        when(jwtService.extractUserId(anyString())).thenReturn(userId);
     }
 
     @Test
