@@ -6,36 +6,19 @@ import com.forgeai.identity.api.exception.GlobalExceptionHandler;
 import com.forgeai.identity.application.port.in.UserProfileUseCase;
 import com.forgeai.identity.domain.exception.InvalidCredentialsException;
 import com.forgeai.identity.domain.exception.UserAlreadyExistsException;
-import com.forgeai.identity.infrastructure.security.JwtService;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import com.forgeai.identity.infrastructure.security.SecurityConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -46,54 +29,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserController.class)
-@Import({UserControllerTest.TestSecurityConfig.class, GlobalExceptionHandler.class})
+@Import({SecurityConfig.class, GlobalExceptionHandler.class})
 public class UserControllerTest {
-
-    @TestConfiguration
-    static class TestSecurityConfig {
-        @Bean
-        public SecurityFilterChain testSecurityFilterChain(HttpSecurity http, JwtService jwtService) throws Exception {
-            http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/api/v1/users/**").authenticated()
-                    .anyRequest().permitAll()
-                )
-                .addFilterBefore(new OncePerRequestFilter() {
-                    @Override
-                    protected void doFilterInternal(HttpServletRequest request,
-                                                    HttpServletResponse response,
-                                                    FilterChain filterChain)
-                            throws ServletException, IOException {
-                        String header = request.getHeader("Authorization");
-                        if (header != null && header.startsWith("Bearer ")) {
-                            String token = header.substring(7);
-                            try {
-                                if (jwtService.validateToken(token)) {
-                                    UUID userId = jwtService.extractUserId(token);
-                                    if (userId != null) {
-                                        Authentication auth = new UsernamePasswordAuthenticationToken(
-                                                userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
-                                        SecurityContextHolder.getContext().setAuthentication(auth);
-                                    }
-                                }
-                            } catch (Exception ignored) {}
-                        }
-                        filterChain.doFilter(request, response);
-                    }
-                }, AuthorizationFilter.class)
-                .exceptionHandling(exceptions -> exceptions
-                    .authenticationEntryPoint((request, response, authException) -> {
-                        response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                        response.setContentType("application/json");
-                        response.getWriter().write("{\"error\": \"Unauthorized\"}");
-                    })
-                );
-
-            return http.build();
-        }
-    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -105,9 +42,7 @@ public class UserControllerTest {
     private UserProfileUseCase userProfileUseCase;
 
     @MockBean
-    private JwtService jwtService;
-
-
+    private JwtDecoder jwtDecoder;
 
     private UUID userId;
     private UserProfileResponse profileResponse;
@@ -120,9 +55,16 @@ public class UserControllerTest {
                 userId, "test@example.com", "testuser", "First", "Last",
                 "ACTIVE", true, null, Instant.now(), Instant.now()
         );
-        
-        when(jwtService.validateToken(anyString())).thenReturn(true);
-        when(jwtService.extractUserId(anyString())).thenReturn(userId);
+
+        Jwt jwt = Jwt.withTokenValue("test-token")
+                .headers(h -> h.put("alg", "none"))
+                .claim("sub", userId.toString())
+                .subject(userId.toString())
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+
+        when(jwtDecoder.decode(anyString())).thenReturn(jwt);
     }
 
     @Test

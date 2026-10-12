@@ -160,8 +160,9 @@ class PersistenceInvariantTest {
     // -----------------------------------------------------------------------
     @Test
     void systemRole_duplicateName_fails() {
-        roleRepository.saveAndFlush(systemRole("TEST_DUP_SYSTEM_ROLE"));
-        assertThatThrownBy(() -> roleRepository.saveAndFlush(systemRole("TEST_DUP_SYSTEM_ROLE")))
+        String roleName = "TEST_CUSTOM_ROLE_" + UUID.randomUUID().toString().substring(0, 8);
+        roleRepository.saveAndFlush(systemRole(roleName));
+        assertThatThrownBy(() -> roleRepository.saveAndFlush(systemRole(roleName)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

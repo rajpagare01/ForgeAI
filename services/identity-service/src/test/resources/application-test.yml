@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgeai_test}
+    username: ${SPRING_DATASOURCE_USERNAME:forge}
+    password: ${SPRING_DATASOURCE_PASSWORD:forge}
+    driver-class-name: org.postgresql.Driver
