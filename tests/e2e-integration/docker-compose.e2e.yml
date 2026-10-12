@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # 1. Identity Service PostgreSQL
+  postgres-identity:
+    image: postgres:16-alpine
+    container_name: forgeai-postgres-identity
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: forgeai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: identity_db
+    restart: unless-stopped
+
+  # 2. Project Service PostgreSQL
+  postgres-project:
+    image: postgres:16-alpine
+    container_name: forgeai-postgres-project
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: forgeai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: project_db
+    restart: unless-stopped
+
+  # 3. Source Control Service PostgreSQL
+  postgres-sourcecontrol:
+    image: postgres:16-alpine
+    container_name: forgeai-postgres-sourcecontrol
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: forgeai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sourcecontrol_db
+    restart: unless-stopped
+
+  # 4. Testing Service PostgreSQL
+  postgres-testing:
+    image: postgres:16-alpine
+    container_name: forgeai-postgres-testing
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: forgeai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: testing_db
+    restart: unless-stopped
+
+  # 5. AI Service PostgreSQL with pgvector
+  postgres-ai:
+    image: pgvector/pgvector:pg16
+    container_name: forgeai-postgres-ai
+    ports:
+      - "5436:5432"
+    environment:
+      POSTGRES_USER: forgeai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ai_db
+    restart: unless-stopped
+
+  # 6. AI Service (Python FastAPI)
+  ai-service:
+    build:
+      context: ../../services/ai-service
+      dockerfile: Dockerfile
+    container_name: forgeai-ai-service
+    ports:
+      - "8084:8084"
+    depends_on:
+      - postgres-ai
+    environment:
+      DATABASE_URL: postgresql://forgeai:password@postgres-ai:5432/ai_db
+      PORT: 8084
+    restart: unless-stopped
+
+  # 7. E2E Test Runner Container
+  e2e-test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forgeai-e2e-runner
+    depends_on:
+      - ai-service
+    environment:
+      GATEWAY_URL: http://api-gateway:8080
+      AI_SERVICE_URL: http://ai-service:8084

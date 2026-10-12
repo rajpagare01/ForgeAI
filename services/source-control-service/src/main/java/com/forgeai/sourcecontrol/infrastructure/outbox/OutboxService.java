@@ -9,6 +9,7 @@ import com.forgeai.sourcecontrol.domain.event.EventEnvelope;
 import com.forgeai.sourcecontrol.infrastructure.persistence.entity.OutboxEventEntity;
 import com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataOutboxEventRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +34,17 @@ public class OutboxService {
     @Transactional(propagation = Propagation.MANDATORY)
     public <T extends DomainEvent> OutboxEventEntity publish(T event, String traceId, String aggregateType, String aggregateId) {
         try {
-            EventEnvelope<T> envelope = EventEnvelope.from(event, traceId, aggregateType, aggregateId);
+            // Restore active traceId from MDC first to preserve W3C trace context, then parameter, then random
+            String effectiveTraceId = MDC.get("traceId");
+            if (effectiveTraceId == null || effectiveTraceId.isBlank()) {
+                effectiveTraceId = traceId;
+            }
+            if (effectiveTraceId == null || effectiveTraceId.isBlank()) {
+                effectiveTraceId = UUID.randomUUID().toString().replace("-", "");
+            }
+
+
+            EventEnvelope<T> envelope = EventEnvelope.from(event, effectiveTraceId, aggregateType, aggregateId);
             String payloadJson = objectMapper.writeValueAsString(envelope);
 
             OutboxEventEntity entity = OutboxEventEntity.builder()
@@ -41,13 +52,14 @@ public class OutboxService {
                     .aggregateId(aggregateId)
                     .eventType(event.getEventType())
                     .payload(payloadJson)
-                    .traceId(traceId != null ? traceId : UUID.randomUUID().toString())
+                    .traceId(effectiveTraceId)
                     .createdAt(Instant.now())
                     .attemptCount(0)
                     .build();
 
             OutboxEventEntity saved = outboxEventRepository.save(entity);
-            log.debug("Persisted outbox event: type={}, aggregateId={}", event.getEventType(), aggregateId);
+            log.debug("Persisted outbox event: type={}, aggregateId={}, traceId={}",
+                    event.getEventType(), aggregateId, effectiveTraceId);
             return saved;
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize domain event: {}", event.getEventType(), e);

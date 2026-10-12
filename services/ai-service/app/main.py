@@ -43,14 +43,20 @@ async def lifespan(app: FastAPI):
     logger.info("AI Service shutdown complete.")
 
 
+from app.core.trace_middleware import TraceContextMiddleware
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     lifespan=lifespan,
 )
 
+# Register W3C trace context middleware
+app.add_middleware(TraceContextMiddleware)
+
 # Include API router
 app.include_router(ai_router.router)
+
 
 
 @app.get("/health", tags=["Health"])

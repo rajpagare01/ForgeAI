@@ -13,6 +13,7 @@ import com.forgeai.project.domain.repository.TaskRepository;
 import com.forgeai.project.infrastructure.outbox.OutboxService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,13 +43,25 @@ public class SourceControlEventConsumer {
             return;
         }
 
-        Object payload = envelope.getPayload();
-        if (payload instanceof CommitCreatedEvent commitEvent) {
-            onCommitCreated(commitEvent);
-        } else if (payload instanceof PullRequestOpenedEvent prEvent) {
-            onPullRequestOpened(prEvent);
-        } else if (payload instanceof BranchCreatedEvent branchEvent) {
-            onBranchCreated(branchEvent);
+        // Restore incoming traceId into MDC for continued correlation
+        String traceId = envelope.getTraceId();
+        if (traceId != null && !traceId.isBlank()) {
+            MDC.put("traceId", traceId);
+        }
+
+        try {
+            Object payload = envelope.getPayload();
+            if (payload instanceof CommitCreatedEvent commitEvent) {
+                onCommitCreated(commitEvent);
+            } else if (payload instanceof PullRequestOpenedEvent prEvent) {
+                onPullRequestOpened(prEvent);
+            } else if (payload instanceof BranchCreatedEvent branchEvent) {
+                onBranchCreated(branchEvent);
+            }
+        } finally {
+            if (traceId != null) {
+                MDC.remove("traceId");
+            }
         }
     }
 
@@ -139,16 +152,19 @@ public class SourceControlEventConsumer {
                 .timestamp(now)
                 .build();
 
-        outboxService.publish(event, "auto-link-" + saved.getId());
-        log.info("Auto-linked Git artifact to task: taskId={}, key={}, linkType={}, ref={}",
-                task.getId(), task.getTaskKey(), linkType, externalRef);
+        String currentTraceId = MDC.get("traceId");
+        outboxService.publish(event, currentTraceId != null ? currentTraceId : ("trace-link-" + saved.getId()));
+
+        log.info("Auto-linked code artifact [traceId={}]: taskKey={}, type={}, ref={}",
+                currentTraceId, task.getTaskKey(), linkType, externalRef);
     }
 
     private Set<String> extractTaskKeys(String text) {
         Set<String> keys = new HashSet<>();
-        if (text == null || text.isBlank()) {
+        if (text == null) {
             return keys;
         }
+
         Matcher matcher = TASK_KEY_PATTERN.matcher(text);
         while (matcher.find()) {
             keys.add(matcher.group().toUpperCase());

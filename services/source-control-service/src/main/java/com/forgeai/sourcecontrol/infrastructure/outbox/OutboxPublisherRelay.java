@@ -7,6 +7,7 @@ import com.forgeai.sourcecontrol.infrastructure.messaging.EventPublisher;
 import com.forgeai.sourcecontrol.infrastructure.persistence.entity.OutboxEventEntity;
 import com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataOutboxEventRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +48,11 @@ public class OutboxPublisherRelay {
         }
 
         for (OutboxEventEntity entity : pendingEvents) {
+            // Step 3: Restore the original traceId into the worker thread's MDC context
+            String traceId = entity.getTraceId();
+            if (traceId != null && !traceId.isBlank()) {
+                MDC.put("traceId", traceId);
+            }
             try {
                 dispatchEntity(entity);
                 entity.setPublishedAt(Instant.now());
@@ -57,6 +63,8 @@ public class OutboxPublisherRelay {
                 entity.setAttemptCount(entity.getAttemptCount() + 1);
                 entity.setLastError(e.getMessage());
                 outboxEventRepository.save(entity);
+            } finally {
+                MDC.remove("traceId");
             }
         }
     }

@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query
-from app.presentation.dependencies import get_tenant_org_id
+from app.presentation.dependencies import get_tenant_org_id, get_trace_id
 from app.presentation.dtos import (
     EnqueueIndexJobRequest,
     EnqueueIndexJobResponse,
@@ -107,10 +107,11 @@ async def graph_impact_analysis(
 async def analyze_pull_request(
     req: PRAnalysisRequest,
     org_id: UUID = Depends(get_tenant_org_id),
+    trace_id: str = Depends(get_trace_id),
 ):
     """
     Generates an executive impact review for a PR using Hybrid RAG (graph + vectors + Gemini)
-    and saves an audit record into analyses.
+    and saves an audit record into analyses correlated with the W3C trace_id.
     """
     _, _, orchestration_service = get_services()
     analysis = await orchestration_service.analyze_pull_request(
@@ -120,6 +121,7 @@ async def analyze_pull_request(
         title=req.title,
         description=req.description,
         changed_symbols=req.changed_symbols,
+        trace_id=trace_id,
     )
     return AnalysisResponseDTO(
         id=analysis.id,
@@ -131,6 +133,7 @@ async def analyze_pull_request(
         summary=analysis.summary,
         risk_level=analysis.risk_level,
         execution_duration_ms=analysis.execution_duration_ms,
+        trace_id=analysis.trace_id,
     )
 
 

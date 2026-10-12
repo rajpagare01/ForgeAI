@@ -62,8 +62,13 @@ CREATE TABLE IF NOT EXISTS analyses (
     risk_level VARCHAR(32), -- 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
     retrieved_chunks JSONB,
     execution_duration_ms BIGINT NOT NULL DEFAULT 0,
+    trace_id VARCHAR(64),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_analyses_org_entity 
     ON analyses (organization_id, entity_type, entity_id);
+
+CREATE INDEX IF NOT EXISTS idx_analyses_trace_id 
+    ON analyses (trace_id);
+

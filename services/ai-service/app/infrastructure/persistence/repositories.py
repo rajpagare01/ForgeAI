@@ -244,8 +244,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             INSERT INTO analyses (
                 id, organization_id, entity_type, entity_id, model_version,
                 prompt_version, summary, risk_level, retrieved_chunks,
-                execution_duration_ms, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+                execution_duration_ms, trace_id, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -260,6 +260,7 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 analysis.risk_level,
                 json.dumps(analysis.retrieved_chunks) if analysis.retrieved_chunks else None,
                 analysis.execution_duration_ms,
+                analysis.trace_id,
                 analysis.created_at,
             )
         return analysis
@@ -270,7 +271,7 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
         query = """
             SELECT id, organization_id, entity_type, entity_id, model_version,
                    prompt_version, summary, risk_level, retrieved_chunks,
-                   execution_duration_ms, created_at
+                   execution_duration_ms, trace_id, created_at
             FROM analyses
             WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
             ORDER BY created_at DESC;
@@ -293,6 +294,7 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                     risk_level=r["risk_level"],
                     retrieved_chunks=chunks,
                     execution_duration_ms=r["execution_duration_ms"],
+                    trace_id=r["trace_id"],
                     created_at=r["created_at"],
                 )
             )

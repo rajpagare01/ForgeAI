@@ -61,4 +61,5 @@ class Analysis(BaseModel):
     risk_level: Optional[str] = None
     retrieved_chunks: Optional[List[Dict[str, Any]]] = None
     execution_duration_ms: int = 0
+    trace_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

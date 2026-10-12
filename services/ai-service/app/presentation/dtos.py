@@ -50,3 +50,4 @@ class AnalysisResponseDTO(BaseModel):
     summary: str
     risk_level: Optional[str] = None
     execution_duration_ms: int
+    trace_id: Optional[str] = None

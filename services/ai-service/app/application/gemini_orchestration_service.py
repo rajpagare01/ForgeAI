@@ -30,13 +30,14 @@ class GeminiOrchestrationService:
         title: str,
         description: str,
         changed_symbols: List[str],
+        trace_id: Optional[str] = None,
     ) -> Analysis:
         """
         Orchestrates hybrid RAG:
         1. Multi-hop recursive graph traversal for changed symbols
         2. Vector semantic search for PR context
         3. Gemini reasoning with structured prompt
-        4. Audit record persistence in analyses table
+        4. Audit record persistence in analyses table with correlated trace_id
         """
         start_time = time.time()
 
@@ -101,7 +102,7 @@ Please provide:
 
         duration_ms = int((time.time() - start_time) * 1000)
 
-        # 4. Save audit record in analyses table
+        # 4. Save audit record in analyses table with trace_id
         analysis = Analysis(
             organization_id=organization_id,
             entity_type="PR",
@@ -112,10 +113,12 @@ Please provide:
             risk_level=risk,
             retrieved_chunks=retrieved_chunks,
             execution_duration_ms=duration_ms,
+            trace_id=trace_id,
         )
 
         saved = await self.analysis_repo.save_analysis(analysis)
         logger.info(
-            f"Saved PR analysis for PR #{pr_number} (org={organization_id}, duration={duration_ms}ms, risk={risk})"
+            f"Saved PR analysis for PR #{pr_number} [traceId={trace_id}] (org={organization_id}, duration={duration_ms}ms, risk={risk})"
         )
         return saved
+
