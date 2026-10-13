@@ -44,10 +44,13 @@ public class TaskApplicationService {
         Project project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
 
-        // 2. Validate requirement if supplied
+        // 2. Validate requirement if supplied and ensure it belongs to the SAME project
         if (command.requirementId() != null) {
-            requirementRepository.findByIdAndOrganizationId(command.requirementId(), organizationId)
+            Requirement req = requirementRepository.findByIdAndOrganizationId(command.requirementId(), organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + command.requirementId() + " in org=" + organizationId));
+            if (!req.getProjectId().equals(projectId)) {
+                throw new IllegalArgumentException("Requirement " + command.requirementId() + " belongs to project " + req.getProjectId() + ", not " + projectId);
+            }
         }
 
         // 3. Unique task key within project

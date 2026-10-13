@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface SpringDataPullRequestRepository extends JpaRepository<PullRequestJpaEntity, UUID> {
     Optional<PullRequestJpaEntity> findByRepositoryIdAndNumber(UUID repositoryId, Integer number);
     Optional<PullRequestJpaEntity> findByGithubPrId(Long githubPrId);
+    java.util.List<PullRequestJpaEntity> findAllByOrganizationId(UUID organizationId);
+    java.util.List<PullRequestJpaEntity> findAllByRepositoryId(UUID repositoryId);
 }

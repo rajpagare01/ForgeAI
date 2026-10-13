@@ -41,6 +41,13 @@ def get_services():
     return indexing_service, retrieval_service, orchestration_service
 
 
+@router.get("/healthz")
+@router.get("/health")
+async def health_check():
+    """Liveness & readiness probe for AI intelligence service"""
+    return {"status": "ok", "service": "ai-service"}
+
+
 @router.post("/index/enqueue", response_model=EnqueueIndexJobResponse, status_code=202)
 async def enqueue_indexing_job(
     req: EnqueueIndexJobRequest,

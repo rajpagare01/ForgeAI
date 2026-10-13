@@ -28,11 +28,27 @@ public class TestRunController {
         return ResponseEntity.status(HttpStatus.CREATED).body(run);
     }
 
+    @GetMapping
+    public ResponseEntity<java.util.List<TestRun>> listTestRuns(
+            @RequestParam(required = false) UUID repositoryId,
+            @RequestParam(required = false) String commitSha) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        java.util.List<TestRun> runs = testRunApplicationService.listTestRuns(organizationId, repositoryId, commitSha);
+        return ResponseEntity.ok(runs);
+    }
+
     @GetMapping("/{runId}")
     public ResponseEntity<TestRun> getTestRun(@PathVariable UUID runId) {
         UUID organizationId = TenantContext.getOrganizationId();
         TestRun run = testRunApplicationService.getTestRun(organizationId, runId);
         return ResponseEntity.ok(run);
+    }
+
+    @GetMapping("/{runId}/results")
+    public ResponseEntity<java.util.List<com.forgeai.testing.domain.model.TestResult>> getTestResults(@PathVariable UUID runId) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        java.util.List<com.forgeai.testing.domain.model.TestResult> results = testRunApplicationService.getTestResults(organizationId, runId);
+        return ResponseEntity.ok(results);
     }
 
     @PostMapping("/{runId}/complete")

@@ -40,14 +40,14 @@ async def test_pr_analysis_audit():
     # 1. Assert generated analysis fields
     assert analysis.organization_id == org_id
     assert analysis.entity_type == "PR"
-    assert analysis.entity_id == str(pr_number)
+    assert analysis.entity_id == f"{repo_id}#{pr_number}"
     assert analysis.summary is not None
     assert len(analysis.summary) > 20
     assert analysis.prompt_version == "v1.0.0"
     assert analysis.execution_duration_ms >= 0
 
     # 2. Verify persistence in analysis repository
-    stored_records = await analysis_repo.get_by_entity(org_id, "PR", str(pr_number))
+    stored_records = await analysis_repo.get_by_entity(org_id, "PR", f"{repo_id}#{pr_number}")
     assert len(stored_records) == 1
     assert stored_records[0].id == analysis.id
     assert stored_records[0].summary == analysis.summary

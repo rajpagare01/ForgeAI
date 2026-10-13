@@ -207,7 +207,7 @@ public class TokenRotationService {
     # 3. Assert AI outputs
     assert analysis.organization_id == org_id
     assert analysis.entity_type == "PR"
-    assert analysis.entity_id == str(pr_number)
+    assert analysis.entity_id == f"{repo_id}#{pr_number}"
     assert analysis.summary is not None
     assert analysis.prompt_version == "v1.0.0"
     assert analysis.execution_duration_ms >= 0
@@ -222,6 +222,6 @@ public class TokenRotationService {
     assert any("AuthController#refreshToken" in n["source_symbol"] for n in impacted)
 
     # Assert persisted in analyses table
-    stored = await analysis_repo.get_by_entity(org_id, "PR", str(pr_number))
+    stored = await analysis_repo.get_by_entity(org_id, "PR", f"{repo_id}#{pr_number}")
     assert len(stored) == 1
     assert stored[0].id == analysis.id

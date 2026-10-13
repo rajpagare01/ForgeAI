@@ -45,6 +45,20 @@ public class TestRunRepositoryAdapter implements TestRunRepository {
     }
 
     @Override
+    public List<TestRun> findAllByOrganizationId(UUID organizationId) {
+        return jpaRepository.findAllByOrganizationId(organizationId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<TestRun> findAllByOrganizationIdAndRepositoryId(UUID organizationId, UUID repositoryId) {
+        return jpaRepository.findAllByOrganizationIdAndRepositoryId(organizationId, repositoryId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<TestRun> findAllByOrganizationIdAndCommitSha(UUID organizationId, String commitSha) {
         return jpaRepository.findAllByOrganizationIdAndCommitSha(organizationId, commitSha).stream()
                 .map(mapper::toDomain)

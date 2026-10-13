@@ -32,6 +32,12 @@ public class RepositoryController {
         return ResponseEntity.ok(repositoryApplicationService.getRepository(organizationId, id));
     }
 
+    @GetMapping("/{id}/pull-requests")
+    public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.PullRequest>> listPullRequestsForRepo(@PathVariable UUID id) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, id));
+    }
+
     public record ConnectRepositoryRequest(
             Long githubRepoId,
             Long installationId,

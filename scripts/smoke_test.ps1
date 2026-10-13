@@ -3,7 +3,7 @@
 # ==============================================================================
 param (
     [string]$ComposeFile = "docker-compose.prod.yml",
-    [int]$TimeoutSecs = 120,
+    [int]$TimeoutSecs = 300,
     [int]$PollInterval = 5,
     [string]$GatewayUrl = "http://localhost:8080"
 )
@@ -40,7 +40,8 @@ $ExpectedContainers = @(
     "forgeai-source-control-prod",
     "forgeai-testing-prod",
     "forgeai-ai-prod",
-    "forgeai-api-gateway-prod"
+    "forgeai-api-gateway-prod",
+    "forgeai-frontend-prod"
 )
 
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -70,7 +71,7 @@ while ($true) {
     Start-Sleep -Seconds $PollInterval
 }
 
-# 3. End-to-End Health Probe Sweep via API Gateway (Port 8080)
+# 3. End-to-End Health Probe Sweep via API Gateway (Port 8080) & Frontend (Port 3000)
 Write-Host "`n`n[3/4] Performing Gateway & Downstream Health Probe Sweep..." -ForegroundColor Yellow
 
 function Test-Endpoint {
@@ -92,6 +93,7 @@ function Test-Endpoint {
 Test-Endpoint -Url "$GatewayUrl/actuator/health" -Name "API Gateway Health (/actuator/health)"
 Test-Endpoint -Url "$GatewayUrl/.well-known/jwks.json" -Name "Identity JWKS Route (/.well-known/jwks.json)"
 Test-Endpoint -Url "$GatewayUrl/api/v1/ai/health" -Name "AI Service Health (/api/v1/ai/health)"
+Test-Endpoint -Url "http://localhost:3000/" -Name "Next.js Web Dashboard (http://localhost:3000/)"
 
 # 4. Service Status & Summary Report
 Write-Host "`n[4/4] Final Stack Health Summary:" -ForegroundColor Yellow

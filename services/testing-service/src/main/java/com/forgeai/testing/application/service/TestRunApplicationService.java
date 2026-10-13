@@ -129,4 +129,26 @@ public class TestRunApplicationService {
                 updated.getId(), updated.getStatus(), updated.getTotalTests(), passed, failed, skipped);
         return updated;
     }
+
+    @Transactional(readOnly = true)
+    public List<TestRun> listTestRuns(UUID organizationId, UUID repositoryId, String commitSha) {
+        if (organizationId == null) {
+            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        }
+        if (commitSha != null && !commitSha.isBlank()) {
+            return testRunRepository.findAllByOrganizationIdAndCommitSha(organizationId, commitSha);
+        }
+        if (repositoryId != null) {
+            return testRunRepository.findAllByOrganizationIdAndRepositoryId(organizationId, repositoryId);
+        }
+        return testRunRepository.findAllByOrganizationId(organizationId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TestResult> getTestResults(UUID organizationId, UUID runId) {
+        if (organizationId == null) {
+            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        }
+        return testResultRepository.findAllByOrganizationIdAndTestRunId(organizationId, runId);
+    }
 }

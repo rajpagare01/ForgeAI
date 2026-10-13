@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # ------------------------------------------------------------------------------
 # Stage 1: Build Application Layer using Maven & Eclipse Temurin 21
 # ------------------------------------------------------------------------------
@@ -15,7 +14,7 @@ COPY infrastructure/api-gateway/pom.xml infrastructure/api-gateway/
 
 # Copy target module sources and compile
 COPY services/testing-service services/testing-service
-RUN mvn clean package -DskipTests -pl services/testing-service -am
+RUN mvn clean package -DskipTests -pl services/testing-service -am -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.count=5
 
 # ------------------------------------------------------------------------------
 # Stage 2: Extract Spring Boot Layered JAR

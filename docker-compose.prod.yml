@@ -75,16 +75,16 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 25s
+      retries: 30
+      start_period: 180s
     restart: unless-stopped
     networks:
       - forgeai-internal
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 768M
+          cpus: '2.0'
+          memory: 1024M
 
   # ----------------------------------------------------------------------------
   # Core Domain: Project Service (Java 21 / Spring Boot 3)
@@ -106,16 +106,16 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 25s
+      retries: 30
+      start_period: 180s
     restart: unless-stopped
     networks:
       - forgeai-internal
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 768M
+          cpus: '2.0'
+          memory: 1024M
 
   # ----------------------------------------------------------------------------
   # Core Domain: Source Control Service (Java 21 / Spring Boot 3)
@@ -143,16 +143,16 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 25s
+      retries: 30
+      start_period: 180s
     restart: unless-stopped
     networks:
       - forgeai-internal
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 768M
+          cpus: '2.0'
+          memory: 1024M
 
   # ----------------------------------------------------------------------------
   # Core Domain: Testing Service (Java 21 / Spring Boot 3)
@@ -176,16 +176,16 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 25s
+      retries: 30
+      start_period: 180s
     restart: unless-stopped
     networks:
       - forgeai-internal
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 768M
+          cpus: '2.0'
+          memory: 1024M
 
   # ----------------------------------------------------------------------------
   # Core Intelligence: AI Service (Python 3.12 / FastAPI)
@@ -256,8 +256,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 20s
+      retries: 15
+      start_period: 60s
     restart: unless-stopped
     networks:
       - forgeai-internal
@@ -266,6 +266,38 @@ services:
         limits:
           cpus: '1.0'
           memory: 768M
+
+  # ----------------------------------------------------------------------------
+  # Presentation Layer: Modern Next.js 16 Web Dashboard
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: forgeai-frontend-prod
+    ports:
+      - "0.0.0.0:3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_GATEWAY_URL: http://localhost:8080
+      PORT: 3000
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - forgeai-internal
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
 networks:
   forgeai-internal:

@@ -29,6 +29,7 @@ public class CommitJpaEntity {
     @Column(name = "repository_id", nullable = false)
     private UUID repositoryId;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.CHAR)
     @Column(name = "sha", nullable = false, length = 40)
     private String sha;
 

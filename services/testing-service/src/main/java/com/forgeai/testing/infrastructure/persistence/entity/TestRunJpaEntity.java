@@ -28,6 +28,7 @@ public class TestRunJpaEntity {
     @Column(name = "repository_id", nullable = false)
     private UUID repositoryId;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.CHAR)
     @Column(name = "commit_sha", nullable = false, length = 40)
     private String commitSha;
 

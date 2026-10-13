@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # ------------------------------------------------------------------------------
 # Stage 1: Build & Compile Dependencies (Tree-Sitter grammars, C-extensions)
 # ------------------------------------------------------------------------------

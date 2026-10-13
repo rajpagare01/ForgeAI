@@ -27,6 +27,8 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        String clientOrgId = exchange.getRequest().getHeaders().getFirst("X-Org-Id");
+
         // Step 1: Strip any inbound client-spoofed headers to guarantee boundary integrity
         ServerHttpRequest sanitizedRequest = exchange.getRequest().mutate()
                 .headers(httpHeaders -> {
@@ -50,6 +52,9 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                 .flatMap(jwt -> {
                     String userId = jwt.getSubject();
                     String orgId = jwt.getClaimAsString("org_id");
+                    if ((orgId == null || orgId.isBlank()) && clientOrgId != null && !clientOrgId.isBlank()) {
+                        orgId = clientOrgId.trim();
+                    }
                     String role = jwt.getClaimAsString("role");
                     List<String> permissions = jwt.getClaimAsStringList("permissions");
 

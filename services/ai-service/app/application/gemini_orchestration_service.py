@@ -102,11 +102,11 @@ Please provide:
 
         duration_ms = int((time.time() - start_time) * 1000)
 
-        # 4. Save audit record in analyses table with trace_id
+        # 4. Save audit record in analyses table with trace_id (globally unique repo_id#pr_number entity identity)
         analysis = Analysis(
             organization_id=organization_id,
             entity_type="PR",
-            entity_id=str(pr_number),
+            entity_id=f"{repository_id}#{pr_number}",
             model_version=self.llm_client.model_name,
             prompt_version=self.prompt_version,
             summary=summary_text,

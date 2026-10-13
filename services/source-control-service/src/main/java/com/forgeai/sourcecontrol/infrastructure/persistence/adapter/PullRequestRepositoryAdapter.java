@@ -52,4 +52,18 @@ public class PullRequestRepositoryAdapter implements PullRequestRepository {
     public Optional<PullRequest> findByGithubPrId(Long githubPrId) {
         return jpaRepository.findByGithubPrId(githubPrId).map(mapper::toDomain);
     }
+
+    @Override
+    public java.util.List<PullRequest> findAllByOrganizationId(UUID organizationId) {
+        return jpaRepository.findAllByOrganizationId(organizationId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public java.util.List<PullRequest> findAllByRepositoryId(UUID repositoryId) {
+        return jpaRepository.findAllByRepositoryId(repositoryId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
 }

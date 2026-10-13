@@ -30,7 +30,8 @@ public class WebhookDeliveryJpaEntity {
     @Column(name = "signature", nullable = false, length = 128)
     private String signature;
 
-    @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
     private String payload;
 
     @Column(name = "status", nullable = false, length = 32)

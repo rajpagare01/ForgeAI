@@ -1,0 +1,278 @@
+services:
+  # ----------------------------------------------------------------------------
+  # Data Layer: PostgreSQL 16 with pgvector & multi-database init
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: forgeai-postgres-dev
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-forgeai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: postgres
+    volumes:
+      - pg_data_dev:/var/lib/postgresql/data
+      - ./scripts/docker/init-multi-postgres.sh:/docker-entrypoint-initdb.d/init-multi-postgres.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgeai -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Cache & Rate Limiting: Redis 7 Standalone with AOF Persistence
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: forgeai-redis-dev
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Core Domain: Identity Service (Java 21 / Spring Boot 3)
+  # ----------------------------------------------------------------------------
+  identity-service:
+    build:
+      context: .
+      dockerfile: services/identity-service/Dockerfile
+    container_name: forgeai-identity-dev
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_identity
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SERVER_PORT: 8081
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JWT_ISSUER: ${JWT_ISSUER:-forgeai-identity}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Core Domain: Project Service (Java 21 / Spring Boot 3)
+  # ----------------------------------------------------------------------------
+  project-service:
+    build:
+      context: .
+      dockerfile: services/project-service/Dockerfile
+    container_name: forgeai-project-dev
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_project
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SERVER_PORT: 8085
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Core Domain: Source Control Service (Java 21 / Spring Boot 3)
+  # ----------------------------------------------------------------------------
+  source-control-service:
+    build:
+      context: .
+      dockerfile: services/source-control-service/Dockerfile
+    container_name: forgeai-source-control-dev
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/source_control_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SERVER_PORT: 8082
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-dev-webhook-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Core Domain: Testing Service (Java 21 / Spring Boot 3)
+  # ----------------------------------------------------------------------------
+  testing-service:
+    build:
+      context: .
+      dockerfile: services/testing-service/Dockerfile
+    container_name: forgeai-testing-dev
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/testing_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      SERVER_PORT: 8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Intelligence: AI Service (Python 3.11 / FastAPI / pgvector)
+  # ----------------------------------------------------------------------------
+  ai-service:
+    build:
+      context: .
+      dockerfile: services/ai-service/Dockerfile
+    container_name: forgeai-ai-dev
+    ports:
+      - "8084:8084"
+    environment:
+      DATABASE_URL: postgresql://forgeai:password@postgres:5432/ai_db
+      REDIS_URL: redis://redis:6379/0
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-mock-gemini-key-for-dev}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      PORT: 8084
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Edge Gateway: Spring Cloud Gateway (Java 21 / Reactive)
+  # ----------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: .
+      dockerfile: infrastructure/api-gateway/Dockerfile
+    container_name: forgeai-api-gateway-dev
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: 8080
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      IDENTITY_SERVICE_URI: http://identity-service:8081
+      PROJECT_SERVICE_URI: http://project-service:8085
+      SOURCE_CONTROL_SERVICE_URI: http://source-control-service:8082
+      TESTING_SERVICE_URI: http://testing-service:8083
+      AI_SERVICE_URI: http://ai-service:8084
+      JWK_SET_URI: http://identity-service:8081/.well-known/jwks.json
+    depends_on:
+      identity-service:
+        condition: service_healthy
+      project-service:
+        condition: service_healthy
+      source-control-service:
+        condition: service_healthy
+      testing-service:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
+  # Presentation: Web Dashboard (Next.js 16 / TypeScript / Tailwind CSS)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: forgeai-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_GATEWAY_URL: http://localhost:8080
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+# ------------------------------------------------------------------------------
+# Storage & Network Definitions
+# ------------------------------------------------------------------------------
+volumes:
+  pg_data_dev:
+  redis_data_dev:
+
+networks:
+  forgeai-network:
+    driver: bridge

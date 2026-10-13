@@ -26,7 +26,20 @@ public class RepositoryApplicationService {
 
     private final RepositoryRepository repositoryRepository;
     private final GitHubInstallationRepository installationRepository;
+    private final com.forgeai.sourcecontrol.domain.repository.PullRequestRepository pullRequestRepository;
     private final OutboxService outboxService;
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(UUID organizationId, UUID repositoryId) {
+        if (organizationId == null) {
+            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        }
+        if (repositoryId != null) {
+            getRepository(organizationId, repositoryId);
+            return pullRequestRepository.findAllByRepositoryId(repositoryId);
+        }
+        return pullRequestRepository.findAllByOrganizationId(organizationId);
+    }
 
     @Transactional(readOnly = true)
     public List<Repository> listRepositories(UUID organizationId) {

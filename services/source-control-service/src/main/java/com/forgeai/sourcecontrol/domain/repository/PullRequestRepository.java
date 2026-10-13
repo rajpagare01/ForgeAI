@@ -10,4 +10,6 @@ public interface PullRequestRepository {
     Optional<PullRequest> findById(UUID id);
     Optional<PullRequest> findByRepositoryIdAndNumber(UUID repositoryId, Integer number);
     Optional<PullRequest> findByGithubPrId(Long githubPrId);
+    java.util.List<PullRequest> findAllByOrganizationId(UUID organizationId);
+    java.util.List<PullRequest> findAllByRepositoryId(UUID repositoryId);
 }

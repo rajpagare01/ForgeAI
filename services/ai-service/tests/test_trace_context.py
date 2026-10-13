@@ -66,6 +66,6 @@ async def test_trace_id_persisted_in_analyses_audit():
     assert analysis.trace_id == originating_trace_id
 
     # Retrieve from analysis repo
-    records = await analysis_repo.get_by_entity(org_id, "PR", str(pr_number))
+    records = await analysis_repo.get_by_entity(org_id, "PR", f"{repo_id}#{pr_number}")
     assert len(records) == 1
     assert records[0].trace_id == originating_trace_id
