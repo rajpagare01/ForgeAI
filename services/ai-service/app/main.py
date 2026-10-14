@@ -25,22 +25,25 @@ async def lifespan(app: FastAPI):
         await db_pool.init()
         pool = db_pool.pool
         import os
-        migration_path = os.path.join(os.path.dirname(__file__), "..", "migrations", "001_initial_schema.sql")
-        if os.path.exists(migration_path):
-            try:
-                with open(migration_path, "r") as f:
-                    schema_sql = f.read()
-                async with pool.acquire() as conn:
-                    await conn.execute(schema_sql)
-                logger.info("Database schema initialized successfully.")
-            except Exception as se:
-                logger.warning(f"Schema migration skipped or failed: {se}")
-        # Initialize background index worker
-        pool = db_pool.pool
+        migrations_dir = os.path.join(os.path.dirname(__file__), "..", "migrations")
+        if os.path.exists(migrations_dir):
+            migration_files = sorted([f for f in os.listdir(migrations_dir) if f.endswith(".sql")])
+            for mf in migration_files:
+                try:
+                    with open(os.path.join(migrations_dir, mf), "r") as f:
+                        schema_sql = f.read()
+                    async with pool.acquire() as conn:
+                        await conn.execute(schema_sql)
+                    logger.info(f"Database migration {mf} executed successfully.")
+                except Exception as se:
+                    logger.warning(f"Schema migration {mf} skipped or failed: {se}")
+        # Initialize background index worker with durable job repository
+        from app.infrastructure.persistence.repositories import AsyncpgIndexJobRepository
         chunk_repo = AsyncpgCodeChunkRepository(pool)
         edge_repo = AsyncpgGraphEdgeRepository(pool)
+        job_repo = AsyncpgIndexJobRepository(pool)
         indexing_service = IndexingService(chunk_repo, edge_repo)
-        worker = IndexJobQueue(indexing_service)
+        worker = IndexJobQueue(indexing_service, job_repo=job_repo)
         await worker.start_worker()
         ai_router.index_worker = worker
     except Exception as e:

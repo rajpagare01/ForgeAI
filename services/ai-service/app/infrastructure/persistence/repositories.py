@@ -3,11 +3,12 @@ import logging
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 import asyncpg
-from app.domain.models import CodeChunk, GraphEdge, Analysis
+from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob
 from app.domain.repositories import (
     CodeChunkRepository,
     GraphEdgeRepository,
     AnalysisRepository,
+    IndexJobRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,8 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 symbol_name, symbol_type, content, content_hash, embedding, created_at
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11
-            );
+            )
+            ON CONFLICT (organization_id, repository_id, commit_sha, file_path, content_hash) DO NOTHING;
         """
         args = [
             (
@@ -159,7 +161,8 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
             INSERT INTO graph_edges (
                 id, organization_id, repository_id, source_symbol,
                 target_symbol, edge_type, valid_at_sha, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (organization_id, repository_id, valid_at_sha, source_symbol, target_symbol, edge_type) DO NOTHING;
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -182,7 +185,8 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
             INSERT INTO graph_edges (
                 id, organization_id, repository_id, source_symbol,
                 target_symbol, edge_type, valid_at_sha, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (organization_id, repository_id, valid_at_sha, source_symbol, target_symbol, edge_type) DO NOTHING;
         """
         args = [
             (
@@ -244,8 +248,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             INSERT INTO analyses (
                 id, organization_id, entity_type, entity_id, model_version,
                 prompt_version, summary, risk_level, retrieved_chunks,
-                execution_duration_ms, trace_id, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+                execution_duration_ms, trace_id, provider, fallback_used, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -261,6 +265,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 json.dumps(analysis.retrieved_chunks) if analysis.retrieved_chunks else None,
                 analysis.execution_duration_ms,
                 analysis.trace_id,
+                analysis.provider,
+                analysis.fallback_used,
                 analysis.created_at,
             )
         return analysis
@@ -271,7 +277,10 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
         query = """
             SELECT id, organization_id, entity_type, entity_id, model_version,
                    prompt_version, summary, risk_level, retrieved_chunks,
-                   execution_duration_ms, trace_id, created_at
+                   execution_duration_ms, trace_id,
+                   COALESCE(provider, 'GEMINI') as provider,
+                   COALESCE(fallback_used, false) as fallback_used,
+                   created_at
             FROM analyses
             WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
             ORDER BY created_at DESC;
@@ -288,6 +297,7 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                     organization_id=r["organization_id"],
                     entity_type=r["entity_type"],
                     entity_id=r["entity_id"],
+                    provider=r["provider"],
                     model_version=r["model_version"],
                     prompt_version=r["prompt_version"],
                     summary=r["summary"],
@@ -295,7 +305,149 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                     retrieved_chunks=chunks,
                     execution_duration_ms=r["execution_duration_ms"],
                     trace_id=r["trace_id"],
+                    fallback_used=r["fallback_used"],
                     created_at=r["created_at"],
                 )
             )
         return results
+
+
+class AsyncpgIndexJobRepository(IndexJobRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def create_job(self, job: IndexJob) -> IndexJob:
+        query = """
+            INSERT INTO ai_indexing_jobs (
+                id, organization_id, repository_id, commit_sha, status,
+                attempt_count, max_attempts, last_error, files, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
+            RETURNING id;
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                job.id,
+                job.organization_id,
+                job.repository_id,
+                job.commit_sha,
+                job.status.value if hasattr(job.status, "value") else str(job.status),
+                job.attempt_count,
+                job.max_attempts,
+                job.last_error,
+                json.dumps(job.files),
+                job.created_at,
+                job.updated_at,
+            )
+        return job
+
+    async def get_job_by_id(self, job_id: UUID) -> Optional[IndexJob]:
+        query = """
+            SELECT id, organization_id, repository_id, commit_sha, status,
+                   attempt_count, max_attempts, last_error, files,
+                   created_at, updated_at, started_at, completed_at
+            FROM ai_indexing_jobs
+            WHERE id = $1;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, job_id)
+            if row:
+                return self._row_to_job(row)
+        return None
+
+    async def acquire_next_queued_job(self) -> Optional[IndexJob]:
+        query = """
+            WITH next_job AS (
+                SELECT id FROM ai_indexing_jobs
+                WHERE status = 'QUEUED'
+                ORDER BY created_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE ai_indexing_jobs j
+            SET status = 'PROCESSING',
+                started_at = NOW(),
+                updated_at = NOW(),
+                attempt_count = j.attempt_count + 1
+            FROM next_job
+            WHERE j.id = next_job.id
+            RETURNING j.id, j.organization_id, j.repository_id, j.commit_sha, j.status,
+                      j.attempt_count, j.max_attempts, j.last_error, j.files,
+                      j.created_at, j.updated_at, j.started_at, j.completed_at;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query)
+            if row:
+                return self._row_to_job(row)
+        return None
+
+    async def mark_job_status(
+        self, job_id: UUID, status: str, last_error: Optional[str] = None
+    ) -> None:
+        if status == "COMPLETED":
+            query = """
+                UPDATE ai_indexing_jobs
+                SET status = 'COMPLETED',
+                    completed_at = NOW(),
+                    updated_at = NOW(),
+                    last_error = NULL
+                WHERE id = $1;
+            """
+            async with self.pool.acquire() as conn:
+                await conn.execute(query, job_id)
+        elif status == "FAILED":
+            query = """
+                UPDATE ai_indexing_jobs
+                SET status = CASE WHEN attempt_count < max_attempts THEN 'QUEUED' ELSE 'FAILED' END,
+                    last_error = $2,
+                    updated_at = NOW(),
+                    completed_at = CASE WHEN attempt_count >= max_attempts THEN NOW() ELSE NULL END
+                WHERE id = $1;
+            """
+            async with self.pool.acquire() as conn:
+                await conn.execute(query, job_id, last_error)
+        else:
+            query = """
+                UPDATE ai_indexing_jobs
+                SET status = $2,
+                    last_error = $3,
+                    updated_at = NOW()
+                WHERE id = $1;
+            """
+            async with self.pool.acquire() as conn:
+                await conn.execute(query, job_id, status, last_error)
+
+    async def recover_stale_jobs(self) -> int:
+        query = """
+            UPDATE ai_indexing_jobs
+            SET status = 'QUEUED', updated_at = NOW()
+            WHERE status = 'PROCESSING';
+        """
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(query)
+            try:
+                return int(result.split()[-1])
+            except Exception:
+                return 0
+
+    def _row_to_job(self, r: Any) -> IndexJob:
+        files = r["files"]
+        if isinstance(files, str):
+            files = json.loads(files)
+        from app.domain.models import IndexJobStatus
+        return IndexJob(
+            id=r["id"],
+            organization_id=r["organization_id"],
+            repository_id=r["repository_id"],
+            commit_sha=r["commit_sha"],
+            status=IndexJobStatus(r["status"]),
+            attempt_count=r["attempt_count"],
+            max_attempts=r["max_attempts"],
+            last_error=r["last_error"],
+            files=files,
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+            started_at=r["started_at"],
+            completed_at=r["completed_at"],
+        )
+

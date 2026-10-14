@@ -71,8 +71,11 @@ public class OutboxPublisherRelay {
 
     private void dispatchEntity(OutboxEventEntity entity) throws Exception {
         JsonNode rootNode = objectMapper.readTree(entity.getPayload());
+        while (rootNode != null && rootNode.isTextual()) {
+            rootNode = objectMapper.readTree(rootNode.asText());
+        }
         String eventType = entity.getEventType();
-        JsonNode payloadNode = rootNode.has("payload") ? rootNode.get("payload") : rootNode;
+        JsonNode payloadNode = rootNode != null && rootNode.has("payload") ? rootNode.get("payload") : rootNode;
 
         DomainEvent domainEvent = switch (eventType) {
             case "REPOSITORY_CONNECTED" -> objectMapper.treeToValue(payloadNode, RepositoryConnectedEvent.class);

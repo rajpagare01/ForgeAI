@@ -1,11 +1,12 @@
 import math
 from typing import List, Dict, Any, Optional
 from uuid import UUID
-from app.domain.models import CodeChunk, GraphEdge, Analysis
+from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob
 from app.domain.repositories import (
     CodeChunkRepository,
     GraphEdgeRepository,
     AnalysisRepository,
+    IndexJobRepository,
 )
 
 
@@ -118,3 +119,62 @@ class InMemoryAnalysisRepository(AnalysisRepository):
             a for a in self.analyses
             if a.organization_id == org_id and a.entity_type == entity_type and a.entity_id == entity_id
         ]
+
+
+class InMemoryIndexJobRepository(IndexJobRepository):
+    def __init__(self):
+        self.jobs: Dict[UUID, IndexJob] = {}
+
+    async def create_job(self, job: IndexJob) -> IndexJob:
+        self.jobs[job.id] = job
+        return job
+
+    async def get_job_by_id(self, job_id: UUID) -> Optional[IndexJob]:
+        return self.jobs.get(job_id)
+
+    async def acquire_next_queued_job(self) -> Optional[IndexJob]:
+        from app.domain.models import IndexJobStatus, utc_now
+        for job in sorted(self.jobs.values(), key=lambda j: j.created_at):
+            if job.status == IndexJobStatus.QUEUED:
+                job.status = IndexJobStatus.PROCESSING
+                job.attempt_count += 1
+                job.started_at = utc_now()
+                job.updated_at = utc_now()
+                return job
+        return None
+
+    async def mark_job_status(
+        self, job_id: UUID, status: str, last_error: Optional[str] = None
+    ) -> None:
+        from app.domain.models import IndexJobStatus, utc_now
+        job = self.jobs.get(job_id)
+        if not job:
+            return
+        if status == "COMPLETED":
+            job.status = IndexJobStatus.COMPLETED
+            job.completed_at = utc_now()
+            job.updated_at = utc_now()
+            job.last_error = None
+        elif status == "FAILED":
+            if job.attempt_count < job.max_attempts:
+                job.status = IndexJobStatus.QUEUED
+            else:
+                job.status = IndexJobStatus.FAILED
+                job.completed_at = utc_now()
+            job.last_error = last_error
+            job.updated_at = utc_now()
+        else:
+            job.status = IndexJobStatus(status)
+            job.last_error = last_error
+            job.updated_at = utc_now()
+
+    async def recover_stale_jobs(self) -> int:
+        from app.domain.models import IndexJobStatus, utc_now
+        recovered = 0
+        for job in self.jobs.values():
+            if job.status == IndexJobStatus.PROCESSING:
+                job.status = IndexJobStatus.QUEUED
+                job.updated_at = utc_now()
+                recovered += 1
+        return recovered
+

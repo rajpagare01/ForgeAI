@@ -72,4 +72,6 @@ secrets/
 postman/
 generate_postman.py
 Thumbs.db
+scratch/
+
 

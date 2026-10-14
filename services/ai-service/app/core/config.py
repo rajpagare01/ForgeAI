@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1/ai"
     PORT: int = 8084
+    ENVIRONMENT: str = "development"
+    ALLOW_TEST_FALLBACK: bool = False
 
     # Database settings (PostgreSQL 16 with pgvector)
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/ai_db"
@@ -17,11 +19,21 @@ class Settings(BaseSettings):
     # Redis settings (Token bucket & rate limiting)
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # Gemini LLM settings
-    GEMINI_API_KEY: Optional[str] = "test-api-key"
+    # Gemini LLM settings (PRIMARY)
+    GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-1.5-pro"
     GEMINI_EMBEDDING_MODEL: str = "models/text-embedding-004"
     EMBEDDING_DIMENSION: int = 768
+
+    # Groq LLM settings (FALLBACK ONLY - NOT FOR EMBEDDINGS)
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_API_URL: str = "https://api.groq.com/openai/v1/chat/completions"
+
+    # Provider Orchestration
+    AI_PROVIDER_ORDER: str = "gemini,groq"
+    PROVIDER_TIMEOUT_SECONDS: float = 30.0
+    PROVIDER_MAX_RETRIES: int = 2
 
     # Tenant header settings
     ORG_HEADER_NAME: str = "X-Org-Id"
@@ -36,9 +48,12 @@ class Settings(BaseSettings):
             return url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return url
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 settings = Settings()
+

@@ -1,7 +1,7 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from app.presentation.dependencies import get_tenant_org_id, get_trace_id, check_ai_quota
 from app.presentation.dtos import (
     EnqueueIndexJobRequest,
@@ -16,18 +16,19 @@ from app.infrastructure.persistence.repositories import (
     AsyncpgCodeChunkRepository,
     AsyncpgGraphEdgeRepository,
     AsyncpgAnalysisRepository,
+    AsyncpgIndexJobRepository,
 )
 from app.application.indexing_service import IndexingService
 from app.application.retrieval_service import RetrievalService
 from app.application.gemini_orchestration_service import GeminiOrchestrationService
-from app.workers.index_worker import IndexJobQueue
+from app.workers.index_worker import DurableIndexWorker
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ai", tags=["AI Core"])
 
 # Global worker instance (initialized in lifespan)
-index_worker: IndexJobQueue | None = None
+index_worker: DurableIndexWorker | None = None
 
 
 async def get_services():
@@ -54,7 +55,7 @@ async def enqueue_indexing_job(
     org_id: UUID = Depends(get_tenant_org_id),
 ):
     """
-    Asynchronously enqueues repository files for AST parsing and vector indexing.
+    Asynchronously and durably enqueues repository files for AST parsing and vector indexing.
     Returns HTTP 202 immediately to decouple user-facing HTTP request from parsing.
     """
     global index_worker
@@ -63,26 +64,63 @@ async def enqueue_indexing_job(
             pool = await db_pool.get_pool()
             chunk_repo = AsyncpgCodeChunkRepository(pool)
             edge_repo = AsyncpgGraphEdgeRepository(pool)
+            job_repo = AsyncpgIndexJobRepository(pool)
             indexing_service = IndexingService(chunk_repo, edge_repo)
-            index_worker = IndexJobQueue(indexing_service)
+            index_worker = DurableIndexWorker(indexing_service, job_repo=job_repo)
             await index_worker.start_worker()
         except Exception as e:
-            logger.error(f"Failed to lazily initialize IndexJobQueue: {e}")
+            logger.error(f"Failed to lazily initialize DurableIndexWorker: {e}")
 
     files_payload = [{"file_path": f.file_path, "content": f.content} for f in req.files]
+    job_id = None
     if index_worker:
-        await index_worker.enqueue_index_job(
+        job = await index_worker.enqueue_index_job(
             organization_id=org_id,
             repository_id=req.repository_id,
             commit_sha=req.commit_sha,
             files=files_payload,
         )
+        job_id = job.id
+
     return EnqueueIndexJobResponse(
         status="ENQUEUED",
         repository_id=req.repository_id,
         commit_sha=req.commit_sha,
         files_enqueued=len(req.files),
+        job_id=job_id,
     )
+
+
+@router.get("/jobs/{job_id}", response_model=Dict[str, Any])
+async def get_index_job_status(
+    job_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves the execution status of an asynchronous durable indexing job.
+    Enforces tenant isolation by verifying the job belongs to the authenticated tenant.
+    """
+    pool = await db_pool.get_pool()
+    job_repo = AsyncpgIndexJobRepository(pool)
+    job = await job_repo.get_job_by_id(job_id)
+    if not job or job.organization_id != org_id:
+        raise HTTPException(status_code=404, detail="Index job not found or unauthorized.")
+
+    return {
+        "id": str(job.id),
+        "organization_id": str(job.organization_id),
+        "repository_id": str(job.repository_id),
+        "commit_sha": job.commit_sha,
+        "status": job.status.value if hasattr(job.status, "value") else str(job.status),
+        "attempt_count": job.attempt_count,
+        "max_attempts": job.max_attempts,
+        "last_error": job.last_error,
+        "files_count": len(job.files),
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+    }
 
 
 @router.post("/search", response_model=List[Dict[str, Any]])
@@ -129,7 +167,7 @@ async def analyze_pull_request(
     _quota: None = Depends(check_ai_quota),
 ):
     """
-    Generates an executive impact review for a PR using Hybrid RAG (graph + vectors + Gemini)
+    Generates an executive impact review for a PR using Hybrid RAG (graph + vectors + Gemini Primary / Groq Fallback)
     and saves an audit record into analyses correlated with the W3C trace_id.
     """
     _, _, orchestration_service = await get_services()
@@ -147,10 +185,13 @@ async def analyze_pull_request(
         organization_id=analysis.organization_id,
         entity_type=analysis.entity_type,
         entity_id=analysis.entity_id,
+        provider=analysis.provider,
         model_version=analysis.model_version,
         prompt_version=analysis.prompt_version,
         summary=analysis.summary,
         risk_level=analysis.risk_level,
+        fallback_used=analysis.fallback_used,
+        retrieved_chunks=analysis.retrieved_chunks,
         execution_duration_ms=analysis.execution_duration_ms,
         trace_id=analysis.trace_id,
     )
@@ -174,11 +215,15 @@ async def get_analyses_for_entity(
             organization_id=a.organization_id,
             entity_type=a.entity_type,
             entity_id=a.entity_id,
+            provider=a.provider,
             model_version=a.model_version,
             prompt_version=a.prompt_version,
             summary=a.summary,
             risk_level=a.risk_level,
+            fallback_used=a.fallback_used,
+            retrieved_chunks=a.retrieved_chunks,
             execution_duration_ms=a.execution_duration_ms,
+            trace_id=a.trace_id,
         )
         for a in records
     ]

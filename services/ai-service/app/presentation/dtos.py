@@ -19,6 +19,7 @@ class EnqueueIndexJobResponse(BaseModel):
     repository_id: UUID
     commit_sha: str
     files_enqueued: int
+    job_id: Optional[UUID] = None
 
 
 class SemanticSearchRequest(BaseModel):
@@ -45,9 +46,13 @@ class AnalysisResponseDTO(BaseModel):
     organization_id: UUID
     entity_type: str
     entity_id: str
+    provider: str = "GEMINI"
     model_version: str
     prompt_version: str
     summary: str
     risk_level: Optional[str] = None
+    fallback_used: bool = False
+    retrieved_chunks: Optional[List[Dict[str, Any]]] = None
     execution_duration_ms: int
     trace_id: Optional[str] = None
+

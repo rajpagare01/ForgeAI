@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from app.domain.models import CodeChunk, GraphEdge, Analysis
+from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob
 
 
 class CodeChunkRepository(ABC):
@@ -50,3 +50,28 @@ class AnalysisRepository(ABC):
         self, org_id: UUID, entity_type: str, entity_id: str
     ) -> List[Analysis]:
         pass
+
+
+class IndexJobRepository(ABC):
+    @abstractmethod
+    async def create_job(self, job: IndexJob) -> IndexJob:
+        pass
+
+    @abstractmethod
+    async def get_job_by_id(self, job_id: UUID) -> Optional[IndexJob]:
+        pass
+
+    @abstractmethod
+    async def acquire_next_queued_job() -> Optional[IndexJob]:
+        pass
+
+    @abstractmethod
+    async def mark_job_status(
+        self, job_id: UUID, status: str, last_error: Optional[str] = None
+    ) -> None:
+        pass
+
+    @abstractmethod
+    async def recover_stale_jobs(self) -> int:
+        pass
+
