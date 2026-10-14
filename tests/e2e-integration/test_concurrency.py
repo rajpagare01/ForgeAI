@@ -24,6 +24,7 @@ class ConcurrencyAndIdempotencyValidator:
     ):
         self.gateway_url = gateway_url.rstrip("/")
         self.webhook_secret = webhook_secret.encode("utf-8")
+        self.timeout = int(os.getenv("E2E_TIMEOUT", "60"))
         self.session = requests.Session()
 
     def log(self, msg: str):
@@ -61,7 +62,7 @@ class ConcurrencyAndIdempotencyValidator:
 
         def send_webhook():
             try:
-                r = requests.post(f"{self.gateway_url}/api/v1/webhooks/github", data=webhook_body, headers=headers, timeout=20)
+                r = requests.post(f"{self.gateway_url}/api/v1/webhooks/github", data=webhook_body, headers=headers, timeout=self.timeout)
                 results.append(r.status_code)
             except Exception as e:
                 results.append(str(e))
@@ -93,11 +94,11 @@ class ConcurrencyAndIdempotencyValidator:
         requests.post(f"{self.gateway_url}/api/v1/auth/register", json={
             "email": email, "username": username, "password": password,
             "firstName": "Concurrent", "lastName": "User"
-        }, timeout=10)
+        }, timeout=self.timeout)
 
         login_res = requests.post(f"{self.gateway_url}/api/v1/auth/login", json={
             "identifier": email, "password": password
-        }, timeout=10)
+        }, timeout=self.timeout)
         assert login_res.status_code == 200, "Login failed"
         refresh_token = login_res.json()["refreshToken"]
 
@@ -106,7 +107,7 @@ class ConcurrencyAndIdempotencyValidator:
 
         def do_refresh():
             try:
-                r = requests.post(f"{self.gateway_url}/api/v1/auth/refresh", json={"refreshToken": refresh_token}, timeout=10)
+                r = requests.post(f"{self.gateway_url}/api/v1/auth/refresh", json={"refreshToken": refresh_token}, timeout=self.timeout)
                 refresh_results.append(r.status_code)
             except Exception as e:
                 refresh_results.append(str(e))

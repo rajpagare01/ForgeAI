@@ -23,6 +23,18 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing AI Service database pool...")
     try:
         await db_pool.init()
+        pool = db_pool.pool
+        import os
+        migration_path = os.path.join(os.path.dirname(__file__), "..", "migrations", "001_initial_schema.sql")
+        if os.path.exists(migration_path):
+            try:
+                with open(migration_path, "r") as f:
+                    schema_sql = f.read()
+                async with pool.acquire() as conn:
+                    await conn.execute(schema_sql)
+                logger.info("Database schema initialized successfully.")
+            except Exception as se:
+                logger.warning(f"Schema migration skipped or failed: {se}")
         # Initialize background index worker
         pool = db_pool.pool
         chunk_repo = AsyncpgCodeChunkRepository(pool)
@@ -32,7 +44,7 @@ async def lifespan(app: FastAPI):
         await worker.start_worker()
         ai_router.index_worker = worker
     except Exception as e:
-        logger.warning(f"Could not connect to database on startup: {e}. Tests can initialize manually.")
+        logger.warning(f"Could not connect to database on startup: {e}. Endpoints will initialize on demand.")
 
     yield
 

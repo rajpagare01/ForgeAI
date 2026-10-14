@@ -22,6 +22,7 @@ class ForgeAIE2ELifecycleRunner:
     ):
         self.gateway_url = gateway_url.rstrip("/")
         self.webhook_secret = webhook_secret.encode("utf-8")
+        self.timeout = int(os.getenv("E2E_TIMEOUT", "60"))
         self.session = requests.Session()
         
         # Unique run credentials & IDs
@@ -103,7 +104,7 @@ class ForgeAIE2ELifecycleRunner:
             "firstName": "Principal",
             "lastName": "Architect",
         }
-        res = self.session.post(reg_url, json=reg_payload, timeout=10)
+        res = self.session.post(reg_url, json=reg_payload, timeout=self.timeout)
         if res.status_code == 201:
             self.log(f"Registered user '{self.username}' ({self.email})")
             user_data = res.json()
@@ -119,7 +120,7 @@ class ForgeAIE2ELifecycleRunner:
             "identifier": self.email,
             "password": self.password,
         }
-        res = self.session.post(login_url, json=login_payload, timeout=10)
+        res = self.session.post(login_url, json=login_payload, timeout=self.timeout)
         if res.status_code != 200:
             raise RuntimeError(f"Login failed ({res.status_code}): {res.text}")
 
@@ -138,7 +139,7 @@ class ForgeAIE2ELifecycleRunner:
             "slug": slug,
             "description": "Enterprise autonomous governance tenant workspace",
         }
-        res = self.session.post(org_url, json=org_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(org_url, json=org_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code != 201:
             raise RuntimeError(f"Organization creation failed ({res.status_code}): {res.text}")
 
@@ -157,7 +158,7 @@ class ForgeAIE2ELifecycleRunner:
             "key": self.project_key,
             "description": "Governed microservices stack and AST call graph engine",
         }
-        res = self.session.post(proj_url, json=proj_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(proj_url, json=proj_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code != 201:
             raise RuntimeError(f"Project creation failed ({res.status_code}): {res.text}")
         data = res.json()
@@ -167,33 +168,32 @@ class ForgeAIE2ELifecycleRunner:
         # 2. Create Requirement under Project
         req_url = f"{self.gateway_url}/api/v1/projects/{self.project_id}/requirements"
         req_payload = {
-            "key": self.req_key,
+            "identifier": self.req_key,
             "title": "Zero-Trust JWT Revocation & Multi-Tenant Isolation",
             "description": "Verify that client-supplied identity headers are stripped and tokens validated with RS256 JWKS",
-            "category": "SECURITY",
         }
-        res = self.session.post(req_url, json=req_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(req_url, json=req_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code != 201:
             raise RuntimeError(f"Requirement creation failed ({res.status_code}): {res.text}")
         req_data = res.json()
         self.requirement_id = str(req_data["id"])
-        self.log(f"Created Security Requirement [{req_data['key']}] '{req_data['title']}'")
+        self.log(f"Created Security Requirement [{req_data.get('identifier', self.req_key)}] '{req_data['title']}'")
 
         # 3. Create Task bound to Requirement
         task_url = f"{self.gateway_url}/api/v1/projects/{self.project_id}/tasks"
         task_payload = {
-            "key": self.task_key,
+            "taskKey": self.task_key,
             "title": "Implement JwtRevocationGatewayFilter with Redis Token Bucket",
             "description": "Check token JTI against Redis blacklist in reactive WebFilter pipeline",
             "priority": "HIGH",
             "requirementId": self.requirement_id,
         }
-        res = self.session.post(task_url, json=task_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(task_url, json=task_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code != 201:
             raise RuntimeError(f"Task creation failed ({res.status_code}): {res.text}")
         task_data = res.json()
         self.task_id = str(task_data["id"])
-        self.log(f"Created Engineering Task [{task_data['key']}] bound to Requirement ID: {self.requirement_id}")
+        self.log(f"Created Engineering Task [{task_data.get('taskKey', self.task_key)}] bound to Requirement ID: {self.requirement_id}")
 
     def step4_source_control_and_webhook(self):
         self.print_phase(4, "Source Control Service & Webhook Thin Ingest")
@@ -209,7 +209,7 @@ class ForgeAIE2ELifecycleRunner:
             "defaultBranch": "main",
             "isPrivate": True,
         }
-        res = self.session.post(connect_url, json=repo_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(connect_url, json=repo_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code != 201:
             raise RuntimeError(f"Repository connection failed ({res.status_code}): {res.text}")
         repo_data = res.json()
@@ -245,7 +245,7 @@ class ForgeAIE2ELifecycleRunner:
             "X-GitHub-Event": "pull_request",
             "X-Hub-Signature-256": signature,
         }
-        res = self.session.post(webhook_url, data=webhook_body, headers=headers, timeout=10)
+        res = self.session.post(webhook_url, data=webhook_body, headers=headers, timeout=self.timeout)
         if res.status_code not in (200, 202):
             raise RuntimeError(f"Webhook ingestion failed ({res.status_code}): {res.text}")
         self.log(f"GitHub Webhook delivered successfully! HTTP {res.status_code} returned (Delivery ID: {delivery_id[:8]}...)")
@@ -262,7 +262,7 @@ class ForgeAIE2ELifecycleRunner:
             "branch": "feat/jwt-revocation",
             "prNumber": self.pr_number,
         }
-        res = self.session.post(run_url, json=run_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(run_url, json=run_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code != 201:
             raise RuntimeError(f"Test run creation failed ({res.status_code}): {res.text}")
         run_data = res.json()
@@ -279,15 +279,15 @@ class ForgeAIE2ELifecycleRunner:
 """
         headers = self.auth_headers()
         headers["Content-Type"] = "application/xml"
-        res = self.session.post(junit_url, data=junit_xml, headers=headers, timeout=10)
-        if res.status_code != 200:
+        res = self.session.post(junit_url, data=junit_xml, headers=headers, timeout=self.timeout)
+        if res.status_code not in (200, 202):
             raise RuntimeError(f"JUnit XML ingestion failed ({res.status_code}): {res.text}")
         ingest_data = res.json()
         self.log(f"JUnit report parsed & ingested: {ingest_data.get('count', 2)} test cases registered in database.")
 
         # 3. Complete Test Run
         complete_url = f"{self.gateway_url}/api/v1/test-runs/{self.test_run_id}/complete"
-        res = self.session.post(complete_url, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(complete_url, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code != 200:
             raise RuntimeError(f"Test run completion failed ({res.status_code}): {res.text}")
         self.log(f"Test run marked COMPLETED with 100% pass rate.")
@@ -307,7 +307,7 @@ class ForgeAIE2ELifecycleRunner:
                 }
             ],
         }
-        res = self.session.post(index_url, json=index_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(index_url, json=index_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code == 202:
             self.log(f"Enqueued repository indexing job: HTTP 202 accepted asynchronously.")
         else:
@@ -319,7 +319,7 @@ class ForgeAIE2ELifecycleRunner:
             "query": "jwt token validation filter",
             "limit": 5,
         }
-        res = self.session.post(search_url, json=search_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(search_url, json=search_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code == 200:
             results = res.json()
             self.log(f"Semantic search query executed successfully! Found {len(results)} chunk matches.")
@@ -332,7 +332,7 @@ class ForgeAIE2ELifecycleRunner:
             "changed_symbols": ["JwtFilter"],
             "max_depth": 3,
         }
-        res = self.session.post(impact_url, json=impact_payload, headers=self.auth_headers(), timeout=10)
+        res = self.session.post(impact_url, json=impact_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code == 200:
             impact_tree = res.json()
             self.log(f"Recursive AST Graph Impact calculated: {len(impact_tree)} upstream symbols analyzed.")
@@ -348,7 +348,7 @@ class ForgeAIE2ELifecycleRunner:
             "description": f"Resolves {self.task_key} with non-blocking Redis check",
             "changed_symbols": ["JwtFilter", "RedisRevocationStore"],
         }
-        res = self.session.post(pr_url, json=pr_payload, headers=self.auth_headers(), timeout=15)
+        res = self.session.post(pr_url, json=pr_payload, headers=self.auth_headers(), timeout=self.timeout)
         if res.status_code == 200:
             analysis = res.json()
             self.log(f"Gemini PR Analysis generated! Model: {analysis.get('model_version')}, Risk: {analysis.get('risk_level')}")

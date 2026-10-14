@@ -32,7 +32,7 @@ public class TestSuiteRepositoryAdapter implements TestSuiteRepository {
             }
         }
         TestSuiteJpaEntity entity = mapper.toEntity(suite);
-        return mapper.toDomain(jpaRepository.save(entity));
+        return mapper.toDomain(jpaRepository.saveAndFlush(entity));
     }
 
     @Override

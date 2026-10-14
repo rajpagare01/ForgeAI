@@ -74,6 +74,9 @@ public class WebhookIngestionService {
                     .status("PROCESSED")
                     .idempotentHit(false)
                     .build();
+        } catch (org.springframework.dao.DataIntegrityViolationException dive) {
+            log.info("Concurrent constraint violation in webhook delivery {}: {}", deliveryId, dive.getMessage());
+            throw dive;
         } catch (Exception e) {
             log.error("Failed to process webhook delivery {}: {}", deliveryId, e.getMessage(), e);
             savedDelivery.setStatus(WebhookDeliveryStatus.FAILED);

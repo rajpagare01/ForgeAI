@@ -1,3 +1,4 @@
+import asyncio
 import asyncpg
 import logging
 from typing import Optional
@@ -9,6 +10,12 @@ logger = logging.getLogger(__name__)
 class DatabasePool:
     def __init__(self):
         self._pool: Optional[asyncpg.Pool] = None
+        self._init_lock: Optional[asyncio.Lock] = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._init_lock is None:
+            self._init_lock = asyncio.Lock()
+        return self._init_lock
 
     async def init(self, dsn: Optional[str] = None):
         if self._pool is not None:
@@ -27,6 +34,13 @@ class DatabasePool:
             command_timeout=60,
         )
 
+    async def get_pool(self, dsn: Optional[str] = None) -> asyncpg.Pool:
+        if self._pool is None:
+            async with self._get_lock():
+                if self._pool is None:
+                    await self.init(dsn)
+        return self._pool
+
     async def close(self):
         if self._pool is not None:
             await self._pool.close()
@@ -36,7 +50,7 @@ class DatabasePool:
     @property
     def pool(self) -> asyncpg.Pool:
         if self._pool is None:
-            raise RuntimeError("Database pool has not been initialized. Call init() first.")
+            raise RuntimeError("Database pool has not been initialized. Call init() or get_pool() first.")
         return self._pool
 
 
@@ -44,4 +58,4 @@ db_pool = DatabasePool()
 
 
 async def get_db_pool() -> asyncpg.Pool:
-    return db_pool.pool
+    return await db_pool.get_pool()

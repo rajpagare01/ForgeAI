@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     DB_POOL_MIN_SIZE: int = 2
     DB_POOL_MAX_SIZE: int = 20
 
+    # Redis settings (Token bucket & rate limiting)
+    REDIS_URL: str = "redis://redis:6379/0"
+
     # Gemini LLM settings
     GEMINI_API_KEY: Optional[str] = "test-api-key"
     GEMINI_MODEL: str = "gemini-1.5-pro"

@@ -14,7 +14,7 @@ COPY services/testing-service/pom.xml services/testing-service/
 
 # Copy target module sources and compile
 COPY infrastructure/api-gateway infrastructure/api-gateway
-RUN mvn clean package -DskipTests -pl infrastructure/api-gateway -am
+RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests -pl infrastructure/api-gateway -am
 
 # ------------------------------------------------------------------------------
 # Stage 2: Extract Spring Boot Layered JAR

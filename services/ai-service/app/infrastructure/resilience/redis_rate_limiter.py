@@ -16,8 +16,8 @@ class RedisAiRateLimiter:
     Fail-safe: In-memory fallback if Redis is unavailable.
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:6379/0"):
-        self.redis_url = redis_url
+    def __init__(self, redis_url: Optional[str] = None):
+        self.redis_url = redis_url or settings.REDIS_URL
         self._redis: Optional[aioredis.Redis] = None
         self._local_sliding_window: dict[str, list[float]] = {}
         self._local_daily_tokens: dict[str, int] = {}

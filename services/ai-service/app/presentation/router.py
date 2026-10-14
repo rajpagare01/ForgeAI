@@ -30,8 +30,8 @@ router = APIRouter(prefix="/api/v1/ai", tags=["AI Core"])
 index_worker: IndexJobQueue | None = None
 
 
-def get_services():
-    pool = db_pool.pool
+async def get_services():
+    pool = await db_pool.get_pool()
     chunk_repo = AsyncpgCodeChunkRepository(pool)
     edge_repo = AsyncpgGraphEdgeRepository(pool)
     analysis_repo = AsyncpgAnalysisRepository(pool)
@@ -58,6 +58,17 @@ async def enqueue_indexing_job(
     Returns HTTP 202 immediately to decouple user-facing HTTP request from parsing.
     """
     global index_worker
+    if index_worker is None:
+        try:
+            pool = await db_pool.get_pool()
+            chunk_repo = AsyncpgCodeChunkRepository(pool)
+            edge_repo = AsyncpgGraphEdgeRepository(pool)
+            indexing_service = IndexingService(chunk_repo, edge_repo)
+            index_worker = IndexJobQueue(indexing_service)
+            await index_worker.start_worker()
+        except Exception as e:
+            logger.error(f"Failed to lazily initialize IndexJobQueue: {e}")
+
     files_payload = [{"file_path": f.file_path, "content": f.content} for f in req.files]
     if index_worker:
         await index_worker.enqueue_index_job(
@@ -83,7 +94,7 @@ async def semantic_search_code(
     Performs cosine similarity search using pgvector across code chunks.
     Tenant isolation is enforced by org_id.
     """
-    _, retrieval_service, _ = get_services()
+    _, retrieval_service, _ = await get_services()
     results = await retrieval_service.semantic_search(
         organization_id=org_id,
         query=req.query,
@@ -102,7 +113,7 @@ async def graph_impact_analysis(
     Traverses the knowledge graph up to N hops deep using recursive CTE to identify
     impacted upstream components.
     """
-    _, retrieval_service, _ = get_services()
+    _, retrieval_service, _ = await get_services()
     return await retrieval_service.get_impacted_symbols(
         organization_id=org_id,
         changed_symbols=req.changed_symbols,
@@ -121,7 +132,7 @@ async def analyze_pull_request(
     Generates an executive impact review for a PR using Hybrid RAG (graph + vectors + Gemini)
     and saves an audit record into analyses correlated with the W3C trace_id.
     """
-    _, _, orchestration_service = get_services()
+    _, _, orchestration_service = await get_services()
     analysis = await orchestration_service.analyze_pull_request(
         organization_id=org_id,
         repository_id=req.repository_id,
@@ -154,7 +165,7 @@ async def get_analyses_for_entity(
     """
     Fetches historical AI analysis audit records for a given entity (e.g., PR or REPO).
     """
-    pool = db_pool.pool
+    pool = await db_pool.get_pool()
     analysis_repo = AsyncpgAnalysisRepository(pool)
     records = await analysis_repo.get_by_entity(org_id, entity_type, entity_id)
     return [

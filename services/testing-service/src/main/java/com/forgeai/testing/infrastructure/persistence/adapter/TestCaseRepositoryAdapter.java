@@ -34,7 +34,7 @@ public class TestCaseRepositoryAdapter implements TestCaseRepository {
             }
         }
         TestCaseJpaEntity entity = mapper.toEntity(testCase);
-        return mapper.toDomain(jpaRepository.save(entity));
+        return mapper.toDomain(jpaRepository.saveAndFlush(entity));
     }
 
     @Override
