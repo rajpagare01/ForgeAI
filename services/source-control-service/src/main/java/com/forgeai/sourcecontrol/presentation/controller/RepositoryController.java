@@ -46,6 +46,34 @@ public class RepositoryController {
         return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, id));
     }
 
+    @PostMapping("/{id}/sync/pull-requests")
+    public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.PullRequest>> syncPullRequests(
+            @PathVariable UUID id) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.syncPullRequests(organizationId, id));
+    }
+
+    @GetMapping("/{id}/commits")
+    public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.Commit>> listCommits(
+            @PathVariable UUID id) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.listCommits(organizationId, id));
+    }
+
+    @PostMapping("/{id}/sync/commits")
+    public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.Commit>> syncCommits(
+            @PathVariable UUID id) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.syncCommits(organizationId, id));
+    }
+
+    @GetMapping("/{id}/branches")
+    public ResponseEntity<List<com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata>> listBranches(
+            @PathVariable UUID id) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.listBranches(organizationId, id));
+    }
+
     /**
      * Lists all GitHub repositories available to this organization's GitHub App installation.
      * All data is fetched live from GitHub — nothing is cached or fabricated.
@@ -72,6 +100,6 @@ public class RepositoryController {
             throw new IllegalArgumentException("fullName is required (format: owner/repo)");
         }
         Repository repo = repositoryApplicationService.connectRepository(organizationId, request.fullName());
-        return ResponseEntity.status(HttpStatus.CREATED).body(repo);
+        return ResponseEntity.ok(repo);
     }
 }

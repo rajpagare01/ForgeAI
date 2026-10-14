@@ -80,6 +80,7 @@ public class OutboxPublisherRelay {
             case "COMMIT_CREATED" -> objectMapper.treeToValue(payloadNode, CommitCreatedEvent.class);
             case "PULL_REQUEST_OPENED" -> objectMapper.treeToValue(payloadNode, PullRequestOpenedEvent.class);
             case "PULL_REQUEST_MERGED" -> objectMapper.treeToValue(payloadNode, PullRequestMergedEvent.class);
+            case "WORKFLOW_RUN_RECEIVED" -> objectMapper.treeToValue(payloadNode, WorkflowRunReceivedEvent.class);
             default -> null;
         };
 

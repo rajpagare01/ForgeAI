@@ -9,7 +9,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "test_runs", indexes = {
         @Index(name = "idx_runs_commit", columnList = "organization_id, commit_sha"),
-        @Index(name = "idx_runs_pr", columnList = "organization_id, repository_id, pull_request_number")
+        @Index(name = "idx_runs_pr", columnList = "organization_id, repository_id, pull_request_number"),
+        @Index(name = "idx_runs_workflow_run", columnList = "organization_id, repository_id, workflow_run_id")
 })
 @Getter
 @Setter
@@ -70,6 +71,40 @@ public class TestRunJpaEntity {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    // GitHub workflow lifecycle fields (populated by WorkflowRunIngestionService)
+
+    @Column(name = "workflow_name", length = 255)
+    private String workflowName;
+
+    @Column(name = "run_number")
+    private Integer runNumber;
+
+    /**
+     * GitHub workflow_run status: "queued", "in_progress", "completed".
+     * Distinct from the ForgeAI test result status stored in the {@code status} column.
+     */
+    @Column(name = "github_run_status", length = 32)
+    private String githubRunStatus;
+
+    /**
+     * GitHub workflow_run conclusion: "success", "failure", "cancelled", etc.
+     * Null until the run reaches "completed" status.
+     */
+    @Column(name = "conclusion", length = 32)
+    private String conclusion;
+
+    @Column(name = "head_branch", length = 255)
+    private String headBranch;
+
+    @Column(name = "trigger_event", length = 64)
+    private String triggerEvent;
+
+    @Column(name = "html_url", columnDefinition = "TEXT")
+    private String htmlUrl;
+
+    @Column(name = "updated_at")
+    private Instant updatedAt;
 
     @PrePersist
     public void prePersist() {

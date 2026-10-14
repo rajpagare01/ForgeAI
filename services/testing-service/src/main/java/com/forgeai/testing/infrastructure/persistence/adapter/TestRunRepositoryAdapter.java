@@ -32,6 +32,15 @@ public class TestRunRepositoryAdapter implements TestRunRepository {
                 entity.setSkippedTests(run.getSkippedTests());
                 entity.setDurationMs(run.getDurationMs());
                 entity.setCompletedAt(run.getCompletedAt());
+                // Workflow run lifecycle fields
+                if (run.getGithubRunStatus() != null) entity.setGithubRunStatus(run.getGithubRunStatus());
+                if (run.getConclusion() != null) entity.setConclusion(run.getConclusion());
+                if (run.getWorkflowName() != null) entity.setWorkflowName(run.getWorkflowName());
+                if (run.getRunNumber() != null) entity.setRunNumber(run.getRunNumber());
+                if (run.getHeadBranch() != null) entity.setHeadBranch(run.getHeadBranch());
+                if (run.getTriggerEvent() != null) entity.setTriggerEvent(run.getTriggerEvent());
+                if (run.getHtmlUrl() != null) entity.setHtmlUrl(run.getHtmlUrl());
+                entity.setUpdatedAt(run.getUpdatedAt());
                 return mapper.toDomain(jpaRepository.saveAndFlush(entity));
             }
         }
@@ -42,6 +51,12 @@ public class TestRunRepositoryAdapter implements TestRunRepository {
     @Override
     public Optional<TestRun> findByIdAndOrganizationId(UUID id, UUID organizationId) {
         return jpaRepository.findByIdAndOrganizationId(id, organizationId).map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<TestRun> findByRepositoryIdAndWorkflowRunId(UUID repositoryId, Long workflowRunId) {
+        return jpaRepository.findByRepositoryIdAndWorkflowRunId(repositoryId, workflowRunId)
+                .map(mapper::toDomain);
     }
 
     @Override

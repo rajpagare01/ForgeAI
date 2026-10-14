@@ -9,4 +9,6 @@ public interface CommitRepository {
     Commit save(Commit commit);
     Optional<Commit> findByRepositoryIdAndSha(UUID repositoryId, String sha);
     boolean existsByRepositoryIdAndSha(UUID repositoryId, String sha);
+    java.util.List<Commit> findAllByRepositoryId(UUID repositoryId);
+    java.util.List<Commit> findAllByOrganizationId(UUID organizationId);
 }

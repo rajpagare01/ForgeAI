@@ -79,6 +79,14 @@ public class TestingEntityDomainMapper {
                 .startedAt(entity.getStartedAt())
                 .completedAt(entity.getCompletedAt())
                 .createdAt(entity.getCreatedAt())
+                .workflowName(entity.getWorkflowName())
+                .runNumber(entity.getRunNumber())
+                .githubRunStatus(entity.getGithubRunStatus())
+                .conclusion(entity.getConclusion())
+                .headBranch(entity.getHeadBranch())
+                .triggerEvent(entity.getTriggerEvent())
+                .htmlUrl(entity.getHtmlUrl())
+                .updatedAt(entity.getUpdatedAt())
                 .build();
     }
 
@@ -100,6 +108,14 @@ public class TestingEntityDomainMapper {
                 .startedAt(domain.getStartedAt())
                 .completedAt(domain.getCompletedAt())
                 .createdAt(domain.getCreatedAt())
+                .workflowName(domain.getWorkflowName())
+                .runNumber(domain.getRunNumber())
+                .githubRunStatus(domain.getGithubRunStatus())
+                .conclusion(domain.getConclusion())
+                .headBranch(domain.getHeadBranch())
+                .triggerEvent(domain.getTriggerEvent())
+                .htmlUrl(domain.getHtmlUrl())
+                .updatedAt(domain.getUpdatedAt())
                 .build();
     }
 

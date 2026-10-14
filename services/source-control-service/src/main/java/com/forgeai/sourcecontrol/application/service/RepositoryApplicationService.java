@@ -40,6 +40,7 @@ public class RepositoryApplicationService {
     private final RepositoryRepository repositoryRepository;
     private final GitHubInstallationRepository installationRepository;
     private final com.forgeai.sourcecontrol.domain.repository.PullRequestRepository pullRequestRepository;
+    private final com.forgeai.sourcecontrol.domain.repository.CommitRepository commitRepository;
     private final OutboxService outboxService;
     private final GitHubAppClient gitHubAppClient;
     private final GitHubAppConfig gitHubAppConfig;
@@ -51,9 +52,22 @@ public class RepositoryApplicationService {
             OutboxService outboxService,
             GitHubAppClient gitHubAppClient,
             GitHubAppConfig gitHubAppConfig) {
+        this(repositoryRepository, installationRepository, pullRequestRepository, null, outboxService, gitHubAppClient, gitHubAppConfig);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RepositoryApplicationService(
+            RepositoryRepository repositoryRepository,
+            GitHubInstallationRepository installationRepository,
+            com.forgeai.sourcecontrol.domain.repository.PullRequestRepository pullRequestRepository,
+            com.forgeai.sourcecontrol.domain.repository.CommitRepository commitRepository,
+            OutboxService outboxService,
+            GitHubAppClient gitHubAppClient,
+            GitHubAppConfig gitHubAppConfig) {
         this.repositoryRepository = repositoryRepository;
         this.installationRepository = installationRepository;
         this.pullRequestRepository = pullRequestRepository;
+        this.commitRepository = commitRepository;
         this.outboxService = outboxService;
         this.gitHubAppClient = gitHubAppClient;
         this.gitHubAppConfig = gitHubAppConfig;
@@ -85,6 +99,104 @@ public class RepositoryApplicationService {
         requireTenant(organizationId);
         return repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(UUID organizationId, UUID repositoryId) {
+        requireTenant(organizationId);
+        getRepository(organizationId, repositoryId);
+        return commitRepository.findAllByRepositoryId(repositoryId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata> listBranches(
+            UUID organizationId, UUID repositoryId) {
+        requireTenant(organizationId);
+        Repository repo = getRepository(organizationId, repositoryId);
+        return gitHubAppClient.listBranches(repo.getInstallationId(), repo.getFullName());
+    }
+
+    @Transactional
+    public List<com.forgeai.sourcecontrol.domain.model.Commit> syncCommits(UUID organizationId, UUID repositoryId) {
+        requireTenant(organizationId);
+        Repository repo = getRepository(organizationId, repositoryId);
+        List<com.forgeai.sourcecontrol.infrastructure.github.GitHubCommitMetadata> ghCommits =
+                gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), 30);
+
+        List<com.forgeai.sourcecontrol.domain.model.Commit> savedList = new java.util.ArrayList<>();
+        for (var ghCommit : ghCommits) {
+            Optional<com.forgeai.sourcecontrol.domain.model.Commit> existing =
+                    commitRepository.findByRepositoryIdAndSha(repo.getId(), ghCommit.sha());
+            if (existing.isPresent()) {
+                com.forgeai.sourcecontrol.domain.model.Commit c = existing.get();
+                c.setMessage(ghCommit.message());
+                c.setAuthorName(ghCommit.authorName());
+                c.setAuthorEmail(ghCommit.authorEmail());
+                c.setCommittedAt(ghCommit.committedAt());
+                savedList.add(commitRepository.save(c));
+            } else {
+                com.forgeai.sourcecontrol.domain.model.Commit c = com.forgeai.sourcecontrol.domain.model.Commit.builder()
+                        .organizationId(organizationId)
+                        .repositoryId(repo.getId())
+                        .sha(ghCommit.sha())
+                        .message(ghCommit.message())
+                        .authorName(ghCommit.authorName())
+                        .authorEmail(ghCommit.authorEmail())
+                        .committedAt(ghCommit.committedAt())
+                        .createdAt(Instant.now())
+                        .build();
+                savedList.add(commitRepository.save(c));
+            }
+        }
+        log.info("[GitHub] Synchronized {} commits for repo: {}", savedList.size(), repo.getFullName());
+        return savedList;
+    }
+
+    @Transactional
+    public List<com.forgeai.sourcecontrol.domain.model.PullRequest> syncPullRequests(UUID organizationId, UUID repositoryId) {
+        requireTenant(organizationId);
+        Repository repo = getRepository(organizationId, repositoryId);
+        List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestMetadata> ghPrs =
+                gitHubAppClient.listPullRequests(repo.getInstallationId(), repo.getFullName());
+
+        List<com.forgeai.sourcecontrol.domain.model.PullRequest> savedList = new java.util.ArrayList<>();
+        for (var ghPr : ghPrs) {
+            Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing =
+                    pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), ghPr.number());
+            com.forgeai.sourcecontrol.domain.model.PullRequestStatus status =
+                    "closed".equalsIgnoreCase(ghPr.state())
+                            ? (ghPr.mergedAt() != null ? com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.CLOSED)
+                            : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN;
+
+            if (existing.isPresent()) {
+                var pr = existing.get();
+                pr.setTitle(ghPr.title());
+                pr.setBody(ghPr.body());
+                pr.setSourceBranch(ghPr.sourceBranch());
+                pr.setTargetBranch(ghPr.targetBranch());
+                pr.setStatus(status);
+                pr.setUpdatedAt(Instant.now());
+                savedList.add(pullRequestRepository.save(pr));
+            } else {
+                var pr = com.forgeai.sourcecontrol.domain.model.PullRequest.builder()
+                        .organizationId(organizationId)
+                        .repositoryId(repo.getId())
+                        .githubPrId(ghPr.githubPrId())
+                        .number(ghPr.number())
+                        .title(ghPr.title())
+                        .body(ghPr.body())
+                        .sourceBranch(ghPr.sourceBranch())
+                        .targetBranch(ghPr.targetBranch())
+                        .status(status)
+                        .authorGithubId(ghPr.authorLogin())
+                        .createdAt(ghPr.createdAt() != null ? ghPr.createdAt() : Instant.now())
+                        .updatedAt(ghPr.updatedAt() != null ? ghPr.updatedAt() : Instant.now())
+                        .build();
+                savedList.add(pullRequestRepository.save(pr));
+            }
+        }
+        log.info("[GitHub] Synchronized {} pull requests for repo: {}", savedList.size(), repo.getFullName());
+        return savedList;
     }
 
     // -------------------------------------------------------------------------
@@ -228,10 +340,24 @@ public class RepositoryApplicationService {
         GitHubRepositoryMetadata ghRepo = gitHubAppClient.getVerifiedRepository(
                 installation.getInstallationId(), fullName);
 
-        // Duplicate check
-        if (repositoryRepository.findByGithubRepoId(ghRepo.id()).isPresent()) {
+        // Duplicate check and idempotent reconciliation
+        Optional<Repository> existing = repositoryRepository.findByGithubRepoId(ghRepo.id());
+        if (existing.isPresent()) {
+            Repository existingRepo = existing.get();
+            if (organizationId.equals(existingRepo.getOrganizationId())) {
+                existingRepo.setName(ghRepo.name());
+                existingRepo.setFullName(ghRepo.fullName());
+                existingRepo.setDefaultBranch(ghRepo.defaultBranch());
+                existingRepo.setIsPrivate(ghRepo.isPrivate());
+                existingRepo.setInstallationId(installation.getInstallationId());
+                existingRepo.setUpdatedAt(Instant.now());
+                Repository updated = repositoryRepository.save(existingRepo);
+                log.info("[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}",
+                        updated.getId(), updated.getFullName(), updated.getGithubRepoId(), organizationId);
+                return updated;
+            }
             throw new DuplicateResourceException(
-                    "Repository '" + fullName + "' (GitHub ID " + ghRepo.id() + ") is already connected.");
+                    "Repository '" + fullName + "' (GitHub ID " + ghRepo.id() + ") is already connected to another organization.");
         }
 
         Repository repo = Repository.builder()

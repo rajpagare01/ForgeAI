@@ -9,6 +9,7 @@ import java.util.UUID;
 public interface TestRunRepository {
     TestRun save(TestRun run);
     Optional<TestRun> findByIdAndOrganizationId(UUID id, UUID organizationId);
+    Optional<TestRun> findByRepositoryIdAndWorkflowRunId(UUID repositoryId, Long workflowRunId);
     List<TestRun> findAllByOrganizationId(UUID organizationId);
     List<TestRun> findAllByOrganizationIdAndRepositoryId(UUID organizationId, UUID repositoryId);
     List<TestRun> findAllByOrganizationIdAndCommitSha(UUID organizationId, String commitSha);

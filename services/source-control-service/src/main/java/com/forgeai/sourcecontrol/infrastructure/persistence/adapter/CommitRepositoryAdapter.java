@@ -33,4 +33,18 @@ public class CommitRepositoryAdapter implements CommitRepository {
     public boolean existsByRepositoryIdAndSha(UUID repositoryId, String sha) {
         return jpaRepository.existsByRepositoryIdAndSha(repositoryId, sha);
     }
+
+    @Override
+    public java.util.List<Commit> findAllByRepositoryId(UUID repositoryId) {
+        return jpaRepository.findAllByRepositoryIdOrderByCommittedAtDesc(repositoryId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public java.util.List<Commit> findAllByOrganizationId(UUID organizationId) {
+        return jpaRepository.findAllByOrganizationIdOrderByCommittedAtDesc(organizationId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
 }

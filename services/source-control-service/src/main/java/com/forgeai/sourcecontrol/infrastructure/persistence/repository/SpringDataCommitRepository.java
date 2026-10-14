@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface SpringDataCommitRepository extends JpaRepository<CommitJpaEntity, UUID> {
     Optional<CommitJpaEntity> findByRepositoryIdAndSha(UUID repositoryId, String sha);
     boolean existsByRepositoryIdAndSha(UUID repositoryId, String sha);
+    java.util.List<CommitJpaEntity> findAllByRepositoryIdOrderByCommittedAtDesc(UUID repositoryId);
+    java.util.List<CommitJpaEntity> findAllByOrganizationIdOrderByCommittedAtDesc(UUID organizationId);
 }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forgeai.sourcecontrol.application.handler.InstallationEventHandler;
 import com.forgeai.sourcecontrol.application.handler.PullRequestEventHandler;
 import com.forgeai.sourcecontrol.application.handler.PushEventHandler;
+import com.forgeai.sourcecontrol.application.handler.WorkflowRunEventHandler;
 import com.forgeai.sourcecontrol.domain.model.WebhookDelivery;
 import com.forgeai.sourcecontrol.domain.model.WebhookDeliveryStatus;
 import com.forgeai.sourcecontrol.domain.repository.WebhookDeliveryRepository;
@@ -26,6 +27,7 @@ public class WebhookIngestionService {
     private final PushEventHandler pushEventHandler;
     private final PullRequestEventHandler pullRequestEventHandler;
     private final InstallationEventHandler installationEventHandler;
+    private final WorkflowRunEventHandler workflowRunEventHandler;
     private final ObjectMapper objectMapper;
 
     public WebhookIngestionService(
@@ -33,12 +35,14 @@ public class WebhookIngestionService {
             WebhookDeliveryRepository webhookDeliveryRepository,
             PushEventHandler pushEventHandler,
             PullRequestEventHandler pullRequestEventHandler,
-            InstallationEventHandler installationEventHandler) {
+            InstallationEventHandler installationEventHandler,
+            WorkflowRunEventHandler workflowRunEventHandler) {
         this.signatureVerifier = signatureVerifier;
         this.webhookDeliveryRepository = webhookDeliveryRepository;
         this.pushEventHandler = pushEventHandler;
         this.pullRequestEventHandler = pullRequestEventHandler;
         this.installationEventHandler = installationEventHandler;
+        this.workflowRunEventHandler = workflowRunEventHandler;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -105,6 +109,8 @@ public class WebhookIngestionService {
             pullRequestEventHandler.handle(rootNode, deliveryId);
         } else if ("installation".equalsIgnoreCase(eventType) || "installation_repositories".equalsIgnoreCase(eventType)) {
             installationEventHandler.handle(rootNode, deliveryId);
+        } else if ("workflow_run".equalsIgnoreCase(eventType)) {
+            workflowRunEventHandler.handle(rootNode, deliveryId);
         } else {
             log.info("Received unhandled GitHub event type: {}", eventType);
         }

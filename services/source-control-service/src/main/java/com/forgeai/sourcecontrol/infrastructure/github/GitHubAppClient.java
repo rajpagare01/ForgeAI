@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GitHubAppClient {
 
     private static final String GITHUB_API = "https://api.github.com";
+    private static final String USER_AGENT = "ForgeAI-SourceControl/1.0";
     private static final Duration TOKEN_REFRESH_MARGIN = Duration.ofMinutes(5);
 
     private final GitHubAppConfig config;
@@ -53,6 +54,7 @@ public class GitHubAppClient {
         this.config = config;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
     }
@@ -62,7 +64,7 @@ public class GitHubAppClient {
     // -------------------------------------------------------------------------
 
     /**
-     * Builds a signed GitHub App JWT valid for 60 seconds.
+     * Builds a signed GitHub App JWT valid for 9 minutes (60-second backward drift allowance).
      * Used for App-level API calls (e.g. create installation token).
      */
     public String buildAppJwt() {
@@ -71,8 +73,8 @@ public class GitHubAppClient {
         Instant now = Instant.now();
         return Jwts.builder()
                 .issuer(String.valueOf(config.getAppId()))
-                .issuedAt(Date.from(now.minusSeconds(10)))  // clock-skew tolerance
-                .expiration(Date.from(now.plusSeconds(60)))
+                .issuedAt(Date.from(now.minusSeconds(60)))  // 60-second clock-skew tolerance
+                .expiration(Date.from(now.plusSeconds(540))) // 9-minute validity (GitHub max 10m)
                 .signWith(key)
                 .compact();
     }
@@ -106,6 +108,7 @@ public class GitHubAppClient {
                 .uri(URI.create(url))
                 .header("Authorization", "Bearer " + appJwt)
                 .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .timeout(Duration.ofSeconds(15))
@@ -143,6 +146,7 @@ public class GitHubAppClient {
                     .uri(URI.create(url))
                     .header("Authorization", "Bearer " + token)
                     .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", USER_AGENT)
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .GET()
                     .timeout(Duration.ofSeconds(15))
@@ -214,6 +218,7 @@ public class GitHubAppClient {
                 .uri(URI.create(url))
                 .header("Authorization", "Bearer " + appJwt)
                 .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .GET()
                 .timeout(Duration.ofSeconds(15))
@@ -225,6 +230,121 @@ public class GitHubAppClient {
             throw new GitHubApiException("GitHub returned empty account.login for installation " + installationId);
         }
         return login;
+    }
+
+    // -------------------------------------------------------------------------
+    // Commits, Branches, Pull Requests
+    // -------------------------------------------------------------------------
+
+    public List<GitHubCommitMetadata> listCommits(Long installationId, String fullName, int limit) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        int perPage = Math.min(Math.max(limit, 1), 100);
+        String url = GITHUB_API + "/repos/" + fullName + "/commits?per_page=" + perPage;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        JsonNode body = execute(request, "list commits for " + fullName);
+        List<GitHubCommitMetadata> list = new ArrayList<>();
+        if (body.isArray()) {
+            for (JsonNode c : body) {
+                String sha = c.path("sha").asText();
+                String message = c.path("commit").path("message").asText("");
+                String authorName = c.path("commit").path("author").path("name").asText("unknown");
+                String authorEmail = c.path("commit").path("author").path("email").asText("unknown@forgeai.dev");
+                String dateStr = c.path("commit").path("author").path("date").asText(null);
+                Instant committedAt = Instant.now();
+                if (dateStr != null && !dateStr.isBlank()) {
+                    try {
+                        committedAt = Instant.parse(dateStr);
+                    } catch (Exception ignored) {}
+                }
+                list.add(new GitHubCommitMetadata(sha, message, authorName, authorEmail, committedAt));
+            }
+        }
+        return list;
+    }
+
+    public List<GitHubBranchMetadata> listBranches(Long installationId, String fullName) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        String url = GITHUB_API + "/repos/" + fullName + "/branches?per_page=100";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        JsonNode body = execute(request, "list branches for " + fullName);
+        List<GitHubBranchMetadata> list = new ArrayList<>();
+        if (body.isArray()) {
+            for (JsonNode b : body) {
+                String name = b.path("name").asText();
+                String commitSha = b.path("commit").path("sha").asText();
+                boolean isProtected = b.path("protected").asBoolean(false);
+                list.add(new GitHubBranchMetadata(name, commitSha, isProtected));
+            }
+        }
+        return list;
+    }
+
+    public List<GitHubPullRequestMetadata> listPullRequests(Long installationId, String fullName) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        String url = GITHUB_API + "/repos/" + fullName + "/pulls?state=all&per_page=100";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        JsonNode body = execute(request, "list pull requests for " + fullName);
+        List<GitHubPullRequestMetadata> list = new ArrayList<>();
+        if (body.isArray()) {
+            for (JsonNode p : body) {
+                Long prId = p.path("id").asLong();
+                int number = p.path("number").asInt();
+                String title = p.path("title").asText("");
+                String prBody = p.path("body").asText(null);
+                String state = p.path("state").asText("open");
+                String source = p.path("head").path("ref").asText("unknown");
+                String target = p.path("base").path("ref").asText("main");
+                String author = p.path("user").path("login").asText("unknown");
+                Instant createdAt = parseInstant(p.path("created_at").asText(null));
+                Instant updatedAt = parseInstant(p.path("updated_at").asText(null));
+                Instant closedAt = parseInstant(p.path("closed_at").asText(null));
+                Instant mergedAt = parseInstant(p.path("merged_at").asText(null));
+                list.add(new GitHubPullRequestMetadata(prId, number, title, prBody, state, source, target, author, createdAt, updatedAt, closedAt, mergedAt));
+            }
+        }
+        return list;
+    }
+
+    private Instant parseInstant(String s) {
+        if (s == null || s.isBlank() || "null".equals(s)) return null;
+        try {
+            return Instant.parse(s);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -258,11 +378,11 @@ public class GitHubAppClient {
             if (response.statusCode() == 401 || response.statusCode() == 403) {
                 throw new GitHubAccessDeniedException(
                         "GitHub API access denied (HTTP " + response.statusCode() + ") for: " + operation +
-                        ". Check GITHUB_APP_ID and GITHUB_PRIVATE_KEY.");
+                        ". Check GITHUB_APP_ID and GITHUB_PRIVATE_KEY. Response: " + response.body());
             }
             if (response.statusCode() == 404) {
                 throw new GitHubAccessDeniedException(
-                        "GitHub resource not found (HTTP 404) for: " + operation);
+                        "GitHub resource not found (HTTP 404) for: " + operation + ". Response: " + response.body());
             }
             if (response.statusCode() >= 400) {
                 throw new GitHubApiException(
@@ -271,7 +391,7 @@ public class GitHubAppClient {
             return response;
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new GitHubApiException("GitHub API call failed for: " + operation, e);
+            throw new GitHubApiException("GitHub API call failed for: " + operation + " (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")", e);
         }
     }
 
@@ -298,18 +418,67 @@ public class GitHubAppClient {
                     .replaceAll("\\s+", "");
             byte[] decoded = Base64.getDecoder().decode(stripped);
 
-            // Try PKCS8 first, then fall back to PKCS1 via BouncyCastle if available
+            KeyFactory kf = KeyFactory.getInstance("RSA");
+            // Try PKCS#8 first; if that fails (e.g. GitHub standard PKCS#1 RSA key), wrap in PKCS#8 structure
             try {
-                KeyFactory kf = KeyFactory.getInstance("RSA");
                 return kf.generatePrivate(new PKCS8EncodedKeySpec(decoded));
             } catch (Exception pkcs8Ex) {
-                throw new GitHubAppNotConfiguredException(
-                        "GitHub private key could not be parsed. Ensure GITHUB_PRIVATE_KEY is a valid PKCS#8 RSA key: " + pkcs8Ex.getMessage());
+                try {
+                    byte[] pkcs8Bytes = wrapPkcs1ToPkcs8(decoded);
+                    return kf.generatePrivate(new PKCS8EncodedKeySpec(pkcs8Bytes));
+                } catch (Exception pkcs1Ex) {
+                    throw new GitHubAppNotConfiguredException(
+                            "GitHub private key could not be parsed as PKCS#8 or PKCS#1 RSA key: " + pkcs1Ex.getMessage());
+                }
             }
         } catch (GitHubAppNotConfiguredException e) {
             throw e;
         } catch (Exception e) {
             throw new GitHubAppNotConfiguredException("Failed to load GitHub App private key: " + e.getMessage());
+        }
+    }
+
+    private static byte[] wrapPkcs1ToPkcs8(byte[] pkcs1) throws IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        out.write(new byte[]{0x02, 0x01, 0x00}); // version 0
+        out.write(new byte[]{
+                0x30, 0x0d,
+                0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xf7, 0x0d, 0x01, 0x01, 0x01,
+                0x05, 0x00
+        }); // rsaEncryption OID
+        out.write(0x04); // OCTET STRING
+        writeDerLength(out, pkcs1.length);
+        out.write(pkcs1);
+
+        byte[] inner = out.toByteArray();
+        java.io.ByteArrayOutputStream pkcs8 = new java.io.ByteArrayOutputStream();
+        pkcs8.write(0x30); // SEQUENCE
+        writeDerLength(pkcs8, inner.length);
+        pkcs8.write(inner);
+        return pkcs8.toByteArray();
+    }
+
+    private static void writeDerLength(java.io.ByteArrayOutputStream out, int length) {
+        if (length < 128) {
+            out.write(length);
+        } else if (length <= 0xFF) {
+            out.write(0x81);
+            out.write(length);
+        } else if (length <= 0xFFFF) {
+            out.write(0x82);
+            out.write((length >> 8) & 0xFF);
+            out.write(length & 0xFF);
+        } else if (length <= 0xFFFFFF) {
+            out.write(0x83);
+            out.write((length >> 16) & 0xFF);
+            out.write((length >> 8) & 0xFF);
+            out.write(length & 0xFF);
+        } else {
+            out.write(0x84);
+            out.write((length >> 24) & 0xFF);
+            out.write((length >> 16) & 0xFF);
+            out.write((length >> 8) & 0xFF);
+            out.write(length & 0xFF);
         }
     }
 
