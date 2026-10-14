@@ -71,6 +71,29 @@ class WebhookSignatureVerificationTest {
     }
 
     @Test
+    @DisplayName("WebhookSignatureVerificationTest: Signature computed with wrong secret fails with 401 Unauthorized")
+    void wrongSecretFailsWith401() throws Exception {
+        String deliveryId = UUID.randomUUID().toString();
+        String payload = "{\"action\":\"ping\"}";
+        byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+
+        // Compute HMAC using an arbitrary wrong secret
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        javax.crypto.spec.SecretKeySpec wrongKey = new javax.crypto.spec.SecretKeySpec(
+                "completely-wrong-secret-key-12345".getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        mac.init(wrongKey);
+        String wrongSignature = "sha256=" + java.util.HexFormat.of().formatHex(mac.doFinal(payloadBytes));
+
+        mockMvc.perform(post("/api/v1/webhooks/github")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-GitHub-Delivery", deliveryId)
+                        .header("X-GitHub-Event", "ping")
+                        .header("X-Hub-Signature-256", wrongSignature)
+                        .content(payloadBytes))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("WebhookSignatureVerificationTest: Missing signature header fails with 401 Unauthorized")
     void missingSignatureFailsWith401() throws Exception {
         String deliveryId = UUID.randomUUID().toString();

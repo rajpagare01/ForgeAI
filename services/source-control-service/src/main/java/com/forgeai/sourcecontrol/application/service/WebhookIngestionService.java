@@ -19,7 +19,6 @@ import java.time.Instant;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class WebhookIngestionService {
 
     private final GitHubSignatureVerifier signatureVerifier;
@@ -27,7 +26,21 @@ public class WebhookIngestionService {
     private final PushEventHandler pushEventHandler;
     private final PullRequestEventHandler pullRequestEventHandler;
     private final InstallationEventHandler installationEventHandler;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    public WebhookIngestionService(
+            GitHubSignatureVerifier signatureVerifier,
+            WebhookDeliveryRepository webhookDeliveryRepository,
+            PushEventHandler pushEventHandler,
+            PullRequestEventHandler pullRequestEventHandler,
+            InstallationEventHandler installationEventHandler) {
+        this.signatureVerifier = signatureVerifier;
+        this.webhookDeliveryRepository = webhookDeliveryRepository;
+        this.pushEventHandler = pushEventHandler;
+        this.pullRequestEventHandler = pullRequestEventHandler;
+        this.installationEventHandler = installationEventHandler;
+        this.objectMapper = new ObjectMapper();
+    }
 
     @Transactional
     public WebhookIngestionResult ingestWebhook(String deliveryId,

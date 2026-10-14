@@ -19,12 +19,21 @@ public class GitHubSignatureVerifier {
 
     private final String webhookSecret;
 
-    public GitHubSignatureVerifier(@Value("${forgeai.github.webhook-secret}") String webhookSecret) {
-        this.webhookSecret = webhookSecret;
+    public GitHubSignatureVerifier(@Value("${forgeai.github.webhook-secret:}") String webhookSecret) {
+        this.webhookSecret = webhookSecret != null ? webhookSecret.trim() : "";
+        if (this.webhookSecret.isBlank()) {
+            log.warn("[GitHub Security] Webhook secret is not configured or blank! All incoming GitHub webhooks will be rejected.");
+        } else {
+            log.info("[GitHub Security] GitHub webhook signature verifier initialized (secret configured, length={}).", this.webhookSecret.length());
+        }
+    }
+
+    public boolean isSecretConfigured() {
+        return webhookSecret != null && !webhookSecret.isBlank();
     }
 
     public boolean isValid(byte[] payloadBytes, String signatureHeader) {
-        if (signatureHeader == null || signatureHeader.isBlank() || payloadBytes == null) {
+        if (!isSecretConfigured() || signatureHeader == null || signatureHeader.isBlank() || payloadBytes == null) {
             return false;
         }
 

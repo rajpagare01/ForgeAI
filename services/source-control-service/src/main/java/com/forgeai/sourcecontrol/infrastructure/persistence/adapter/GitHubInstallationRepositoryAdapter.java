@@ -9,8 +9,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -25,6 +27,7 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
             Optional<GitHubInstallationJpaEntity> existingOpt = jpaRepository.findById(installation.getId());
             if (existingOpt.isPresent()) {
                 GitHubInstallationJpaEntity entity = existingOpt.get();
+                entity.setOrganizationId(installation.getOrganizationId());
                 entity.setAccountLogin(installation.getAccountLogin());
                 entity.setAccountType(installation.getAccountType());
                 entity.setStatus(installation.getStatus() != null ? installation.getStatus().name() : entity.getStatus());
@@ -44,5 +47,12 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
     @Override
     public Optional<GitHubInstallation> findByOrganizationId(UUID organizationId) {
         return jpaRepository.findByOrganizationId(organizationId).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<GitHubInstallation> findAll() {
+        return jpaRepository.findAll().stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
     }
 }

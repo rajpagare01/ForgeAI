@@ -53,8 +53,32 @@ public class InstallationEventHandler {
             }
             installation = installationRepository.save(installation);
         } else {
-            // For new installation, map to org or generate org ID if payload does not specify
-            UUID orgId = UUID.randomUUID();
+            UUID orgId = null;
+            if (rootNode.hasNonNull("organization_id")) {
+                orgId = UUID.fromString(rootNode.path("organization_id").asText());
+            } else if (rootNode.hasNonNull("org_id")) {
+                orgId = UUID.fromString(rootNode.path("org_id").asText());
+            } else if (rootNode.path("client_payload").hasNonNull("organization_id")) {
+                orgId = UUID.fromString(rootNode.path("client_payload").path("organization_id").asText());
+            }
+
+            if (orgId == null) {
+                // Unknown installation: quarantine with SUSPENDED status awaiting explicit onboarding
+                UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+                log.warn("Unknown GitHub installation {}: no ForgeAI organization mapping found. Quarantining with SUSPENDED status under quarantine tenant {}. Requires explicit onboarding.", installationId, QUARANTINE_ORG_ID);
+                installation = GitHubInstallation.builder()
+                        .organizationId(QUARANTINE_ORG_ID)
+                        .installationId(installationId)
+                        .accountLogin(accountLogin)
+                        .accountType(accountType)
+                        .status(InstallationStatus.SUSPENDED)
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+                installationRepository.save(installation);
+                return; // Do not process attached repositories for quarantined installation
+            }
+
             installation = GitHubInstallation.builder()
                     .organizationId(orgId)
                     .installationId(installationId)

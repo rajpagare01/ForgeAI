@@ -19,6 +19,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
 
 management:
   endpoints:
@@ -31,4 +35,13 @@ management:
 
 forgeai:
   github:
-    webhook-secret: ${GITHUB_WEBHOOK_SECRET:dev-secret-key-12345}
+    # Numeric GitHub App ID — required for GitHub integration
+    # Set via GITHUB_APP_ID environment variable
+    app-id: ${GITHUB_APP_ID:5311634}
+    # RSA private key in PKCS#8 PEM format (if supplied as an inline string)
+    private-key: ${GITHUB_PRIVATE_KEY:}
+    # Path to RSA private key file on disk (default: secrets/github-app-private-key.pem)
+    private-key-path: ${GITHUB_PRIVATE_KEY_PATH:secrets/github-app-private-key.pem}
+    # Webhook shared secret — must match the secret configured in GitHub App settings.
+    # Set via GITHUB_WEBHOOK_SECRET environment variable.
+    webhook-secret: ${GITHUB_WEBHOOK_SECRET:xahS7wsvcFI8NbuyGnYt3WEQRfjCmVKqMA6pe214OJDB5XLk}

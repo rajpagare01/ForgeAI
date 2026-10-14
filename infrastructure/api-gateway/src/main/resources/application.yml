@@ -44,7 +44,7 @@ spring:
         - id: source-control-service
           uri: ${SOURCE_CONTROL_SERVICE_URI:http://localhost:8082}
           predicates:
-            - Path=/api/v1/source-control/**,/api/v1/repositories/**,/api/v1/pull-requests/**
+            - Path=/api/v1/source-control/**,/api/v1/repositories/**,/api/v1/pull-requests/**,/api/v1/installations/**,/api/v1/github/**
           filters:
             - name: RequestRateLimiter
               args:

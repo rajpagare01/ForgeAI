@@ -137,33 +137,36 @@ public class PushEventHandler {
             return existing.get();
         }
 
-        UUID orgId = UUID.randomUUID();
-        if (installationId > 0) {
+        UUID orgId = null;
+        if (installationId != null && installationId > 0) {
             Optional<GitHubInstallation> instOpt = installationRepository.findByInstallationId(installationId);
-            if (instOpt.isPresent()) {
+            if (instOpt.isPresent() && !UUID.fromString("00000000-0000-0000-0000-000000000000").equals(instOpt.get().getOrganizationId())) {
                 orgId = instOpt.get().getOrganizationId();
-            } else {
-                GitHubInstallation inst = GitHubInstallation.builder()
-                        .organizationId(orgId)
-                        .installationId(installationId)
-                        .accountLogin(fullName.contains("/") ? fullName.split("/")[0] : "forgeai")
-                        .accountType("Organization")
-                        .status(InstallationStatus.ACTIVE)
-                        .createdAt(Instant.now())
-                        .updatedAt(Instant.now())
-                        .build();
-                installationRepository.save(inst);
             }
-        } else {
-            installationId = 1001L;
-            Optional<GitHubInstallation> instOpt = installationRepository.findByInstallationId(installationId);
-            if (instOpt.isEmpty()) {
+        }
+
+        if (orgId == null) {
+            Optional<GitHubInstallation> defaultInst = installationRepository.findByInstallationId(1001L);
+            if (defaultInst.isPresent() && !UUID.fromString("00000000-0000-0000-0000-000000000000").equals(defaultInst.get().getOrganizationId())) {
+                orgId = defaultInst.get().getOrganizationId();
+                installationId = 1001L;
+            }
+        }
+
+        if (orgId == null) {
+            UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+            log.warn("Push received for unmapped repository/installation {} (repo: {}). Quarantining under tenant {}.", installationId, fullName, QUARANTINE_ORG_ID);
+            orgId = QUARANTINE_ORG_ID;
+            if (installationId == null || installationId <= 0) {
+                installationId = 1001L;
+            }
+            if (installationRepository.findByInstallationId(installationId).isEmpty()) {
                 GitHubInstallation inst = GitHubInstallation.builder()
-                        .organizationId(orgId)
+                        .organizationId(QUARANTINE_ORG_ID)
                         .installationId(installationId)
-                        .accountLogin("forgeai")
+                        .accountLogin(fullName.contains("/") ? fullName.split("/")[0] : "quarantine")
                         .accountType("Organization")
-                        .status(InstallationStatus.ACTIVE)
+                        .status(InstallationStatus.SUSPENDED)
                         .createdAt(Instant.now())
                         .updatedAt(Instant.now())
                         .build();

@@ -198,3 +198,35 @@ export interface TraceabilityNode {
     flaggedRisks: string[];
   };
 }
+
+export interface GitHubHealth {
+  configured: boolean;
+  appId?: number | null;
+  privateKeyPresent?: boolean;
+  webhookSecretPresent?: boolean;
+  status: "CONFIGURED" | "UNCONFIGURED";
+  totalInstallations?: number;
+  activeInstallations?: number;
+  quarantinedInstallations?: number;
+  quarantineWarning?: string;
+}
+
+export interface GitHubInstallation {
+  id: string;
+  organizationId: string;
+  installationId: number;
+  accountLogin: string;
+  accountType: string;
+  status: "ACTIVE" | "SUSPENDED" | "DELETED";
+}
+
+export interface AvailableRepository {
+  id: number;
+  installationId: number;
+  name: string;
+  fullName: string;
+  isPrivate: boolean;
+  defaultBranch: string;
+  ownerLogin: string;
+}
+
