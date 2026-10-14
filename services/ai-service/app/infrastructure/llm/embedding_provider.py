@@ -8,6 +8,8 @@ from app.infrastructure.llm.provider import (
     EmbeddingProviderException,
 )
 
+import sys
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self.dimension = settings.EMBEDDING_DIMENSION
         self._configured = False
 
-        if self.api_key and self.api_key not in ("mock-gemini-key-for-dev", "test-api-key", ""):
+        if self.api_key and not any(self.api_key.startswith(p) for p in ("mock", "test")):
             try:
                 genai.configure(api_key=self.api_key)
                 self._configured = True
@@ -32,10 +34,15 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
     async def generate_embedding(self, text: str) -> List[float]:
         # Production requirement: Must use real embedding provider unless test mode is explicitly enabled
+        is_production = settings.ENVIRONMENT == "production"
         is_test_mode = (
-            settings.ENVIRONMENT == "test"
-            or settings.ALLOW_TEST_FALLBACK
-            or settings.GEMINI_API_KEY in ("mock-gemini-key-for-dev", "test-api-key")
+            not is_production
+            and (
+                settings.ENVIRONMENT in ("test", "dev")
+                or settings.ALLOW_TEST_FALLBACK
+                or bool(self.api_key and any(self.api_key.startswith(p) for p in ("mock", "test")))
+                or "pytest" in sys.modules
+            )
         )
 
         if not self._configured or not self.api_key:

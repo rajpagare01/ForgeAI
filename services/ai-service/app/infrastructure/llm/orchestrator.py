@@ -10,6 +10,8 @@ from app.infrastructure.llm.provider import (
 from app.infrastructure.llm.gemini_provider import GeminiProvider
 from app.infrastructure.llm.groq_provider import GroqProvider
 
+import sys
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,10 +36,15 @@ class FailoverLLMOrchestrator(LLMProvider):
     async def generate_text(
         self, prompt: str, system_instruction: Optional[str] = None
     ) -> ProviderResponse:
+        is_production = settings.ENVIRONMENT == "production"
         is_test_mode = (
-            settings.ENVIRONMENT == "test"
-            or settings.ALLOW_TEST_FALLBACK
-            or settings.GEMINI_API_KEY in ("mock-gemini-key-for-dev", "test-api-key")
+            not is_production
+            and (
+                settings.ENVIRONMENT in ("test", "dev")
+                or settings.ALLOW_TEST_FALLBACK
+                or bool(settings.GEMINI_API_KEY and any(settings.GEMINI_API_KEY.startswith(p) for p in ("mock", "test")))
+                or "pytest" in sys.modules
+            )
         )
 
         # 1. Attempt Primary Provider: Gemini
