@@ -40,7 +40,7 @@ class FailoverLLMOrchestrator(LLMProvider):
         is_test_mode = (
             not is_production
             and (
-                settings.ENVIRONMENT in ("test", "dev")
+                settings.ENVIRONMENT in ("test", "dev", "development")
                 or settings.ALLOW_TEST_FALLBACK
                 or bool(settings.GEMINI_API_KEY and any(settings.GEMINI_API_KEY.startswith(p) for p in ("mock", "test")))
                 or "pytest" in sys.modules

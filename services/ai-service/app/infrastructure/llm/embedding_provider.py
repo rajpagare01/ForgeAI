@@ -38,7 +38,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         is_test_mode = (
             not is_production
             and (
-                settings.ENVIRONMENT in ("test", "dev")
+                settings.ENVIRONMENT in ("test", "dev", "development")
                 or settings.ALLOW_TEST_FALLBACK
                 or bool(self.api_key and any(self.api_key.startswith(p) for p in ("mock", "test")))
                 or "pytest" in sys.modules
@@ -53,30 +53,42 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 "Real embedding provider is unconfigured in production mode (GEMINI_API_KEY required)."
             )
 
-        try:
-            result = genai.embed_content(
-                model=self.embedding_model,
-                content=text,
-                task_type="retrieval_document",
-            )
-            embedding = result.get("embedding", [])
-            if not embedding:
-                raise EmbeddingProviderException("Gemini returned empty embedding vector.")
+        # Gemini model name may accept either "models/text-embedding-004" or "text-embedding-004"
+        candidate_models = [self.embedding_model]
+        if self.embedding_model.startswith("models/"):
+            candidate_models.append(self.embedding_model.replace("models/", ""))
+        else:
+            candidate_models.append(f"models/{self.embedding_model}")
 
-            # Pad or slice to dimension (768)
-            if len(embedding) < self.dimension:
-                embedding = embedding + [0.0] * (self.dimension - len(embedding))
-            return embedding[:self.dimension]
-
-        except Exception as e:
-            if is_test_mode:
-                logger.warning(
-                    "[TEST_FALLBACK] Gemini embedding call failed (%s); using deterministic vector for offline test.",
-                    type(e).__name__,
+        last_err = None
+        for candidate in candidate_models:
+            try:
+                result = genai.embed_content(
+                    model=candidate,
+                    content=text,
+                    task_type="retrieval_document",
                 )
-                return self._generate_deterministic_vector(text)
-            logger.error("Real embedding generation failed in production: %s", type(e).__name__)
-            raise EmbeddingProviderException(f"Failed to generate vector embedding: {type(e).__name__}") from e
+                embedding = result.get("embedding", [])
+                if not embedding:
+                    continue
+
+                # Pad or slice to dimension (768)
+                if len(embedding) < self.dimension:
+                    embedding = embedding + [0.0] * (self.dimension - len(embedding))
+                return embedding[:self.dimension]
+            except Exception as e:
+                last_err = e
+                logger.debug("Failed embedding with candidate model '%s': %s", candidate, type(e).__name__)
+
+        if is_test_mode:
+            logger.warning(
+                "[TEST_FALLBACK] Gemini embedding call failed (%s); using deterministic vector for offline test.",
+                type(last_err).__name__ if last_err else "Unknown",
+            )
+            return self._generate_deterministic_vector(text)
+
+        logger.error("Real embedding generation failed in production: %s", type(last_err).__name__ if last_err else "Unknown")
+        raise EmbeddingProviderException(f"Failed to generate vector embedding: {type(last_err).__name__}") from last_err
 
     def _generate_deterministic_vector(self, text: str) -> List[float]:
         """

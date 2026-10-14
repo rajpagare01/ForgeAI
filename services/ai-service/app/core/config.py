@@ -21,13 +21,13 @@ class Settings(BaseSettings):
 
     # Gemini LLM settings (PRIMARY)
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-pro"
-    GEMINI_EMBEDDING_MODEL: str = "models/text-embedding-004"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     EMBEDDING_DIMENSION: int = 768
 
     # Groq LLM settings (FALLBACK ONLY - NOT FOR EMBEDDINGS)
     GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "qwen/qwen3.8-27b"
     GROQ_API_URL: str = "https://api.groq.com/openai/v1/chat/completions"
 
     # Provider Orchestration
