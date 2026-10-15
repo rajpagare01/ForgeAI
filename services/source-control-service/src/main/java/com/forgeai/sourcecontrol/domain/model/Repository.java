@@ -21,6 +21,12 @@ public class Repository {
     private String fullName;
     private String defaultBranch;
     private Boolean isPrivate;
+    private String latestObservedSha;
+    private String latestIndexedSha;
+    private RepositorySyncStatus syncStatus;
+    private Instant lastSyncedAt;
+    private String lastError;
+    private String lastDeliveryId;
     private Instant createdAt;
     private Instant updatedAt;
 }

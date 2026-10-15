@@ -28,13 +28,29 @@ class InMemoryCodeChunkRepository(CodeChunkRepository):
                 return c
         return None
 
+    async def deactivate_file_chunks(self, org_id: UUID, repo_id: UUID, file_path: str) -> int:
+        count = 0
+        for c in self.chunks:
+            if c.organization_id == org_id and c.repository_id == repo_id and c.file_path == file_path and c.is_current:
+                c.is_current = False
+                count += 1
+        return count
+
+    async def deactivate_all_repo_chunks(self, org_id: UUID, repo_id: UUID) -> int:
+        count = 0
+        for c in self.chunks:
+            if c.organization_id == org_id and c.repository_id == repo_id and c.is_current:
+                c.is_current = False
+                count += 1
+        return count
+
     async def similarity_search(
-        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None
+        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None, only_current: bool = True
     ) -> List[Dict[str, Any]]:
         # Enforce strict tenant isolation: filter by organization_id == org_id
         matching = [
             c for c in self.chunks
-            if c.organization_id == org_id and c.embedding is not None and (repo_id is None or c.repository_id == repo_id)
+            if c.organization_id == org_id and c.embedding is not None and (repo_id is None or c.repository_id == repo_id) and (not only_current or c.is_current)
         ]
 
         def cosine_distance(v1: List[float], v2: List[float]) -> float:
@@ -58,6 +74,7 @@ class InMemoryCodeChunkRepository(CodeChunkRepository):
                 "symbol_name": c.symbol_name,
                 "symbol_type": c.symbol_type,
                 "content": c.content,
+                "is_current": c.is_current,
                 "distance": dist,
                 "similarity": 1.0 - dist,
             })
@@ -78,8 +95,17 @@ class InMemoryGraphEdgeRepository(GraphEdgeRepository):
         self.edges.extend(edges)
         return len(edges)
 
+    async def deactivate_edges_for_symbols(self, org_id: UUID, repo_id: UUID, symbols: List[str]) -> int:
+        count = 0
+        sym_set = set(symbols)
+        for e in self.edges:
+            if e.organization_id == org_id and e.repository_id == repo_id and e.is_current and (e.source_symbol in sym_set or e.target_symbol in sym_set):
+                e.is_current = False
+                count += 1
+        return count
+
     async def find_impact_tree(
-        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3
+        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3, only_current: bool = True
     ) -> List[Dict[str, Any]]:
         # Simulates the recursive CTE with organization_id and repository_id isolation
         visited: Dict[str, Dict[str, Any]] = {}
@@ -95,6 +121,7 @@ class InMemoryGraphEdgeRepository(GraphEdgeRepository):
                     edge.organization_id == org_id
                     and edge.repository_id == repository_id
                     and edge.target_symbol == curr_target
+                    and (not only_current or edge.is_current)
                 ):
                     src = edge.source_symbol
                     if src not in visited or depth < visited[src]["depth"]:

@@ -19,8 +19,16 @@ class CodeChunkRepository(ABC):
 
     @abstractmethod
     async def similarity_search(
-        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None
+        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None, only_current: bool = True
     ) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def deactivate_file_chunks(self, org_id: UUID, repo_id: UUID, file_path: str) -> int:
+        pass
+
+    @abstractmethod
+    async def deactivate_all_repo_chunks(self, org_id: UUID, repo_id: UUID) -> int:
         pass
 
 
@@ -35,8 +43,12 @@ class GraphEdgeRepository(ABC):
 
     @abstractmethod
     async def find_impact_tree(
-        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3
+        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3, only_current: bool = True
     ) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def deactivate_edges_for_symbols(self, org_id: UUID, repo_id: UUID, symbols: List[str]) -> int:
         pass
 
 

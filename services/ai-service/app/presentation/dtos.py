@@ -58,3 +58,27 @@ class AnalysisResponseDTO(BaseModel):
     execution_duration_ms: int
     trace_id: Optional[str] = None
 
+
+class PushSyncFileItem(BaseModel):
+    file_path: str
+    status: str = "modified"  # "added", "modified", "removed"
+    content: Optional[str] = None
+
+
+class PushSyncRequest(BaseModel):
+    repository_id: UUID
+    commit_sha: str
+    ref: Optional[str] = None
+    files: List[PushSyncFileItem] = Field(default_factory=list)
+
+
+class PushSyncResponse(BaseModel):
+    status: str
+    repository_id: UUID
+    commit_sha: str
+    files_processed: int
+    files_deactivated: int = 0
+    chunks_indexed: int
+    cache_hits: int
+    edges_indexed: int
+

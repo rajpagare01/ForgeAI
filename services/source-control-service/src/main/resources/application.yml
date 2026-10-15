@@ -48,4 +48,6 @@ forgeai:
   services:
     testing-service:
       url: ${TESTING_SERVICE_URL:http://testing-service:8083}
+    ai-service:
+      url: ${AI_SERVICE_URL:http://ai-service:8084}
 

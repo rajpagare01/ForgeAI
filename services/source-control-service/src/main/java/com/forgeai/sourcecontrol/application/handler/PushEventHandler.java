@@ -16,9 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus;
+import com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient;
+
 import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Component
@@ -28,16 +30,31 @@ public class PushEventHandler {
     private final GitHubInstallationRepository installationRepository;
     private final CommitRepository commitRepository;
     private final OutboxService outboxService;
+    private final com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient aiServiceClient;
+    private final com.forgeai.sourcecontrol.infrastructure.github.GitHubAppClient gitHubAppClient;
 
     public PushEventHandler(
             RepositoryRepository repositoryRepository,
             GitHubInstallationRepository installationRepository,
             CommitRepository commitRepository,
             OutboxService outboxService) {
+        this(repositoryRepository, installationRepository, commitRepository, outboxService, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PushEventHandler(
+            RepositoryRepository repositoryRepository,
+            GitHubInstallationRepository installationRepository,
+            CommitRepository commitRepository,
+            OutboxService outboxService,
+            com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient aiServiceClient,
+            com.forgeai.sourcecontrol.infrastructure.github.GitHubAppClient gitHubAppClient) {
         this.repositoryRepository = repositoryRepository;
         this.installationRepository = installationRepository;
         this.commitRepository = commitRepository;
         this.outboxService = outboxService;
+        this.aiServiceClient = aiServiceClient;
+        this.gitHubAppClient = gitHubAppClient;
     }
 
     @Transactional
@@ -80,6 +97,105 @@ public class PushEventHandler {
             for (JsonNode commitNode : commitsNode) {
                 processCommitNode(commitNode, repository, deliveryId);
             }
+        }
+
+        // Process Synchronization & Incremental Indexing for push events
+        String afterSha = rootNode.path("after").asText(null);
+        if (afterSha == null || afterSha.isBlank()) {
+            JsonNode headCommit = rootNode.path("head_commit");
+            if (!headCommit.isMissingNode() && !headCommit.isNull()) {
+                afterSha = headCommit.path("id").asText(null);
+                if (afterSha == null || afterSha.isBlank()) {
+                    afterSha = headCommit.path("sha").asText(null);
+                }
+            }
+        }
+
+        if (afterSha != null && !afterSha.isBlank() && !afterSha.matches("^0+$")) {
+            repository.setLatestObservedSha(afterSha);
+            repository.setLastDeliveryId(deliveryId);
+
+            boolean isDefaultBranchPush = ref.equals("refs/heads/" + defaultBranch) ||
+                                          ref.equals(defaultBranch) ||
+                                          ref.endsWith("/" + defaultBranch);
+
+            if (isDefaultBranchPush) {
+                if (aiServiceClient != null) {
+                    repository.setSyncStatus(RepositorySyncStatus.SYNCING);
+                    repository = repositoryRepository.save(repository);
+
+                    // Collect authoritative changed files across commits
+                    Map<String, String> fileStatusMap = new LinkedHashMap<>();
+                    if (commitsNode.isArray()) {
+                        for (JsonNode commitNode : commitsNode) {
+                            JsonNode added = commitNode.path("added");
+                            if (added.isArray()) {
+                                for (JsonNode f : added) fileStatusMap.put(f.asText(), "added");
+                            }
+                            JsonNode modified = commitNode.path("modified");
+                            if (modified.isArray()) {
+                                for (JsonNode f : modified) {
+                                    String path = f.asText();
+                                    if (!"added".equals(fileStatusMap.get(path))) {
+                                        fileStatusMap.put(path, "modified");
+                                    }
+                                }
+                            }
+                            JsonNode removed = commitNode.path("removed");
+                            if (removed.isArray()) {
+                                for (JsonNode f : removed) {
+                                    String path = f.asText();
+                                    if ("added".equals(fileStatusMap.get(path))) {
+                                        fileStatusMap.remove(path);
+                                    } else {
+                                        fileStatusMap.put(path, "removed");
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    List<AiServiceClient.ChangedFilePayload> changedFiles = new ArrayList<>();
+                    for (Map.Entry<String, String> entry : fileStatusMap.entrySet()) {
+                        String path = entry.getKey();
+                        String status = entry.getValue();
+                        String content = null;
+                        if (!"removed".equals(status) && gitHubAppClient != null && repository.getInstallationId() != null && repository.getInstallationId() > 0) {
+                            try {
+                                content = gitHubAppClient.getFileContent(repository.getInstallationId(), repository.getFullName(), path, afterSha).orElse(null);
+                            } catch (Exception e) {
+                                log.debug("Could not fetch file content for {}@{}: {}", path, afterSha, e.getMessage());
+                            }
+                        }
+                        changedFiles.add(new AiServiceClient.ChangedFilePayload(path, status, content));
+                    }
+
+                    boolean syncSuccess = aiServiceClient.syncPush(
+                            repository.getOrganizationId(),
+                            repository.getId(),
+                            afterSha,
+                            ref,
+                            changedFiles
+                    );
+
+                    if (syncSuccess) {
+                        repository.setLatestIndexedSha(afterSha);
+                        repository.setSyncStatus(RepositorySyncStatus.SYNCED);
+                        repository.setLastSyncedAt(Instant.now());
+                        repository.setLastError(null);
+                    } else {
+                        repository.setSyncStatus(RepositorySyncStatus.FAILED);
+                        repository.setLastError("Failed to incrementally index commit " + afterSha);
+                    }
+                } else {
+                    // Fallback when aiServiceClient is not bound (e.g. lightweight unit tests)
+                    repository.setLatestIndexedSha(afterSha);
+                    repository.setSyncStatus(RepositorySyncStatus.SYNCED);
+                    repository.setLastSyncedAt(Instant.now());
+                }
+            }
+
+            repositoryRepository.save(repository);
         }
     }
 

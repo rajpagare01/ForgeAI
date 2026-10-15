@@ -44,6 +44,25 @@ public class RepositoryJpaEntity {
     @Builder.Default
     private Boolean isPrivate = true;
 
+    @Column(name = "latest_observed_sha", length = 64)
+    private String latestObservedSha;
+
+    @Column(name = "latest_indexed_sha", length = 64)
+    private String latestIndexedSha;
+
+    @Column(name = "sync_status", nullable = false, length = 32)
+    @Builder.Default
+    private String syncStatus = "SYNCED";
+
+    @Column(name = "last_synced_at")
+    private Instant lastSyncedAt;
+
+    @Column(name = "last_error", columnDefinition = "TEXT")
+    private String lastError;
+
+    @Column(name = "last_delivery_id", length = 128)
+    private String lastDeliveryId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

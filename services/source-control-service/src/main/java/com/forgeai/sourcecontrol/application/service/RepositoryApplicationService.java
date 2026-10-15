@@ -45,6 +45,7 @@ public class RepositoryApplicationService {
     private final OutboxService outboxService;
     private final GitHubAppClient gitHubAppClient;
     private final GitHubAppConfig gitHubAppConfig;
+    private final com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient aiServiceClient;
 
     public RepositoryApplicationService(
             RepositoryRepository repositoryRepository,
@@ -53,7 +54,18 @@ public class RepositoryApplicationService {
             OutboxService outboxService,
             GitHubAppClient gitHubAppClient,
             GitHubAppConfig gitHubAppConfig) {
-        this(repositoryRepository, installationRepository, pullRequestRepository, null, outboxService, gitHubAppClient, gitHubAppConfig);
+        this(repositoryRepository, installationRepository, pullRequestRepository, null, outboxService, gitHubAppClient, gitHubAppConfig, null);
+    }
+
+    public RepositoryApplicationService(
+            RepositoryRepository repositoryRepository,
+            GitHubInstallationRepository installationRepository,
+            com.forgeai.sourcecontrol.domain.repository.PullRequestRepository pullRequestRepository,
+            com.forgeai.sourcecontrol.domain.repository.CommitRepository commitRepository,
+            OutboxService outboxService,
+            GitHubAppClient gitHubAppClient,
+            GitHubAppConfig gitHubAppConfig) {
+        this(repositoryRepository, installationRepository, pullRequestRepository, commitRepository, outboxService, gitHubAppClient, gitHubAppConfig, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -64,7 +76,8 @@ public class RepositoryApplicationService {
             com.forgeai.sourcecontrol.domain.repository.CommitRepository commitRepository,
             OutboxService outboxService,
             GitHubAppClient gitHubAppClient,
-            GitHubAppConfig gitHubAppConfig) {
+            GitHubAppConfig gitHubAppConfig,
+            com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient aiServiceClient) {
         this.repositoryRepository = repositoryRepository;
         this.installationRepository = installationRepository;
         this.pullRequestRepository = pullRequestRepository;
@@ -72,6 +85,7 @@ public class RepositoryApplicationService {
         this.outboxService = outboxService;
         this.gitHubAppClient = gitHubAppClient;
         this.gitHubAppConfig = gitHubAppConfig;
+        this.aiServiceClient = aiServiceClient;
     }
 
     // -------------------------------------------------------------------------
@@ -521,6 +535,113 @@ public class RepositoryApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No active GitHub App installation found for this organization. " +
                         "Install the ForgeAI GitHub App and claim the installation first."));
+    }
+
+    // -------------------------------------------------------------------------
+    // Synchronization & Reconciliation
+    // -------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO getSyncStatus(UUID organizationId, UUID repositoryId) {
+        requireTenant(organizationId);
+        Repository repo = getRepository(organizationId, repositoryId);
+
+        com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus status = repo.getSyncStatus();
+        if (status == null) {
+            status = com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCED;
+        }
+
+        if (status != com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCING &&
+            status != com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.FAILED) {
+            if (repo.getLatestObservedSha() != null &&
+                !repo.getLatestObservedSha().isBlank() &&
+                !repo.getLatestObservedSha().equals(repo.getLatestIndexedSha())) {
+                status = com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.STALE;
+            }
+        }
+
+        return com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO.builder()
+                .repositoryId(repo.getId())
+                .repositoryFullName(repo.getFullName())
+                .defaultBranch(repo.getDefaultBranch())
+                .currentGithubHead(repo.getLatestObservedSha())
+                .indexedHead(repo.getLatestIndexedSha())
+                .syncStatus(status)
+                .lastSyncedAt(repo.getLastSyncedAt())
+                .lastError(repo.getLastError())
+                .build();
+    }
+
+    @Transactional
+    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(UUID organizationId, UUID repositoryId) {
+        requireTenant(organizationId);
+        Repository repo = getRepository(organizationId, repositoryId);
+
+        String currentHead = null;
+        if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0) {
+            try {
+                // Find default branch HEAD
+                var branches = gitHubAppClient.listBranches(repo.getInstallationId(), repo.getFullName());
+                for (var b : branches) {
+                    if (repo.getDefaultBranch().equalsIgnoreCase(b.name())) {
+                        currentHead = b.commitSha();
+                        break;
+                    }
+                }
+                if (currentHead == null) {
+                    var commits = gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), 1);
+                    if (!commits.isEmpty()) {
+                        currentHead = commits.get(0).sha();
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[GitHub] Could not query remote HEAD during reconciliation for repo {}: {}", repo.getFullName(), e.getMessage());
+            }
+        }
+
+        if (currentHead != null && !currentHead.isBlank()) {
+            repo.setLatestObservedSha(currentHead);
+        } else if (repo.getLatestObservedSha() != null) {
+            currentHead = repo.getLatestObservedSha();
+        }
+
+        if (currentHead != null && !currentHead.isBlank()) {
+            if (!currentHead.equals(repo.getLatestIndexedSha())) {
+                repo.setSyncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCING);
+                repositoryRepository.save(repo);
+
+                boolean syncSuccess = true;
+                if (aiServiceClient != null) {
+                    syncSuccess = aiServiceClient.syncPush(
+                            organizationId,
+                            repo.getId(),
+                            currentHead,
+                            "refs/heads/" + repo.getDefaultBranch(),
+                            java.util.List.of()
+                    );
+                }
+
+                if (syncSuccess) {
+                    repo.setLatestIndexedSha(currentHead);
+                    repo.setSyncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCED);
+                    repo.setLastSyncedAt(Instant.now());
+                    repo.setLastError(null);
+                } else {
+                    repo.setSyncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.FAILED);
+                    repo.setLastError("Reconciliation failed for commit " + currentHead);
+                }
+            } else {
+                repo.setSyncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCED);
+                repo.setLastSyncedAt(Instant.now());
+                repo.setLastError(null);
+            }
+        } else {
+            repo.setSyncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCED);
+            repo.setLastSyncedAt(Instant.now());
+        }
+
+        repositoryRepository.save(repo);
+        return getSyncStatus(organizationId, repositoryId);
     }
 
     // -------------------------------------------------------------------------

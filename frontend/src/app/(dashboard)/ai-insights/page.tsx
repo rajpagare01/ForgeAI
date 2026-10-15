@@ -28,6 +28,7 @@ import {
   ArrowRight,
   FileDiff,
   Code2,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type LifecycleStep = "idle" | "fetching" | "deriving" | "indexing" | "graph" | "reasoning" | "complete";
+
+export interface RepositorySyncStatus {
+  repositoryId: string;
+  organizationId: string;
+  syncStatus: "SYNCED" | "SYNCING" | "STALE" | "FAILED";
+  latestObservedSha?: string;
+  latestIndexedSha?: string;
+  lastSyncedAt?: string;
+  lastError?: string;
+  lastDeliveryId?: string;
+}
 
 interface PullRequestFile {
   filename: string;
@@ -72,6 +84,11 @@ export default function AiInsightsPage() {
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
   const [isLoadingRepos, setIsLoadingRepos] = useState<boolean>(true);
+
+  // Repository Continuous Synchronization state
+  const [syncStatus, setSyncStatus] = useState<RepositorySyncStatus | null>(null);
+  const [isLoadingSyncStatus, setIsLoadingSyncStatus] = useState<boolean>(false);
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
 
   // Real Pull Requests
   const [pullRequests, setPullRequests] = useState<any[]>([]);
@@ -139,6 +156,46 @@ export default function AiInsightsPage() {
   useEffect(() => {
     fetchRepositories();
   }, [currentOrg.id, fetchRepositories]);
+
+  // Fetch repository sync status
+  const fetchSyncStatus = useCallback(async () => {
+    if (!selectedRepoId) {
+      setSyncStatus(null);
+      return;
+    }
+    setIsLoadingSyncStatus(true);
+    try {
+      const data = await apiClient.get<RepositorySyncStatus>(`/api/v1/repositories/${selectedRepoId}/sync-status`);
+      if (data && typeof data === "object") {
+        setSyncStatus(data);
+      }
+    } catch (err: any) {
+      console.warn("Could not fetch repository sync status:", err);
+      setSyncStatus(null);
+    } finally {
+      setIsLoadingSyncStatus(false);
+    }
+  }, [selectedRepoId]);
+
+  useEffect(() => {
+    fetchSyncStatus();
+  }, [selectedRepoId, fetchSyncStatus]);
+
+  const handleReconcile = async () => {
+    if (!selectedRepoId) return;
+    setIsReconciling(true);
+    try {
+      const res = await apiClient.post<RepositorySyncStatus>(`/api/v1/repositories/${selectedRepoId}/reconcile`, {});
+      if (res && typeof res === "object") {
+        setSyncStatus(res);
+      }
+      setTimeout(() => fetchSyncStatus(), 2000);
+    } catch (err: any) {
+      console.warn("Reconciliation failed:", err);
+    } finally {
+      setIsReconciling(false);
+    }
+  };
 
   // 2. Fetch real pull requests when selected repository changes
   useEffect(() => {
@@ -349,6 +406,94 @@ export default function AiInsightsPage() {
           )}
         </div>
       </div>
+
+      {/* Continuous Repository Synchronization Indicator */}
+      {selectedRepo && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm text-xs">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Sync State:</span>
+              {isLoadingSyncStatus && !syncStatus ? (
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+                  <span>Checking...</span>
+                </div>
+              ) : (
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                    syncStatus?.syncStatus === "SYNCED"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                      : syncStatus?.syncStatus === "SYNCING"
+                      ? "bg-blue-500/10 text-blue-400 border-blue-500/30 animate-pulse"
+                      : syncStatus?.syncStatus === "STALE"
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                      : syncStatus?.syncStatus === "FAILED"
+                      ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {syncStatus?.syncStatus === "SYNCED" && <CheckCircle2 className="h-3.5 w-3.5" />}
+                  {syncStatus?.syncStatus === "SYNCING" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {syncStatus?.syncStatus === "STALE" && <AlertTriangle className="h-3.5 w-3.5" />}
+                  {syncStatus?.syncStatus === "FAILED" && <ShieldAlert className="h-3.5 w-3.5" />}
+                  {syncStatus?.syncStatus || "SYNCED"}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 font-mono text-[11px] bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-md">
+              <span className="text-slate-500">GitHub HEAD:</span>
+              <span className="text-slate-300 font-semibold">
+                {syncStatus?.latestObservedSha ? syncStatus.latestObservedSha.substring(0, 7) : "None"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 font-mono text-[11px] bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-md">
+              <span className="text-slate-500">Indexed HEAD:</span>
+              <span className="text-indigo-400 font-semibold">
+                {syncStatus?.latestIndexedSha ? syncStatus.latestIndexedSha.substring(0, 7) : "None"}
+              </span>
+            </div>
+
+            {syncStatus?.lastSyncedAt && (
+              <div className="text-[11px] text-slate-400">
+                Last Synced:{" "}
+                <span className="text-slate-200 font-medium">
+                  {new Date(syncStatus.lastSyncedAt).toLocaleTimeString()}
+                </span>
+              </div>
+            )}
+
+            {syncStatus?.lastError && (
+              <span className="text-[11px] text-rose-400 font-medium truncate max-w-sm" title={syncStatus.lastError}>
+                Error: {syncStatus.lastError}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReconcile}
+              disabled={isReconciling || isLoadingSyncStatus}
+              className="h-7 text-xs px-3 border-indigo-500/30 bg-indigo-950/30 hover:bg-indigo-900/50 text-indigo-200 transition-colors"
+            >
+              {isReconciling ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin mr-1.5 text-indigo-400" />
+                  Reconciling...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3 w-3 mr-1.5 text-indigo-400" />
+                  Reconcile
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2">

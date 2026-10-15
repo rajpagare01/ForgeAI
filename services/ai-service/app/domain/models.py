@@ -47,6 +47,7 @@ class CodeChunk(BaseModel):
     content: str
     content_hash: str
     embedding: Optional[List[float]] = None
+    is_current: bool = True
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -58,6 +59,7 @@ class GraphEdge(BaseModel):
     target_symbol: str
     edge_type: str
     valid_at_sha: str
+    is_current: bool = True
     created_at: datetime = Field(default_factory=utc_now)
 
 

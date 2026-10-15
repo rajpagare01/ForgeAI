@@ -14,11 +14,15 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Component
-@RequiredArgsConstructor
 public class RepositoryRepositoryAdapter implements RepositoryRepository {
 
     private final SpringDataRepositoryRepository jpaRepository;
     private final SourceControlEntityMapper mapper;
+
+    public RepositoryRepositoryAdapter(SpringDataRepositoryRepository jpaRepository, SourceControlEntityMapper mapper) {
+        this.jpaRepository = jpaRepository;
+        this.mapper = mapper;
+    }
 
     @Override
     public Repository save(Repository repository) {
@@ -30,6 +34,12 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
                 entity.setFullName(repository.getFullName());
                 entity.setDefaultBranch(repository.getDefaultBranch());
                 entity.setIsPrivate(repository.getIsPrivate());
+                entity.setLatestObservedSha(repository.getLatestObservedSha());
+                entity.setLatestIndexedSha(repository.getLatestIndexedSha());
+                entity.setSyncStatus(repository.getSyncStatus() != null ? repository.getSyncStatus().name() : "SYNCED");
+                entity.setLastSyncedAt(repository.getLastSyncedAt());
+                entity.setLastError(repository.getLastError());
+                entity.setLastDeliveryId(repository.getLastDeliveryId());
                 entity.setUpdatedAt(Instant.now());
                 return mapper.toDomain(jpaRepository.saveAndFlush(entity));
             }

@@ -39,6 +39,20 @@ public class RepositoryController {
         return ResponseEntity.ok(repositoryApplicationService.getRepository(organizationId, id));
     }
 
+    @GetMapping("/{id}/sync-status")
+    public ResponseEntity<com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO> getRepositorySyncStatus(
+            @PathVariable UUID id) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.getSyncStatus(organizationId, id));
+    }
+
+    @PostMapping("/{id}/reconcile")
+    public ResponseEntity<com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO> reconcileRepository(
+            @PathVariable UUID id) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.reconcileRepository(organizationId, id));
+    }
+
     @GetMapping("/{id}/pull-requests")
     public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.PullRequest>> listPullRequestsForRepo(
             @PathVariable UUID id) {

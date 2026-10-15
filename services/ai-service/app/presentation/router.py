@@ -10,6 +10,8 @@ from app.presentation.dtos import (
     ImpactAnalysisRequest,
     PRAnalysisRequest,
     AnalysisResponseDTO,
+    PushSyncRequest,
+    PushSyncResponse,
 )
 from app.core.database import db_pool
 from app.infrastructure.persistence.repositories import (
@@ -37,7 +39,7 @@ async def get_services():
     edge_repo = AsyncpgGraphEdgeRepository(pool)
     analysis_repo = AsyncpgAnalysisRepository(pool)
     job_repo = AsyncpgIndexJobRepository(pool)
-    indexing_service = IndexingService(chunk_repo, edge_repo)
+    indexing_service = IndexingService(chunk_repo, edge_repo, job_repo=job_repo)
     retrieval_service = RetrievalService(chunk_repo, edge_repo)
     orchestration_service = GeminiOrchestrationService(
         retrieval_service=retrieval_service,
@@ -108,6 +110,39 @@ async def enqueue_indexing_job(
         commit_sha=req.commit_sha,
         files_enqueued=len(req.files),
         job_id=job.id,
+    )
+
+
+@router.post("/sync/push", response_model=PushSyncResponse)
+async def sync_push_event(
+    req: PushSyncRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Incrementally synchronizes a repository push event into the intelligence layer:
+    - Removes / deactivates deleted file chunks and edges
+    - Re-indexes modified and added files with content hash embedding reuse
+    - Enforces tenant and repository isolation
+    - Idempotently succeeds if commit state is already indexed
+    """
+    indexing_service, _, _ = await get_services()
+    files_payload = [{"file_path": f.file_path, "status": f.status, "content": f.content} for f in req.files]
+    result = await indexing_service.sync_incremental_push(
+        organization_id=org_id,
+        repository_id=req.repository_id,
+        commit_sha=req.commit_sha,
+        ref=req.ref,
+        files=files_payload,
+    )
+    return PushSyncResponse(
+        status=result.get("status", "COMPLETED"),
+        repository_id=req.repository_id,
+        commit_sha=req.commit_sha,
+        files_processed=result.get("files_processed", 0),
+        files_deactivated=result.get("files_deactivated", 0),
+        chunks_indexed=result.get("chunks_indexed", 0),
+        cache_hits=result.get("cache_hits", 0),
+        edges_indexed=result.get("edges_indexed", 0),
     )
 
 

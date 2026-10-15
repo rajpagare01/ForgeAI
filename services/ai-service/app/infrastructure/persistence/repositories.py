@@ -22,10 +22,13 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
         query = """
             INSERT INTO code_chunks (
                 id, organization_id, repository_id, commit_sha, file_path,
-                symbol_name, symbol_type, content, content_hash, embedding, created_at
+                symbol_name, symbol_type, content, content_hash, embedding, is_current, created_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11
-            ) RETURNING id;
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12
+            )
+            ON CONFLICT (organization_id, repository_id, commit_sha, file_path, content_hash)
+            DO UPDATE SET is_current = EXCLUDED.is_current
+            RETURNING id;
         """
         emb_str = f"[{','.join(str(x) for x in chunk.embedding)}]" if chunk.embedding else None
         async with self.pool.acquire() as conn:
@@ -41,6 +44,7 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 chunk.content,
                 chunk.content_hash,
                 emb_str,
+                chunk.is_current,
                 chunk.created_at,
             )
         return chunk
@@ -51,11 +55,12 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
         query = """
             INSERT INTO code_chunks (
                 id, organization_id, repository_id, commit_sha, file_path,
-                symbol_name, symbol_type, content, content_hash, embedding, created_at
+                symbol_name, symbol_type, content, content_hash, embedding, is_current, created_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12
             )
-            ON CONFLICT (organization_id, repository_id, commit_sha, file_path, content_hash) DO NOTHING;
+            ON CONFLICT (organization_id, repository_id, commit_sha, file_path, content_hash)
+            DO UPDATE SET is_current = EXCLUDED.is_current;
         """
         args = [
             (
@@ -69,6 +74,7 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 c.content,
                 c.content_hash,
                 f"[{','.join(str(x) for x in c.embedding)}]" if c.embedding else None,
+                c.is_current,
                 c.created_at,
             )
             for c in chunks
@@ -77,10 +83,36 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
             await conn.executemany(query, args)
         return len(chunks)
 
+    async def deactivate_file_chunks(self, org_id: UUID, repo_id: UUID, file_path: str) -> int:
+        query = """
+            UPDATE code_chunks
+            SET is_current = FALSE
+            WHERE organization_id = $1 AND repository_id = $2 AND file_path = $3 AND is_current = TRUE;
+        """
+        async with self.pool.acquire() as conn:
+            res = await conn.execute(query, org_id, repo_id, file_path)
+            try:
+                return int(res.split()[-1])
+            except Exception:
+                return 0
+
+    async def deactivate_all_repo_chunks(self, org_id: UUID, repo_id: UUID) -> int:
+        query = """
+            UPDATE code_chunks
+            SET is_current = FALSE
+            WHERE organization_id = $1 AND repository_id = $2 AND is_current = TRUE;
+        """
+        async with self.pool.acquire() as conn:
+            res = await conn.execute(query, org_id, repo_id)
+            try:
+                return int(res.split()[-1])
+            except Exception:
+                return 0
+
     async def find_by_content_hash(self, org_id: UUID, content_hash: str) -> Optional[CodeChunk]:
         query = """
             SELECT id, organization_id, repository_id, commit_sha, file_path,
-                   symbol_name, symbol_type, content, content_hash, created_at
+                   symbol_name, symbol_type, content, content_hash, is_current, created_at
             FROM code_chunks
             WHERE organization_id = $1 AND content_hash = $2
             LIMIT 1;
@@ -98,37 +130,40 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                     symbol_type=row["symbol_type"],
                     content=row["content"],
                     content_hash=row["content_hash"],
+                    is_current=row.get("is_current", True),
                     created_at=row["created_at"],
                 )
         return None
 
     async def similarity_search(
-        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None
+        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None, only_current: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Enforces strict multi-tenancy: WHERE organization_id = $1 is mandatory.
         Uses pgvector cosine distance operator <=>
+        Filters by is_current = TRUE when only_current is set to True.
         """
         emb_str = f"[{','.join(str(x) for x in query_embedding)}]"
+        current_clause = "AND is_current = TRUE" if only_current else ""
         if repo_id:
-            query = """
+            query = f"""
                 SELECT id, organization_id, repository_id, commit_sha, file_path,
-                       symbol_name, symbol_type, content, content_hash,
+                       symbol_name, symbol_type, content, content_hash, is_current,
                        (embedding <=> $2::vector) AS distance
                 FROM code_chunks
-                WHERE organization_id = $1 AND repository_id = $3 AND embedding IS NOT NULL
+                WHERE organization_id = $1 AND repository_id = $3 AND embedding IS NOT NULL {current_clause}
                 ORDER BY embedding <=> $2::vector
                 LIMIT $4;
             """
             async with self.pool.acquire() as conn:
                 rows = await conn.fetch(query, org_id, emb_str, repo_id, limit)
         else:
-            query = """
+            query = f"""
                 SELECT id, organization_id, repository_id, commit_sha, file_path,
-                       symbol_name, symbol_type, content, content_hash,
+                       symbol_name, symbol_type, content, content_hash, is_current,
                        (embedding <=> $2::vector) AS distance
                 FROM code_chunks
-                WHERE organization_id = $1 AND embedding IS NOT NULL
+                WHERE organization_id = $1 AND embedding IS NOT NULL {current_clause}
                 ORDER BY embedding <=> $2::vector
                 LIMIT $3;
             """
@@ -146,6 +181,7 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 "symbol_name": r["symbol_name"],
                 "symbol_type": r["symbol_type"],
                 "content": r["content"],
+                "is_current": r.get("is_current", True),
                 "distance": float(r["distance"]) if r["distance"] is not None else 1.0,
                 "similarity": 1.0 - (float(r["distance"]) if r["distance"] is not None else 1.0),
             })
@@ -160,9 +196,10 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
         query = """
             INSERT INTO graph_edges (
                 id, organization_id, repository_id, source_symbol,
-                target_symbol, edge_type, valid_at_sha, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (organization_id, repository_id, valid_at_sha, source_symbol, target_symbol, edge_type) DO NOTHING;
+                target_symbol, edge_type, valid_at_sha, is_current, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (organization_id, repository_id, valid_at_sha, source_symbol, target_symbol, edge_type)
+            DO UPDATE SET is_current = EXCLUDED.is_current;
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -174,6 +211,7 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
                 edge.target_symbol,
                 edge.edge_type,
                 edge.valid_at_sha,
+                edge.is_current,
                 edge.created_at,
             )
         return edge
@@ -184,9 +222,10 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
         query = """
             INSERT INTO graph_edges (
                 id, organization_id, repository_id, source_symbol,
-                target_symbol, edge_type, valid_at_sha, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (organization_id, repository_id, valid_at_sha, source_symbol, target_symbol, edge_type) DO NOTHING;
+                target_symbol, edge_type, valid_at_sha, is_current, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (organization_id, repository_id, valid_at_sha, source_symbol, target_symbol, edge_type)
+            DO UPDATE SET is_current = EXCLUDED.is_current;
         """
         args = [
             (
@@ -197,6 +236,7 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
                 e.target_symbol,
                 e.edge_type,
                 e.valid_at_sha,
+                e.is_current,
                 e.created_at,
             )
             for e in edges
@@ -205,24 +245,44 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
             await conn.executemany(query, args)
         return len(edges)
 
+    async def deactivate_edges_for_symbols(self, org_id: UUID, repo_id: UUID, symbols: List[str]) -> int:
+        if not symbols:
+            return 0
+        query = """
+            UPDATE graph_edges
+            SET is_current = FALSE
+            WHERE organization_id = $1 AND repository_id = $2 AND is_current = TRUE
+              AND (source_symbol = ANY($3) OR target_symbol = ANY($3));
+        """
+        async with self.pool.acquire() as conn:
+            res = await conn.execute(query, org_id, repo_id, symbols)
+            try:
+                return int(res.split()[-1])
+            except Exception:
+                return 0
+
     async def find_impact_tree(
-        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3
+        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3, only_current: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Recursive CTE traversing knowledge graph up to max_depth hops.
         Enforces tenant AND repository isolation by constraining every level to:
         organization_id = $1 AND repository_id = $2.
+        Filters by is_current = TRUE when only_current is set to True.
         """
-        query = """
+        current_base = "AND is_current = TRUE" if only_current else ""
+        current_join = "AND ge.is_current = TRUE" if only_current else ""
+
+        query = f"""
             WITH RECURSIVE impact_tree AS (
                 SELECT source_symbol, target_symbol, edge_type, 1 AS depth
                 FROM graph_edges
-                WHERE organization_id = $1 AND repository_id = $2 AND target_symbol = $3
+                WHERE organization_id = $1 AND repository_id = $2 AND target_symbol = $3 {current_base}
                 UNION
                 SELECT ge.source_symbol, ge.target_symbol, ge.edge_type, it.depth + 1
                 FROM graph_edges ge
                 JOIN impact_tree it ON ge.target_symbol = it.source_symbol
-                WHERE ge.organization_id = $1 AND ge.repository_id = $2 AND it.depth < $4
+                WHERE ge.organization_id = $1 AND ge.repository_id = $2 {current_join} AND it.depth < $4
             )
             SELECT DISTINCT source_symbol, edge_type, depth
             FROM impact_tree

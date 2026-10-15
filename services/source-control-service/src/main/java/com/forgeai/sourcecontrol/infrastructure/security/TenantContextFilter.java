@@ -28,11 +28,14 @@ public class TenantContextFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         try {
             String orgIdHeader = request.getHeader(HEADER_ORG_ID);
+            if (orgIdHeader == null || orgIdHeader.isBlank()) {
+                orgIdHeader = request.getHeader("X-Organization-Id");
+            }
             if (orgIdHeader != null && !orgIdHeader.isBlank()) {
                 try {
                     TenantContext.setOrganizationId(UUID.fromString(orgIdHeader.trim()));
                 } catch (IllegalArgumentException e) {
-                    log.warn("Invalid UUID format in {}: {}", HEADER_ORG_ID, orgIdHeader);
+                    log.warn("Invalid UUID format in org header: {}", orgIdHeader);
                 }
             }
 

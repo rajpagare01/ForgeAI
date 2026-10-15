@@ -24,10 +24,12 @@ class RetrievalService:
         query: str,
         limit: int = 5,
         repository_id: Optional[UUID] = None,
+        only_current: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Retrieves top relevant code chunks via pgvector cosine distance.
         Guarantees strict tenant isolation by filtering organization_id.
+        Filters by is_current = TRUE when only_current is True.
         """
         query_embedding = await self.llm_client.generate_embedding(query)
         return await self.code_chunk_repo.similarity_search(
@@ -35,6 +37,7 @@ class RetrievalService:
             query_embedding=query_embedding,
             limit=limit,
             repo_id=repository_id,
+            only_current=only_current,
         )
 
     async def get_impacted_symbols(
@@ -43,10 +46,12 @@ class RetrievalService:
         repository_id: UUID,
         changed_symbols: List[str],
         max_depth: int = 3,
+        only_current: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Runs recursive CTE on graph_edges for all changed symbols to find impacted upstream callers/users.
         Enforces both organization_id and repository_id isolation.
+        Filters by is_current = TRUE when only_current is True.
         """
         all_impacted: Dict[str, Dict[str, Any]] = {}
         for sym in changed_symbols:
@@ -55,6 +60,7 @@ class RetrievalService:
                 repository_id=repository_id,
                 target_symbol=sym,
                 max_depth=max_depth,
+                only_current=only_current,
             )
             for item in tree:
                 src = item["source_symbol"]
