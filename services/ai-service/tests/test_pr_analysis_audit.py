@@ -42,7 +42,7 @@ async def test_pr_analysis_audit():
     assert analysis.entity_type == "PR"
     assert analysis.entity_id == f"{repo_id}#{pr_number}"
     assert analysis.summary is not None
-    assert analysis.prompt_version in ("v1.0.0", "v1.1.0")
+    assert analysis.prompt_version in ("v1.0.0", "v1.1.0", "v1.2.0")
     assert analysis.execution_duration_ms >= 0
 
     # 2. Verify persistence in analysis repository

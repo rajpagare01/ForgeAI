@@ -9,6 +9,7 @@ from app.domain.repositories import (
     IndexJobRepository,
     TestRecommendationRepository,
     TestValidationFeedbackRepository,
+    MergeEvaluationRepository,
 )
 
 
@@ -277,4 +278,32 @@ class InMemoryTestValidationFeedbackRepository(TestValidationFeedbackRepository)
             ):
                 return f
         return None
+
+
+class InMemoryMergeEvaluationRepository(MergeEvaluationRepository):
+    def __init__(self):
+        self.evaluations: List[Any] = []
+
+    async def save_evaluation(self, evaluation: Any) -> Any:
+        self.evaluations.append(evaluation)
+        return evaluation
+
+    async def get_by_commit(self, org_id: UUID, repo_id: UUID, commit_sha: str) -> Optional[Any]:
+        for e in reversed(self.evaluations):
+            if (
+                getattr(e, "organization_id", None) == org_id
+                and getattr(e, "repository_id", None) == repo_id
+                and getattr(e, "commit_sha", None) == commit_sha
+            ):
+                return e
+        return None
+
+    async def get_by_pr(self, org_id: UUID, repo_id: UUID, pr_number: int) -> List[Any]:
+        return [
+            e for e in reversed(self.evaluations)
+            if getattr(e, "organization_id", None) == org_id
+            and getattr(e, "repository_id", None) == repo_id
+            and getattr(e, "pr_number", None) == pr_number
+        ]
+
 

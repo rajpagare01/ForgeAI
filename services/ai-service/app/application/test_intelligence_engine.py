@@ -9,6 +9,7 @@ from app.domain.models import (
     TestPriorityBucket,
     TestRecommendation,
     TestValidationFeedback,
+    TestMergeRequirement,
 )
 
 logger = logging.getLogger(__name__)
@@ -320,6 +321,10 @@ class TestIntelligenceEngine:
                 cand=cand,
                 deterministic_risk_score=deterministic_risk_score,
             )
+            merge_req = cls._calculate_merge_requirement(
+                cand=cand,
+                deterministic_risk_score=deterministic_risk_score,
+            )
             # Combine reasons and evidence paths cleanly
             combined_reason = "; ".join(cand["reasons"]) or "Regression testing recommended for modified area."
             primary_path = cand["evidence_path"] if cand["evidence_path"] else [f"Changed Component -> Test: {cand['test_name']}"]
@@ -333,6 +338,7 @@ class TestIntelligenceEngine:
                 target_symbol=cand["target_symbol"],
                 priority_score=score,
                 priority_bucket=bucket,
+                merge_requirement=merge_req,
                 confidence=confidence,
                 evidence_sources=sorted(list(cand["evidence_sources"])),
                 evidence_types=sorted(list(cand["evidence_types"])),
@@ -385,9 +391,9 @@ class TestIntelligenceEngine:
         cls,
         cand: Dict[str, Any],
         deterministic_risk_score: float,
-    ) -> Tuple[float, str, str]:
+    ) -> Tuple[float, str, str, str]:
         """
-        Calculates explainable priority score (0.0 to 100.0), confidence, and bucket.
+        Calculates explainable priority score (0.0 to 100.0), confidence, bucket, and merge_requirement.
 
         Weight Breakdown:
           1. Direct Symbol Coverage (Max 35.0):
@@ -467,6 +473,38 @@ class TestIntelligenceEngine:
         return total_score, confidence, bucket
 
     @classmethod
+    def _calculate_merge_requirement(
+        cls,
+        cand: Dict[str, Any],
+        deterministic_risk_score: float,
+    ) -> str:
+        """
+        Determine Stronger Concept: MERGE-REQUIRED TEST
+        Possible states: TEST_REQUIRED, TEST_RECOMMENDED, TEST_OPTIONAL
+        A test can become TEST_REQUIRED when:
+        - it directly covers a changed critical symbol (AST_CALL or RUNTIME_COVERAGE)
+        - direct structural unit test pairing for changed component (PATH_PAIRING)
+        - PR risk exceeds configured threshold (>= 50.0) and touches modified component
+        - the test is historically failure-prone (fail_count >= 1)
+        - blast radius depth is 1 on a medium/high risk PR
+        """
+        fail_count = cand.get("historical_failure_count", 0)
+        if (
+            cand.get("ast_call")
+            or cand.get("runtime_coverage")
+            or cand.get("path_pairing")
+            or fail_count >= 1
+            or (cand.get("blast_radius_depth") == 1 and deterministic_risk_score >= 35.0)
+            or (deterministic_risk_score >= 50.0 and cand.get("file_ref"))
+        ):
+            return TestMergeRequirement.TEST_REQUIRED.value
+        elif cand.get("file_ref") or cand.get("cochange_count", 0) > 0 or deterministic_risk_score >= 25.0:
+            return TestMergeRequirement.TEST_RECOMMENDED.value
+        else:
+            return TestMergeRequirement.TEST_OPTIONAL.value
+
+
+    @classmethod
     def _derive_overall_confidence(
         cls,
         recommendations: List[TestRecommendation],
@@ -507,15 +545,27 @@ class TestIntelligenceEngine:
           - executed_count: recommended tests that actually executed in CI
           - passed_count: executed tests that passed
           - failed_count: executed tests that failed
-          - high_priority_missed_count: tests that failed in CI but were NOT in MUST_RUN
+          - high_priority_missed_count: tests that failed in CI but were NOT in MUST_RUN or TEST_REQUIRED
           - prediction_to_failure_correlation:
               (failed recommended tests) / (total failed tests in CI)
-              Yields 1.0 if all failed tests in CI were correctly predicted.
+              Yields None if 0 failures occurred (cannot claim predictive accuracy without failure signal).
+          - required_test_failure_capture:
+              (failed TEST_REQUIRED tests) / (total failed tests in CI)
+              Yields None if 0 failures occurred.
+          - required_test_execution_rate:
+              (executed TEST_REQUIRED tests) / (total TEST_REQUIRED tests)
+          - false_positive_required_test_rate:
+              (passed TEST_REQUIRED tests) / (total executed TEST_REQUIRED tests)
+          - missed_failure_count:
+              total failed tests in CI not caught by TEST_REQUIRED
+          - recommendation_coverage:
+              (matched_executed) / (recommended_count)
           - test_selection_efficiency:
               (executed MUST_RUN tests) / (total executed tests in CI)
         """
         rec_names = {r.test_name.lower(): r for r in recommended_tests}
         must_run_names = {r.test_name.lower(): r for r in recommended_tests if r.priority_bucket == TestPriorityBucket.MUST_RUN.value}
+        required_names = {r.test_name.lower(): r for r in recommended_tests if r.merge_requirement == TestMergeRequirement.TEST_REQUIRED.value}
 
         total_executed = len(executed_test_results)
         matched_executed = 0
@@ -524,10 +574,14 @@ class TestIntelligenceEngine:
         all_failed_in_ci = 0
         missed_high_priority = 0
 
+        required_executed_count = 0
+        required_passed_count = 0
+        required_failed_count = 0
+
         for res in executed_test_results:
             t_name = (res.get("name") or res.get("test_name") or "").lower()
             status = (res.get("status") or "").upper()
-            is_failed = status == "FAILED"
+            is_failed = status in ("FAILED", "FAILURE", "FAIL")
 
             if is_failed:
                 all_failed_in_ci += 1
@@ -537,36 +591,85 @@ class TestIntelligenceEngine:
                 matched_executed += 1
                 if is_failed:
                     matched_failed += 1
-                elif status == "PASSED":
+                elif status in ("PASSED", "SUCCESS", "PASS"):
                     matched_passed += 1
 
-            # Check if an unpredicted or non-MUST_RUN test failed
+            # Check if matching required test
+            matched_req = next((r for name, r in required_names.items() if name in t_name or t_name in name), None)
+            if matched_req:
+                required_executed_count += 1
+                if is_failed:
+                    required_failed_count += 1
+                elif status in ("PASSED", "SUCCESS", "PASS"):
+                    required_passed_count += 1
+
+            # Check if an unpredicted or non-MUST_RUN / non-REQUIRED test failed
             if is_failed:
                 is_must_run = any(name in t_name or t_name in name for name in must_run_names)
-                if not is_must_run:
+                is_req = any(name in t_name or t_name in name for name in required_names)
+                if not (is_must_run or is_req):
                     missed_high_priority += 1
 
-        # Calculate prediction-to-failure correlation:
-        # Proportion of actual CI test failures that were anticipated by test intelligence
-        if all_failed_in_ci > 0:
-            pred_correlation = round(matched_failed / all_failed_in_ci, 2)
-        else:
-            # If 0 failures occurred and our recommendations ran clean, correlation is 1.0 (perfect stability)
-            pred_correlation = 1.0
+        # 1. Prediction to Failure Correlation:
+        # Proportion of actual CI failures anticipated by any recommended test.
+        # If 0 failures occurred in CI, returns None (do not claim 1.0 artificial accuracy).
+        pred_correlation = (
+            round(matched_failed / all_failed_in_ci, 2)
+            if all_failed_in_ci > 0
+            else None
+        )
 
-        # Calculate selection efficiency:
-        # Proportion of tests that ran in MUST_RUN group relative to total run count
+        # 2. Required Test Failure Capture:
+        # Proportion of actual CI failures captured specifically by TEST_REQUIRED tests.
+        required_failure_capture = (
+            round(required_failed_count / all_failed_in_ci, 2)
+            if all_failed_in_ci > 0
+            else None
+        )
+
+        # 3. Required Test Execution Rate:
+        # Proportion of identified TEST_REQUIRED tests that actually ran in CI.
+        total_required_tests = len(required_names)
+        required_execution_rate = (
+            round(required_executed_count / total_required_tests, 2)
+            if total_required_tests > 0
+            else 1.0
+        )
+
+        # 4. False Positive Required Test Rate:
+        # Proportion of executed TEST_REQUIRED tests that passed without revealing a failure.
+        false_positive_required_rate = (
+            round(required_passed_count / required_executed_count, 2)
+            if required_executed_count > 0
+            else 0.0
+        )
+
+        # 5. Missed Failure Count:
+        # Total CI failures that were NOT captured by TEST_REQUIRED tests.
+        missed_failure_count = all_failed_in_ci - required_failed_count
+
+        # 6. Recommendation Coverage:
+        # Proportion of all recommended tests that executed.
+        rec_count = len(recommended_tests)
+        rec_coverage = round(matched_executed / rec_count, 2) if rec_count > 0 else 1.0
+
+        # 7. Test Selection Efficiency:
         must_run_count = len(must_run_names)
         efficiency = round(must_run_count / total_executed, 2) if total_executed > 0 else 1.0
 
         return {
-            "recommended_count": len(recommended_tests),
+            "recommended_count": rec_count,
             "executed_count": matched_executed,
             "passed_count": matched_passed,
             "failed_count": matched_failed,
             "high_priority_missed_count": missed_high_priority,
             "prediction_to_failure_correlation": pred_correlation,
             "test_selection_efficiency": efficiency,
+            "required_test_failure_capture": required_failure_capture,
+            "required_test_execution_rate": required_execution_rate,
+            "false_positive_required_test_rate": false_positive_required_rate,
+            "missed_failure_count": missed_failure_count,
+            "recommendation_coverage": rec_coverage,
             "total_ci_tests_executed": total_executed,
             "total_ci_failures": all_failed_in_ci,
             "workflow_run_id": workflow_run_id,

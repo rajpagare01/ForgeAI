@@ -10,6 +10,7 @@ from app.domain.models import (
     IndexJob,
     TestRecommendation,
     TestValidationFeedback,
+    MergeEvaluation,
 )
 from app.domain.repositories import (
     CodeChunkRepository,
@@ -18,6 +19,7 @@ from app.domain.repositories import (
     IndexJobRepository,
     TestRecommendationRepository,
     TestValidationFeedbackRepository,
+    MergeEvaluationRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -320,8 +322,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 prompt_version, summary, risk_level, retrieved_chunks,
                 execution_duration_ms, trace_id, provider, fallback_used,
                 risk_score, confidence, risk_factors, impact_metadata,
-                test_strategy, test_effectiveness, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20);
+                test_strategy, test_effectiveness, merge_readiness, review_findings, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22);
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -345,6 +347,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 json.dumps(analysis.impact_metadata) if analysis.impact_metadata else "{}",
                 json.dumps(analysis.test_strategy) if analysis.test_strategy else "{}",
                 json.dumps(analysis.test_effectiveness) if analysis.test_effectiveness else None,
+                json.dumps(analysis.merge_readiness) if analysis.merge_readiness else None,
+                json.dumps(analysis.review_findings) if analysis.review_findings else "[]",
                 analysis.created_at,
             )
         return analysis
@@ -354,14 +358,15 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
     ) -> List[Analysis]:
         query = """
             SELECT id, organization_id, entity_type, entity_id, model_version,
-                   prompt_version, summary, risk_level, retrieved_chunks,
-                   execution_duration_ms, trace_id,
-                   COALESCE(provider, 'GEMINI') as provider,
-                   COALESCE(fallback_used, false) as fallback_used,
-                   COALESCE(risk_score, 0.0) as risk_score,
-                   COALESCE(confidence, 'MEDIUM') as confidence,
-                   risk_factors, impact_metadata, test_strategy, test_effectiveness,
-                   created_at
+               prompt_version, summary, risk_level, retrieved_chunks,
+               execution_duration_ms, trace_id,
+               COALESCE(provider, 'GEMINI') as provider,
+               COALESCE(fallback_used, false) as fallback_used,
+               COALESCE(risk_score, 0.0) as risk_score,
+               COALESCE(confidence, 'MEDIUM') as confidence,
+               risk_factors, impact_metadata, test_strategy, test_effectiveness,
+               merge_readiness, review_findings,
+               created_at
             FROM analyses
             WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
             ORDER BY created_at DESC;
@@ -376,6 +381,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             r_impact = json.loads(r["impact_metadata"]) if r.get("impact_metadata") else {}
             r_strat = json.loads(r["test_strategy"]) if r.get("test_strategy") else {}
             r_eff = json.loads(r["test_effectiveness"]) if r.get("test_effectiveness") else None
+            m_readiness = json.loads(r["merge_readiness"]) if r.get("merge_readiness") else None
+            r_findings = json.loads(r["review_findings"]) if r.get("review_findings") else []
             results.append(
                 Analysis(
                     id=r["id"],
@@ -393,6 +400,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                     impact_metadata=r_impact,
                     test_strategy=r_strat,
                     test_effectiveness=r_eff,
+                    merge_readiness=m_readiness,
+                    review_findings=r_findings,
                     retrieved_chunks=chunks,
                     execution_duration_ms=r["execution_duration_ms"],
                     trace_id=r["trace_id"],
@@ -405,14 +414,15 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
     async def get_by_id(self, org_id: UUID, analysis_id: UUID) -> Optional[Analysis]:
         query = """
             SELECT id, organization_id, entity_type, entity_id, model_version,
-                   prompt_version, summary, risk_level, retrieved_chunks,
-                   execution_duration_ms, trace_id,
-                   COALESCE(provider, 'GEMINI') as provider,
-                   COALESCE(fallback_used, false) as fallback_used,
-                   COALESCE(risk_score, 0.0) as risk_score,
-                   COALESCE(confidence, 'MEDIUM') as confidence,
-                   risk_factors, impact_metadata, test_strategy, test_effectiveness,
-                   created_at
+               prompt_version, summary, risk_level, retrieved_chunks,
+               execution_duration_ms, trace_id,
+               COALESCE(provider, 'GEMINI') as provider,
+               COALESCE(fallback_used, false) as fallback_used,
+               COALESCE(risk_score, 0.0) as risk_score,
+               COALESCE(confidence, 'MEDIUM') as confidence,
+               risk_factors, impact_metadata, test_strategy, test_effectiveness,
+               merge_readiness, review_findings,
+               created_at
             FROM analyses
             WHERE organization_id = $1 AND id = $2;
         """
@@ -425,6 +435,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
         r_impact = json.loads(r["impact_metadata"]) if r.get("impact_metadata") else {}
         r_strat = json.loads(r["test_strategy"]) if r.get("test_strategy") else {}
         r_eff = json.loads(r["test_effectiveness"]) if r.get("test_effectiveness") else None
+        m_readiness = json.loads(r["merge_readiness"]) if r.get("merge_readiness") else None
+        r_findings = json.loads(r["review_findings"]) if r.get("review_findings") else []
         return Analysis(
             id=r["id"],
             organization_id=r["organization_id"],
@@ -441,6 +453,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             impact_metadata=r_impact,
             test_strategy=r_strat,
             test_effectiveness=r_eff,
+            merge_readiness=m_readiness,
+            review_findings=r_findings,
             retrieved_chunks=chunks,
             execution_duration_ms=r["execution_duration_ms"],
             trace_id=r["trace_id"],
@@ -807,4 +821,106 @@ class AsyncpgIndexJobRepository(IndexJobRepository):
             started_at=r["started_at"],
             completed_at=r["completed_at"],
         )
+
+
+class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_evaluation(self, evaluation: MergeEvaluation) -> MergeEvaluation:
+        query = """
+            INSERT INTO merge_evaluations (
+                id, analysis_id, organization_id, repository_id, pr_number,
+                commit_sha, decision, readiness_score, confidence, policy_version,
+                blocking_reasons, warnings, required_actions, required_checks,
+                required_tests, security_status, github_mode, decision_timestamp, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19);
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                evaluation.id,
+                evaluation.analysis_id,
+                evaluation.organization_id,
+                evaluation.repository_id,
+                evaluation.pr_number,
+                evaluation.commit_sha,
+                evaluation.decision,
+                float(evaluation.readiness_score),
+                evaluation.confidence,
+                evaluation.policy_version,
+                json.dumps(evaluation.blocking_reasons),
+                json.dumps(evaluation.warnings),
+                json.dumps(evaluation.required_actions),
+                json.dumps(evaluation.required_checks),
+                json.dumps(evaluation.required_tests),
+                evaluation.security_status,
+                evaluation.github_mode,
+                evaluation.decision_timestamp,
+                evaluation.created_at,
+            )
+        return evaluation
+
+    async def get_by_commit(
+        self, org_id: UUID, repo_id: UUID, commit_sha: str
+    ) -> Optional[MergeEvaluation]:
+        query = """
+            SELECT id, analysis_id, organization_id, repository_id, pr_number,
+                   commit_sha, decision, readiness_score, confidence, policy_version,
+                   blocking_reasons, warnings, required_actions, required_checks,
+                   required_tests, security_status, github_mode, decision_timestamp, created_at
+            FROM merge_evaluations
+            WHERE organization_id = $1 AND repository_id = $2 AND commit_sha = $3
+            ORDER BY decision_timestamp DESC LIMIT 1;
+        """
+        async with self.pool.acquire() as conn:
+            r = await conn.fetchrow(query, org_id, repo_id, commit_sha)
+        if not r:
+            return None
+        return self._row_to_evaluation(r)
+
+    async def get_by_pr(
+        self, org_id: UUID, repo_id: UUID, pr_number: int
+    ) -> List[MergeEvaluation]:
+        query = """
+            SELECT id, analysis_id, organization_id, repository_id, pr_number,
+                   commit_sha, decision, readiness_score, confidence, policy_version,
+                   blocking_reasons, warnings, required_actions, required_checks,
+                   required_tests, security_status, github_mode, decision_timestamp, created_at
+            FROM merge_evaluations
+            WHERE organization_id = $1 AND repository_id = $2 AND pr_number = $3
+            ORDER BY decision_timestamp DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, repo_id, pr_number)
+        return [self._row_to_evaluation(r) for r in rows]
+
+    def _row_to_evaluation(self, r: Any) -> MergeEvaluation:
+        b_reasons = json.loads(r["blocking_reasons"]) if r.get("blocking_reasons") else []
+        warns = json.loads(r["warnings"]) if r.get("warnings") else []
+        req_actions = json.loads(r["required_actions"]) if r.get("required_actions") else []
+        req_checks = json.loads(r["required_checks"]) if r.get("required_checks") else []
+        req_tests = json.loads(r["required_tests"]) if r.get("required_tests") else []
+        return MergeEvaluation(
+            id=r["id"],
+            analysis_id=r["analysis_id"],
+            organization_id=r["organization_id"],
+            repository_id=r["repository_id"],
+            pr_number=r["pr_number"],
+            commit_sha=r["commit_sha"],
+            decision=r["decision"],
+            readiness_score=float(r["readiness_score"]),
+            confidence=r["confidence"],
+            policy_version=r["policy_version"],
+            blocking_reasons=b_reasons,
+            warnings=warns,
+            required_actions=req_actions,
+            required_checks=req_checks,
+            required_tests=req_tests,
+            security_status=r.get("security_status", "SECURITY_EVIDENCE_UNAVAILABLE"),
+            github_mode=r.get("github_mode", "MODE_A_ADVISORY"),
+            decision_timestamp=r["decision_timestamp"],
+            created_at=r["created_at"],
+        )
+
 

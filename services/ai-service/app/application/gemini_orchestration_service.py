@@ -1,14 +1,24 @@
 import time
+import json
+import re
 import logging
 from typing import List, Dict, Any, Optional
 from uuid import UUID
-from app.domain.models import Analysis, RiskLevel, IndexJob, IndexJobStatus, TestRecommendation
-from app.domain.repositories import AnalysisRepository, IndexJobRepository, TestRecommendationRepository
+from app.domain.models import Analysis, RiskLevel, IndexJob, IndexJobStatus, TestRecommendation, MergeEvaluation
+from app.domain.repositories import (
+    AnalysisRepository,
+    IndexJobRepository,
+    TestRecommendationRepository,
+    MergeEvaluationRepository,
+)
 from app.application.retrieval_service import RetrievalService
 from app.application.indexing_service import IndexingService
 from app.application.impact_engine import ChangeImpactEngine, ImpactAnalysisResult
 from app.application.risk_engine import DeterministicRiskEngine, RiskAssessment
 from app.application.test_intelligence_engine import TestIntelligenceEngine, TestStrategyResult
+from app.application.merge_policy import MergePolicy, get_default_merge_policy
+from app.application.merge_readiness_engine import MergeReadinessEngine
+from app.application.review_finding_service import ReviewFindingService
 from app.infrastructure.llm.gemini_client import GeminiClient
 from app.infrastructure.client.source_control_client import SourceControlClient
 from app.infrastructure.client.testing_service_client import TestingServiceClient
@@ -29,6 +39,7 @@ class GeminiOrchestrationService:
         indexing_service: Optional[IndexingService] = None,
         job_repo: Optional[IndexJobRepository] = None,
         test_rec_repo: Optional[TestRecommendationRepository] = None,
+        merge_eval_repo: Optional[MergeEvaluationRepository] = None,
     ):
         self.retrieval_service = retrieval_service
         self.analysis_repo = analysis_repo
@@ -39,7 +50,8 @@ class GeminiOrchestrationService:
         self.indexing_service = indexing_service
         self.job_repo = job_repo
         self.test_rec_repo = test_rec_repo
-        self.prompt_version = "v1.1.0"
+        self.merge_eval_repo = merge_eval_repo
+        self.prompt_version = "v1.2.0"
 
     async def analyze_pull_request(
         self,
@@ -274,6 +286,23 @@ class GeminiOrchestrationService:
 
         runtime_coverage_data = pr_changes.get("coverage") if pr_changes else None
 
+        # ----------------------------------------------------------------------
+        # 8b. Deterministic Risk Scoring Layer (BEFORE LLM REASONING)
+        # ----------------------------------------------------------------------
+        risk_assessment: RiskAssessment = DeterministicRiskEngine.calculate_risk(
+            changed_files=raw_files,
+            changed_symbols=effective_symbols,
+            direct_impact=impact_result.direct_impact,
+            transitive_impact=impact_result.transitive_impact,
+            affected_modules=impact_result.affected_modules,
+            affected_tests=impact_result.affected_tests,
+            historical_signals=impact_result.historical_signals,
+            sync_status=sync_status_val,
+        )
+
+        # ----------------------------------------------------------------------
+        # 8c. Test Intelligence Engine: Static, Runtime & Historical Evidence
+        # ----------------------------------------------------------------------
         test_strategy: TestStrategyResult = TestIntelligenceEngine.evaluate_test_strategy(
             organization_id=organization_id,
             repository_id=repository_id,
@@ -288,7 +317,7 @@ class GeminiOrchestrationService:
             runtime_test_runs=runtime_test_runs,
             historical_failed_tests=historical_failed_tests,
             runtime_coverage_data=runtime_coverage_data,
-            deterministic_risk_score=0.0,
+            deterministic_risk_score=risk_assessment.risk_score,
         )
 
         all_prioritized_tests = test_strategy.must_run + test_strategy.should_run + test_strategy.optional
@@ -300,23 +329,10 @@ class GeminiOrchestrationService:
                 "relationship": r.reason,
                 "priority_bucket": r.priority_bucket,
                 "priority_score": r.priority_score,
+                "merge_requirement": r.merge_requirement,
             }
             for r in all_prioritized_tests
         ] if all_prioritized_tests else impact_result.affected_tests
-
-        # ----------------------------------------------------------------------
-        # 9. Deterministic Risk Scoring Layer (BEFORE LLM REASONING)
-        # ----------------------------------------------------------------------
-        risk_assessment: RiskAssessment = DeterministicRiskEngine.calculate_risk(
-            changed_files=raw_files,
-            changed_symbols=effective_symbols,
-            direct_impact=impact_result.direct_impact,
-            transitive_impact=impact_result.transitive_impact,
-            affected_modules=impact_result.affected_modules,
-            affected_tests=enriched_affected_tests,
-            historical_signals=impact_result.historical_signals,
-            sync_status=sync_status_val,
-        )
 
         # ----------------------------------------------------------------------
         # 10. Structured Grounded Prompt Construction (FACTS / INFERENCES / RECOMMENDATIONS)
@@ -461,6 +477,25 @@ REQUIRED OUTPUT STRUCTURE:
 ### SECTION 3: RECOMMENDATIONS (Engineering Actions & Prioritized Test Strategy)
 - Review the deterministic test selection: MUST RUN, SHOULD RUN, and OPTIONAL test groups.
 - Recommend architectural mitigations or safety checks before merging.
+
+### SECTION 4: STRUCTURED REVIEW FINDINGS (JSON Block)
+Provide structured code review findings strictly inside a ```json ... ``` code block.
+Each finding must contain:
+[
+  {{
+    "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO",
+    "category": "CORRECTNESS" | "ARCHITECTURE" | "SECURITY" | "PERFORMANCE" | "TESTING" | "MAINTAINABILITY" | "RELIABILITY",
+    "finding_type": "OBSERVED" | "INFERRED",
+    "title": "Concise finding title",
+    "description": "Specific finding details grounded strictly in repository facts",
+    "affected_file": "relative/file/path",
+    "affected_symbol": "SymbolName",
+    "evidence": "Concrete code / AST / CI evidence supporting this finding",
+    "recommendation": "Concrete engineering recommendation",
+    "confidence": "HIGH" | "MEDIUM" | "LOW"
+  }}
+]
+If no defects or risks are detected, provide positive validation findings with severity INFO or LOW.
 """
 
         system_instruction = (
@@ -481,7 +516,74 @@ REQUIRED OUTPUT STRUCTURE:
         duration_ms = int((time.time() - start_time) * 1000)
 
         # ----------------------------------------------------------------------
-        # 12. Structured Impact Metadata & Audit Record Persistence
+        # 12. Structured Review Finding Extraction & Deduplication
+        # ----------------------------------------------------------------------
+        raw_findings: List[Dict[str, Any]] = []
+        json_match = re.search(r"```(?:json)?\s*(\[\s*\{.*?\}\s*\])\s*```", resp.text, re.DOTALL)
+        if json_match:
+            try:
+                raw_findings = json.loads(json_match.group(1))
+            except Exception as e:
+                logger.debug("Failed to parse review findings JSON from LLM: %s", e)
+
+        # Grounded fallback if no valid JSON block found in LLM response
+        if not raw_findings:
+            raw_findings = [
+                {
+                    "severity": "INFO" if risk_assessment.risk_level in ("LOW", "NEGLIGIBLE") else "MEDIUM",
+                    "category": "CORRECTNESS",
+                    "finding_type": "OBSERVED",
+                    "title": f"Deterministic risk evaluated as {risk_assessment.risk_level}",
+                    "description": f"PR risk score {risk_assessment.risk_score:.1f}/100 with {len(raw_files)} changed files and {len(effective_symbols)} AST symbols.",
+                    "affected_file": raw_files[0].get("filename") if raw_files else "",
+                    "affected_symbol": effective_symbols[0] if effective_symbols else "",
+                    "evidence": f"Repository AST and knowledge graph analysis with confidence {risk_assessment.confidence}.",
+                    "recommendation": "Execute required test suite and verify merge readiness.",
+                    "confidence": risk_assessment.confidence,
+                }
+            ]
+
+        structured_review_findings = ReviewFindingService.process_review_findings(
+            organization_id=organization_id,
+            repository_id=repository_id,
+            raw_findings=raw_findings,
+            directly_changed_files=impact_result.directly_changed_files,
+            directly_changed_symbols=effective_symbols,
+            deterministic_risk_level=risk_assessment.risk_level,
+        )
+
+        # ----------------------------------------------------------------------
+        # 13. CI Results Ingestion for Merge Readiness
+        # ----------------------------------------------------------------------
+        actual_ci_results: Optional[Dict[str, Any]] = None
+        matching_run = None
+        if runtime_test_runs:
+            for run in runtime_test_runs:
+                r_sha = (run.get("commitSha") or run.get("commit_sha") or run.get("head_sha") or "")
+                if r_sha and head_sha and r_sha.lower() == head_sha.lower():
+                    matching_run = run
+                    break
+            if not matching_run and runtime_test_runs:
+                matching_run = runtime_test_runs[0]
+
+        if matching_run:
+            run_id = matching_run.get("id")
+            executed_tests = []
+            if run_id:
+                try:
+                    executed_tests = await self.testing_client.get_test_results(organization_id, UUID(str(run_id)))
+                except Exception as e:
+                    logger.debug("Could not fetch test results for run %s: %s", run_id, e)
+            actual_ci_results = {
+                "status": matching_run.get("status"),
+                "conclusion": matching_run.get("conclusion") or matching_run.get("status"),
+                "workflow_run_id": matching_run.get("id") or matching_run.get("workflowRunId"),
+                "jobs": matching_run.get("jobs", []),
+                "executed_tests": executed_tests,
+            }
+
+        # ----------------------------------------------------------------------
+        # 14. Deterministic Merge Readiness Engine Evaluation
         # ----------------------------------------------------------------------
         impact_metadata = {
             "changed_components": {
@@ -496,9 +598,11 @@ REQUIRED OUTPUT STRUCTURE:
             "architectural_concerns": impact_result.architectural_concerns,
             "sync_status": sync_status_val,
             "confidence_reason": risk_assessment.confidence_reason,
+            "max_depth": max((n.get("depth", 1) for n in impact_result.transitive_impact), default=1),
+            "affected_services": impact_result.affected_modules,
+            "total_impacted_nodes": len(impact_result.direct_impact) + len(impact_result.transitive_impact),
         }
 
-        # Structured test strategy serialization
         test_strategy_dict = {
             "must_run": [r.model_dump() for r in test_strategy.must_run],
             "should_run": [r.model_dump() for r in test_strategy.should_run],
@@ -511,6 +615,33 @@ REQUIRED OUTPUT STRUCTURE:
             "confidence_rationale": test_strategy.confidence_rationale,
         }
 
+        merge_readiness = MergeReadinessEngine.evaluate_merge_readiness(
+            organization_id=organization_id,
+            repository_id=repository_id,
+            pr_number=pr_number,
+            commit_sha=head_sha,
+            pr_metadata={
+                "title": title,
+                "description": description,
+                "head_sha": head_sha,
+                "base_sha": base_sha,
+                "changed_files": raw_files,
+                "deletions": sum(f.get("deletions", 0) for f in raw_files) if raw_files else 0,
+            },
+            sync_status={"status": sync_status_val, "last_commit_sha": head_sha},
+            deterministic_risk_score=risk_assessment.risk_score,
+            deterministic_risk_level=risk_assessment.risk_level,
+            risk_factors=[rf.model_dump() for rf in risk_assessment.risk_factors],
+            impact_metadata=impact_metadata,
+            test_strategy=test_strategy_dict,
+            actual_ci_results=actual_ci_results,
+            review_findings=[f.model_dump() for f in structured_review_findings],
+            provenance_records=impact_result.provenance_evidence[:20],
+        )
+
+        # ----------------------------------------------------------------------
+        # 15. Audit Record Persistence
+        # ----------------------------------------------------------------------
         analysis = Analysis(
             organization_id=organization_id,
             entity_type="PR",
@@ -526,6 +657,8 @@ REQUIRED OUTPUT STRUCTURE:
             impact_metadata=impact_metadata,
             test_strategy=test_strategy_dict,
             test_effectiveness=None,
+            merge_readiness=merge_readiness.model_dump(),
+            review_findings=[f.model_dump() for f in structured_review_findings],
             retrieved_chunks=impact_result.provenance_evidence[:30],
             execution_duration_ms=duration_ms,
             trace_id=trace_id,
@@ -546,10 +679,37 @@ REQUIRED OUTPUT STRUCTURE:
             except Exception as e:
                 logger.warning("Failed to persist test recommendations table: %s", e)
 
+        # Durably persist merge evaluation audit record if repository configured
+        if self.merge_eval_repo:
+            try:
+                eval_record = MergeEvaluation(
+                    analysis_id=saved.id,
+                    organization_id=organization_id,
+                    repository_id=repository_id,
+                    pr_number=pr_number,
+                    commit_sha=head_sha,
+                    decision=merge_readiness.decision,
+                    readiness_score=merge_readiness.readiness_score,
+                    confidence=merge_readiness.confidence,
+                    policy_version=merge_readiness.policy_version,
+                    blocking_reasons=merge_readiness.blocking_reasons,
+                    warnings=merge_readiness.warnings,
+                    required_actions=merge_readiness.required_actions,
+                    required_checks=[c.model_dump() for c in merge_readiness.required_checks],
+                    required_tests=merge_readiness.required_tests,
+                    security_status=merge_readiness.security_status,
+                    github_mode=merge_readiness.github_mode,
+                )
+                await self.merge_eval_repo.save_evaluation(eval_record)
+                logger.info("Persisted merge evaluation %s for analysis %s", eval_record.id, saved.id)
+            except Exception as e:
+                logger.warning("Failed to persist merge evaluation: %s", e)
+
         logger.info(
             f"Saved PR engineering intelligence analysis for PR #{pr_number} [traceId={trace_id}] "
-            f"(provider={resp.provider}, fallback={resp.fallback_used}, score={risk_assessment.risk_score}, "
-            f"risk={risk_assessment.risk_level}, confidence={risk_assessment.confidence}, duration={duration_ms}ms)"
+            f"(decision={merge_readiness.decision}, score={merge_readiness.readiness_score}, "
+            f"provider={resp.provider}, fallback={resp.fallback_used}, duration={duration_ms}ms)"
         )
         return saved
+
 

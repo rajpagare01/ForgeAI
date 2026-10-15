@@ -51,6 +51,7 @@ class TestRecommendationDTO(BaseModel):
     target_symbol: Optional[str] = None
     priority_score: float = 0.0
     priority_bucket: str = "OPTIONAL"
+    merge_requirement: str = "TEST_RECOMMENDED"
     confidence: str = "LOW"
     evidence_sources: List[str] = Field(default_factory=list)
     evidence_types: List[str] = Field(default_factory=list)
@@ -59,6 +60,40 @@ class TestRecommendationDTO(BaseModel):
     historical_failure_count: int = 0
     cochange_count: int = 0
     runtime_coverage_verified: bool = False
+
+
+class ReviewFindingDTO(BaseModel):
+    id: Optional[UUID] = None
+    severity: str
+    category: str
+    finding_type: str = "OBSERVED"
+    title: str
+    description: str
+    affected_file: Optional[str] = None
+    affected_symbol: Optional[str] = None
+    line_number: Optional[int] = None
+    evidence: str = ""
+    recommendation: str = ""
+    confidence: str = "MEDIUM"
+    provenance_source: str = "AI_GROUNDED_REVIEW"
+
+
+class MergeReadinessDTO(BaseModel):
+    decision: str
+    readiness_score: float
+    confidence: str
+    policy_version: str
+    blocking_reasons: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    required_actions: List[str] = Field(default_factory=list)
+    required_checks: List[Dict[str, Any]] = Field(default_factory=list)
+    completed_checks: List[str] = Field(default_factory=list)
+    failed_checks: List[str] = Field(default_factory=list)
+    missing_checks: List[str] = Field(default_factory=list)
+    required_tests: List[Dict[str, Any]] = Field(default_factory=list)
+    security_status: str = "SECURITY_EVIDENCE_UNAVAILABLE"
+    github_mode: str = "MODE_A_ADVISORY"
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class TestStrategyDTO(BaseModel):
@@ -105,6 +140,8 @@ class AnalysisResponseDTO(BaseModel):
     impact_metadata: Dict[str, Any] = Field(default_factory=dict)
     test_strategy: Optional[Dict[str, Any]] = None
     test_effectiveness: Optional[Dict[str, Any]] = None
+    merge_readiness: Optional[Dict[str, Any]] = None
+    review_findings: List[Dict[str, Any]] = Field(default_factory=list)
     changed_components: Optional[Dict[str, Any]] = None
     direct_impact: Optional[List[Dict[str, Any]]] = None
     transitive_impact: Optional[List[Dict[str, Any]]] = None

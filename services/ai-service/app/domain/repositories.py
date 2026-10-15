@@ -129,3 +129,22 @@ class IndexJobRepository(ABC):
     async def recover_stale_jobs(self) -> int:
         pass
 
+
+class MergeEvaluationRepository(ABC):
+    @abstractmethod
+    async def save_evaluation(self, evaluation: Any) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_by_commit(
+        self, org_id: UUID, repo_id: UUID, commit_sha: str
+    ) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    async def get_by_pr(
+        self, org_id: UUID, repo_id: UUID, pr_number: int
+    ) -> List[Any]:
+        pass
+
+

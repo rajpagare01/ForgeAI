@@ -35,10 +35,18 @@ import {
   History,
   Boxes,
   FileCheck,
+  FileWarning,
   Flame,
   Zap,
   CheckCheck,
   BarChart3,
+  ShieldX,
+  ChevronUp,
+  HelpCircle,
+  Check,
+  XCircle,
+  AlertCircle,
+  Scale,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -131,6 +139,7 @@ export interface TestRecommendationItem {
   target_symbol?: string;
   priority_score: number;
   priority_bucket: "MUST_RUN" | "SHOULD_RUN" | "OPTIONAL";
+  merge_requirement?: "TEST_REQUIRED" | "TEST_RECOMMENDED" | "TEST_OPTIONAL" | string;
   confidence: "HIGH" | "MEDIUM" | "LOW";
   evidence_sources: string[];
   evidence_types: string[];
@@ -139,6 +148,50 @@ export interface TestRecommendationItem {
   historical_failure_count: number;
   cochange_count: number;
   runtime_coverage_verified: boolean;
+}
+
+export interface ReviewFindingItem {
+  id?: string;
+  title: string;
+  category: "BUG_RISK" | "BREAKING_CHANGE" | "REGRESSION_RISK" | "SECURITY" | "TEST_GAP" | "STYLE_MAINTAINABILITY" | string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" | string;
+  finding_type: "OBSERVED" | "INFERRED" | string;
+  affected_file: string;
+  affected_symbol?: string;
+  description: string;
+  evidence: string;
+  recommendation: string;
+}
+
+export interface RequiredCheckItem {
+  name: string;
+  category: string;
+  status: "PASSED" | "FAILED" | "MISSING" | "RUNNING" | "WARNING" | "SKIPPED" | string;
+  evidence: string;
+  detail: string;
+}
+
+export interface MergeReadinessDTO {
+  decision: "READY" | "READY_WITH_WARNINGS" | "NOT_READY" | "BLOCKED_BY_MISSING_EVIDENCE" | string;
+  readiness_score: number;
+  policy_version: string;
+  summary: string;
+  reasons: string[];
+  blockers: string[];
+  warnings: string[];
+  required_checks: RequiredCheckItem[];
+  completed_checks: (string | RequiredCheckItem)[];
+  failed_checks: (string | RequiredCheckItem)[];
+  missing_checks: (string | RequiredCheckItem)[];
+  security_status: "NO_SECURITY_FINDINGS" | "SECURITY_WARNING" | "SECURITY_BLOCKER" | "SECURITY_EVIDENCE_UNAVAILABLE" | string;
+  evidence_summary: {
+    ci_status: string;
+    total_required_tests: number;
+    executed_required_tests: number;
+    failed_required_tests: number;
+    security_status: string;
+    deterministic_risk_score: number;
+  };
 }
 
 export interface TestStrategyDTO {
@@ -180,6 +233,8 @@ export interface PrAnalysisResponse {
   risk_score: number;
   confidence: "HIGH" | "MEDIUM" | "LOW";
   summary: string;
+  merge_readiness?: MergeReadinessDTO;
+  review_findings?: ReviewFindingItem[];
   changed_components?: ComponentItem[];
   direct_impact?: BlastRadiusItem[];
   transitive_impact?: BlastRadiusItem[];
@@ -286,6 +341,10 @@ export default function AiInsightsPage() {
   const [isValidatingTests, setIsValidatingTests] = useState<boolean>(false);
   const [testValidationResult, setTestValidationResult] = useState<TestValidationResponseDTO | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Merge Readiness & Review Findings state
+  const [isReadinessDetailsOpen, setIsReadinessDetailsOpen] = useState<boolean>(false);
+  const [findingSeverityFilter, setFindingSeverityFilter] = useState<string>("ALL");
 
   // 1. Fetch authorized repositories
   const fetchRepositories = useCallback(async () => {
@@ -1060,6 +1119,281 @@ export default function AiInsightsPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-6 pt-2">
+                  {/* ========================================================= */}
+                  {/* AUTOMATED MERGE READINESS BANNER (DETERMINISTIC ENGINE)   */}
+                  {/* ========================================================= */}
+                  {prAnalysisResult.merge_readiness && (
+                    <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950 p-5 shadow-2xl relative overflow-hidden space-y-4">
+                      {/* Subtle accent backdrop */}
+                      <div className="absolute top-0 right-0 w-96 h-32 bg-purple-500/5 blur-3xl pointer-events-none rounded-full -mr-20 -mt-10" />
+
+                      {/* Header Row: Decision Badge, Readiness Score, Policy & "Why?" Toggle */}
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {/* Categorical Decision Badge */}
+                          {(() => {
+                            const decision = prAnalysisResult.merge_readiness.decision;
+                            if (decision === "READY") {
+                              return (
+                                <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 flex items-center gap-1.5 shadow-lg shadow-emerald-950/50">
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                  READY TO MERGE
+                                </Badge>
+                              );
+                            }
+                            if (decision === "READY_WITH_WARNINGS") {
+                              return (
+                                <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-amber-950/80 text-amber-300 border border-amber-500/50 flex items-center gap-1.5 shadow-lg shadow-amber-950/50">
+                                  <AlertTriangle className="h-4 w-4 text-amber-400" />
+                                  READY WITH WARNINGS
+                                </Badge>
+                              );
+                            }
+                            if (decision === "NOT_READY") {
+                              return (
+                                <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-rose-950/80 text-rose-300 border border-rose-500/50 flex items-center gap-1.5 shadow-lg shadow-rose-950/50">
+                                  <XCircle className="h-4 w-4 text-rose-400" />
+                                  NOT READY TO MERGE
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-blue-950/80 text-blue-300 border border-blue-500/50 flex items-center gap-1.5 shadow-lg shadow-blue-950/50">
+                                <AlertCircle className="h-4 w-4 text-blue-400" />
+                                BLOCKED BY MISSING EVIDENCE
+                              </Badge>
+                            );
+                          })()}
+
+                          {/* Policy Version Badge */}
+                          <Badge variant="outline" className="text-[10px] font-mono text-slate-400 border-slate-800 bg-slate-900/60">
+                            Policy: {prAnalysisResult.merge_readiness.policy_version || "merge-policy-v1"}
+                          </Badge>
+
+                          {/* Security Status Badge */}
+                          {(() => {
+                            const sec = prAnalysisResult.merge_readiness.security_status;
+                            if (sec === "NO_SECURITY_FINDINGS") {
+                              return (
+                                <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/30 bg-emerald-950/20 flex items-center gap-1">
+                                  <ShieldCheck className="h-3 w-3" />
+                                  Security: Clean
+                                </Badge>
+                              );
+                            }
+                            if (sec === "SECURITY_BLOCKER") {
+                              return (
+                                <Badge variant="destructive" className="text-[10px] font-mono flex items-center gap-1">
+                                  <ShieldAlert className="h-3 w-3" />
+                                  Security: Blocker
+                                </Badge>
+                              );
+                            }
+                            if (sec === "SECURITY_WARNING") {
+                              return (
+                                <Badge variant="outline" className="text-[10px] font-mono text-amber-400 border-amber-500/40 bg-amber-950/20 flex items-center gap-1">
+                                  <ShieldAlert className="h-3 w-3" />
+                                  Security: Warning
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Badge variant="outline" className="text-[10px] font-mono text-slate-400 border-slate-700 bg-slate-900/40 flex items-center gap-1">
+                                <ShieldX className="h-3 w-3 text-slate-500" />
+                                Security: Evidence Unavailable
+                              </Badge>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Readiness Score & "Why?" Expand Toggle */}
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono uppercase tracking-wider text-slate-400">Readiness Score:</span>
+                            <div className="flex items-baseline gap-1">
+                              <span
+                                className={`text-lg font-mono font-extrabold ${
+                                  prAnalysisResult.merge_readiness.readiness_score >= 80
+                                    ? "text-emerald-400"
+                                    : prAnalysisResult.merge_readiness.readiness_score >= 50
+                                    ? "text-amber-400"
+                                    : "text-rose-400"
+                                }`}
+                              >
+                                {prAnalysisResult.merge_readiness.readiness_score.toFixed(1)}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-500">/ 100.0</span>
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsReadinessDetailsOpen((prev) => !prev)}
+                            className="h-8 text-xs font-mono px-3 border-slate-700 bg-slate-900/80 hover:bg-slate-800 text-slate-200 transition-colors flex items-center gap-1.5"
+                          >
+                            <HelpCircle className="h-3.5 w-3.5 text-purple-400" />
+                            <span>Why?</span>
+                            {isReadinessDetailsOpen ? (
+                              <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Summary Banner */}
+                      <div className="text-xs text-slate-300 leading-relaxed font-sans">
+                        {prAnalysisResult.merge_readiness.summary}
+                      </div>
+
+                      {/* Blocker Callouts if any */}
+                      {prAnalysisResult.merge_readiness.blockers && prAnalysisResult.merge_readiness.blockers.length > 0 && (
+                        <div className="p-3.5 rounded-xl border border-rose-500/40 bg-rose-950/30 text-xs space-y-1.5">
+                          <div className="font-bold text-rose-200 flex items-center gap-1.5">
+                            <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                            <span>Merge Blockers ({prAnalysisResult.merge_readiness.blockers.length})</span>
+                          </div>
+                          <ul className="list-disc list-inside space-y-1 text-rose-300/90 pl-1">
+                            {prAnalysisResult.merge_readiness.blockers.map((blocker, bIdx) => (
+                              <li key={bIdx} className="leading-snug">{blocker}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Warning Callouts if any */}
+                      {prAnalysisResult.merge_readiness.warnings && prAnalysisResult.merge_readiness.warnings.length > 0 && (
+                        <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-950/20 text-xs space-y-1.5">
+                          <div className="font-bold text-amber-200 flex items-center gap-1.5">
+                            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                            <span>Advisory Warnings ({prAnalysisResult.merge_readiness.warnings.length})</span>
+                          </div>
+                          <ul className="list-disc list-inside space-y-1 text-amber-300/90 pl-1">
+                            {prAnalysisResult.merge_readiness.warnings.map((warning, wIdx) => (
+                              <li key={wIdx} className="leading-snug">{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Interactive "Why?" Evidence Drawer */}
+                      {isReadinessDetailsOpen && (
+                        <div className="pt-3 border-t border-slate-800/80 space-y-4 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <Scale className="h-4 w-4 text-indigo-400" />
+                              Required Checks & Grounded Evidence Matrix
+                            </span>
+                            <span className="text-[11px] font-mono text-slate-400">
+                              Deterministic Evaluation &bull; Mode A Advisory
+                            </span>
+                          </div>
+
+                          {/* Required Checks Matrix Table */}
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/80 overflow-hidden">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-xs font-mono">
+                                <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                                  <tr>
+                                    <th className="px-3.5 py-2.5">Check Name</th>
+                                    <th className="px-3.5 py-2.5">Category</th>
+                                    <th className="px-3.5 py-2.5">Status</th>
+                                    <th className="px-3.5 py-2.5">Observed Evidence</th>
+                                    <th className="px-3.5 py-2.5">Evaluation Detail</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/60">
+                                  {Array.isArray(prAnalysisResult.merge_readiness.required_checks) &&
+                                    prAnalysisResult.merge_readiness.required_checks.map((check, cIdx) => (
+                                      <tr key={cIdx} className="hover:bg-slate-900/40 transition-colors">
+                                        <td className="px-3.5 py-2.5 font-semibold text-slate-200 whitespace-nowrap">
+                                          {check.name}
+                                        </td>
+                                        <td className="px-3.5 py-2.5 text-slate-400 text-[11px]">
+                                          {check.category}
+                                        </td>
+                                        <td className="px-3.5 py-2.5 whitespace-nowrap">
+                                          {check.status === "PASSED" && (
+                                            <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/40 bg-emerald-950/30">
+                                              PASSED
+                                            </Badge>
+                                          )}
+                                          {check.status === "FAILED" && (
+                                            <Badge variant="destructive" className="text-[10px]">
+                                              FAILED
+                                            </Badge>
+                                          )}
+                                          {check.status === "MISSING" && (
+                                            <Badge variant="outline" className="text-[10px] text-blue-400 border-blue-500/40 bg-blue-950/30">
+                                              MISSING
+                                            </Badge>
+                                          )}
+                                          {check.status === "RUNNING" && (
+                                            <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/40 bg-purple-950/30 animate-pulse">
+                                              RUNNING
+                                            </Badge>
+                                          )}
+                                          {check.status === "WARNING" && (
+                                            <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/40 bg-amber-950/30">
+                                              WARNING
+                                            </Badge>
+                                          )}
+                                          {check.status === "SKIPPED" && (
+                                            <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700 bg-slate-900/40">
+                                              SKIPPED
+                                            </Badge>
+                                          )}
+                                        </td>
+                                        <td className="px-3.5 py-2.5 text-slate-300 text-[11px] max-w-xs truncate">
+                                          {check.evidence || "—"}
+                                        </td>
+                                        <td className="px-3.5 py-2.5 text-slate-400 text-[11px] font-sans">
+                                          {check.detail || "—"}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Evidence Summary Stats Grid */}
+                          {prAnalysisResult.merge_readiness.evidence_summary && (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-xs">
+                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
+                                <div className="text-[10px] uppercase text-slate-500">CI Run Status</div>
+                                <div className="text-slate-200 font-bold mt-0.5">
+                                  {prAnalysisResult.merge_readiness.evidence_summary.ci_status}
+                                </div>
+                              </div>
+                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
+                                <div className="text-[10px] uppercase text-slate-500">Required Tests (Exec/Total)</div>
+                                <div className="text-slate-200 font-bold mt-0.5">
+                                  {prAnalysisResult.merge_readiness.evidence_summary.executed_required_tests} / {prAnalysisResult.merge_readiness.evidence_summary.total_required_tests}
+                                </div>
+                              </div>
+                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
+                                <div className="text-[10px] uppercase text-slate-500">Required Test Failures</div>
+                                <div className={`font-bold mt-0.5 ${prAnalysisResult.merge_readiness.evidence_summary.failed_required_tests > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                                  {prAnalysisResult.merge_readiness.evidence_summary.failed_required_tests}
+                                </div>
+                              </div>
+                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
+                                <div className="text-[10px] uppercase text-slate-500">Deterministic Risk</div>
+                                <div className="text-purple-300 font-bold mt-0.5">
+                                  {prAnalysisResult.merge_readiness.evidence_summary.deterministic_risk_score.toFixed(1)} / 100
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Insufficient context warning callout if applicable */}
                   {prAnalysisResult.summary?.includes("INSUFFICIENT_CONTEXT") && (
                     <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/30 text-xs text-amber-200 flex items-start gap-3">
@@ -1522,6 +1856,16 @@ export default function AiInsightsPage() {
                                         {rec.priority_bucket}
                                       </Badge>
 
+                                      {/* Stronger Concept: Required for Merge */}
+                                      {rec.merge_requirement === "TEST_REQUIRED" && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] font-mono font-bold uppercase tracking-wider bg-rose-950/70 text-rose-300 border-rose-500/60"
+                                        >
+                                          Required for Merge
+                                        </Badge>
+                                      )}
+
                                       {/* Confidence */}
                                       <Badge
                                         variant="outline"
@@ -1819,6 +2163,177 @@ export default function AiInsightsPage() {
                     <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-line font-sans shadow-inner">
                       {prAnalysisResult.summary}
                     </div>
+                  </div>
+
+                  {/* ========================================================= */}
+                  {/* AUTOMATED AI CODE REVIEW FINDINGS (GROUNDED & DEDUPLICATED)*/}
+                  {/* ========================================================= */}
+                  <div className="space-y-4 pt-2 border-t border-slate-800/80">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <FileCheck className="h-4 w-4 text-emerald-400" />
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">
+                          Automated Code Review Findings
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-mono text-purple-300 border-purple-500/30">
+                          {prAnalysisResult.review_findings?.length || 0} findings
+                        </Badge>
+                      </div>
+
+                      {/* Severity Filters */}
+                      <div className="flex items-center gap-1 text-[11px] flex-wrap">
+                        {(["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const).map((sev) => {
+                          const count =
+                            sev === "ALL"
+                              ? prAnalysisResult.review_findings?.length || 0
+                              : prAnalysisResult.review_findings?.filter((f) => f.severity === sev).length || 0;
+                          return (
+                            <button
+                              key={sev}
+                              onClick={() => setFindingSeverityFilter(sev)}
+                              className={`px-2.5 py-1 rounded text-[10px] font-mono transition-colors flex items-center gap-1 ${
+                                findingSeverityFilter === sev
+                                  ? "bg-purple-600 text-white font-semibold"
+                                  : "bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                              }`}
+                            >
+                              <span>{sev}</span>
+                              <span className="text-[9px] opacity-75">({count})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {prAnalysisResult.review_findings && prAnalysisResult.review_findings.length > 0 ? (
+                      (() => {
+                        const filtered =
+                          findingSeverityFilter === "ALL"
+                            ? prAnalysisResult.review_findings
+                            : prAnalysisResult.review_findings.filter((f) => f.severity === findingSeverityFilter);
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="p-6 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                              No review findings matching severity {findingSeverityFilter}.
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 gap-3">
+                            {filtered.map((finding, fIdx) => (
+                              <div
+                                key={finding.id || fIdx}
+                                className="rounded-xl border border-slate-800/90 bg-slate-950/70 p-4 space-y-3 hover:border-slate-700 transition-all shadow-sm"
+                              >
+                                {/* Header: Title, Severity, Observed/Inferred, Category */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {/* Severity Badge */}
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] font-mono font-bold uppercase tracking-wider ${
+                                        finding.severity === "CRITICAL"
+                                          ? "text-rose-400 border-rose-500/50 bg-rose-950/30"
+                                          : finding.severity === "HIGH"
+                                          ? "text-orange-400 border-orange-500/50 bg-orange-950/30"
+                                          : finding.severity === "MEDIUM"
+                                          ? "text-amber-400 border-amber-500/50 bg-amber-950/30"
+                                          : finding.severity === "LOW"
+                                          ? "text-blue-400 border-blue-500/50 bg-blue-950/30"
+                                          : "text-slate-400 border-slate-700 bg-slate-900/40"
+                                      }`}
+                                    >
+                                      {finding.severity}
+                                    </Badge>
+
+                                    {/* Finding Type (OBSERVED vs INFERRED) */}
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[9px] font-mono uppercase tracking-wider flex items-center gap-1 ${
+                                        finding.finding_type === "OBSERVED"
+                                          ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                          : "text-purple-400 border-purple-500/40 bg-purple-950/20"
+                                      }`}
+                                    >
+                                      {finding.finding_type === "OBSERVED" ? (
+                                        <>
+                                          <Check className="h-3 w-3 text-emerald-400" />
+                                          OBSERVED
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Sparkles className="h-3 w-3 text-purple-400" />
+                                          INFERRED
+                                        </>
+                                      )}
+                                    </Badge>
+
+                                    {/* Category Badge */}
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[9px] font-mono text-slate-300 border-slate-800 bg-slate-900/60"
+                                    >
+                                      {finding.category}
+                                    </Badge>
+                                  </div>
+
+                                  {/* Affected Target */}
+                                  <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 truncate max-w-sm">
+                                    <FileCode className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                                    <span className="text-slate-300 truncate">{finding.affected_file}</span>
+                                    {finding.affected_symbol && (
+                                      <span className="text-purple-300 truncate">#{finding.affected_symbol}</span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Title & Description */}
+                                <div>
+                                  <h4 className="text-sm font-semibold text-white tracking-tight">
+                                    {finding.title}
+                                  </h4>
+                                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                                    {finding.description}
+                                  </p>
+                                </div>
+
+                                {/* Concrete Grounded Evidence */}
+                                {finding.evidence && (
+                                  <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] font-mono text-slate-300 space-y-1">
+                                    <div className="text-[10px] uppercase font-bold text-slate-500">
+                                      Concrete Evidence
+                                    </div>
+                                    <div className="text-slate-300 leading-snug whitespace-pre-wrap break-words">
+                                      {finding.evidence}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Actionable Recommendation */}
+                                {finding.recommendation && (
+                                  <div className="p-2.5 rounded-lg bg-emerald-950/15 border border-emerald-500/20 text-[11px] text-emerald-200 space-y-1">
+                                    <div className="text-[10px] uppercase font-bold text-emerald-400 flex items-center gap-1">
+                                      <CheckCircle2 className="h-3 w-3" />
+                                      Actionable Recommendation
+                                    </div>
+                                    <div className="text-emerald-300/90 leading-snug">
+                                      {finding.recommendation}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/40 text-xs text-slate-400 flex items-center gap-2.5">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                        <span>No automated review issues or architectural violations identified for this changeset.</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* 8. Grounded Provenance Explorer (Multi-Category) */}

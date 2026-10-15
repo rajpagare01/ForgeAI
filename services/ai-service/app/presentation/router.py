@@ -26,6 +26,7 @@ from app.infrastructure.persistence.repositories import (
     AsyncpgIndexJobRepository,
     AsyncpgTestRecommendationRepository,
     AsyncpgTestValidationFeedbackRepository,
+    AsyncpgMergeEvaluationRepository,
 )
 from app.application.indexing_service import IndexingService
 from app.application.retrieval_service import RetrievalService
@@ -49,6 +50,7 @@ async def get_services():
     job_repo = AsyncpgIndexJobRepository(pool)
     test_rec_repo = AsyncpgTestRecommendationRepository(pool)
     test_feedback_repo = AsyncpgTestValidationFeedbackRepository(pool)
+    merge_eval_repo = AsyncpgMergeEvaluationRepository(pool)
     indexing_service = IndexingService(chunk_repo, edge_repo, job_repo=job_repo)
     retrieval_service = RetrievalService(chunk_repo, edge_repo)
     orchestration_service = GeminiOrchestrationService(
@@ -57,8 +59,9 @@ async def get_services():
         indexing_service=indexing_service,
         job_repo=job_repo,
         test_rec_repo=test_rec_repo,
+        merge_eval_repo=merge_eval_repo,
     )
-    return indexing_service, retrieval_service, orchestration_service, analysis_repo, test_rec_repo, test_feedback_repo
+    return indexing_service, retrieval_service, orchestration_service, analysis_repo, test_rec_repo, test_feedback_repo, merge_eval_repo
 
 
 @router.get("/healthz")
@@ -266,6 +269,8 @@ async def analyze_pull_request(
         impact_metadata=meta,
         test_strategy=analysis.test_strategy or {},
         test_effectiveness=analysis.test_effectiveness,
+        merge_readiness=analysis.merge_readiness,
+        review_findings=analysis.review_findings or [],
         changed_components=meta.get("changed_components"),
         direct_impact=meta.get("direct_impact"),
         transitive_impact=meta.get("transitive_impact"),
@@ -406,6 +411,8 @@ async def get_analyses_for_entity(
             impact_metadata=a.impact_metadata or {},
             test_strategy=a.test_strategy or {},
             test_effectiveness=a.test_effectiveness,
+            merge_readiness=a.merge_readiness,
+            review_findings=a.review_findings or [],
             changed_components=(a.impact_metadata or {}).get("changed_components"),
             direct_impact=(a.impact_metadata or {}).get("direct_impact"),
             transitive_impact=(a.impact_metadata or {}).get("transitive_impact"),
@@ -420,3 +427,36 @@ async def get_analyses_for_entity(
         )
         for a in records
     ]
+
+
+@router.get("/merge-readiness/{analysis_id}", response_model=Dict[str, Any])
+async def get_merge_readiness_for_analysis(
+    analysis_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves the deterministic merge readiness evaluation and structured review findings
+    for a completed PR analysis:
+    - Categorical decision (READY, READY_WITH_WARNINGS, NOT_READY, BLOCKED_BY_MISSING_EVIDENCE)
+    - Deterministic readiness score [0.0 - 100.0]
+    - Required checks matrix across CI, TEST_INTELLIGENCE, RISK_ENGINE, SECURITY, SYNCHRONIZATION, PROVENANCE
+    - Required tests execution status
+    - Structured grounded review findings with OBSERVED vs INFERRED classification
+    """
+    pool = await db_pool.get_pool()
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    analysis = await analysis_repo.get_by_id(org_id, analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
+
+    return {
+        "analysis_id": str(analysis.id),
+        "organization_id": str(analysis.organization_id),
+        "entity_id": analysis.entity_id,
+        "merge_readiness": analysis.merge_readiness or {},
+        "review_findings": analysis.review_findings or [],
+        "risk_level": analysis.risk_level,
+        "risk_score": analysis.risk_score,
+        "created_at": analysis.created_at.isoformat() if hasattr(analysis.created_at, "isoformat") else str(analysis.created_at),
+    }
+
