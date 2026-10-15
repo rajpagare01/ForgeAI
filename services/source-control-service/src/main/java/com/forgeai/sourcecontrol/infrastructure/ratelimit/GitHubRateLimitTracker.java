@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 @Component
 public class GitHubRateLimitTracker {
+    // Live Test Intelligence verification run: 1792055553
 
     private static final String REDIS_KEY_PREFIX = "github:ratelimit:";
     private static final double CAPACITY_THRESHOLD_RATIO = 0.10; // 10% threshold
