@@ -43,6 +43,52 @@ class PRAnalysisRequest(BaseModel):
     changed_files: Optional[List[IndexFileInput]] = None
 
 
+class TestRecommendationDTO(BaseModel):
+    id: Optional[UUID] = None
+    test_name: str
+    test_file: str
+    test_method: Optional[str] = None
+    target_symbol: Optional[str] = None
+    priority_score: float = 0.0
+    priority_bucket: str = "OPTIONAL"
+    confidence: str = "LOW"
+    evidence_sources: List[str] = Field(default_factory=list)
+    evidence_types: List[str] = Field(default_factory=list)
+    evidence_path: List[str] = Field(default_factory=list)
+    reason: str = ""
+    historical_failure_count: int = 0
+    cochange_count: int = 0
+    runtime_coverage_verified: bool = False
+
+
+class TestStrategyDTO(BaseModel):
+    must_run: List[TestRecommendationDTO] = Field(default_factory=list)
+    should_run: List[TestRecommendationDTO] = Field(default_factory=list)
+    optional: List[TestRecommendationDTO] = Field(default_factory=list)
+    static_evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    runtime_evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    historical_failures: List[Dict[str, Any]] = Field(default_factory=list)
+    coverage_summary: Dict[str, Any] = Field(default_factory=dict)
+    confidence: str = "MEDIUM"
+    confidence_rationale: str = ""
+
+
+class TestValidationRequest(BaseModel):
+    repository_id: UUID
+    analysis_id: UUID
+    commit_sha: str
+    workflow_run_id: Optional[int] = None
+    executed_tests: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class TestValidationResponse(BaseModel):
+    status: str
+    analysis_id: UUID
+    commit_sha: str
+    workflow_run_id: Optional[int] = None
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AnalysisResponseDTO(BaseModel):
     id: UUID
     organization_id: UUID
@@ -57,6 +103,8 @@ class AnalysisResponseDTO(BaseModel):
     confidence: str = "MEDIUM"
     risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
     impact_metadata: Dict[str, Any] = Field(default_factory=dict)
+    test_strategy: Optional[Dict[str, Any]] = None
+    test_effectiveness: Optional[Dict[str, Any]] = None
     changed_components: Optional[Dict[str, Any]] = None
     direct_impact: Optional[List[Dict[str, Any]]] = None
     transitive_impact: Optional[List[Dict[str, Any]]] = None

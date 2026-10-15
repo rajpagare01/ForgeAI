@@ -63,6 +63,42 @@ class AnalysisRepository(ABC):
     ) -> List[Analysis]:
         pass
 
+    @abstractmethod
+    async def get_by_id(self, org_id: UUID, analysis_id: UUID) -> Optional[Analysis]:
+        pass
+
+
+class TestRecommendationRepository(ABC):
+    @abstractmethod
+    async def save_recommendations(
+        self, recommendations: List[Any]
+    ) -> int:
+        pass
+
+    @abstractmethod
+    async def get_by_analysis(
+        self, org_id: UUID, analysis_id: UUID
+    ) -> List[Any]:
+        pass
+
+    @abstractmethod
+    async def get_by_commit(
+        self, org_id: UUID, repo_id: UUID, commit_sha: str
+    ) -> List[Any]:
+        pass
+
+
+class TestValidationFeedbackRepository(ABC):
+    @abstractmethod
+    async def save_feedback(self, feedback: Any) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_by_commit(
+        self, org_id: UUID, repo_id: UUID, commit_sha: str
+    ) -> Optional[Any]:
+        pass
+
 
 class IndexJobRepository(ABC):
     @abstractmethod

@@ -60,3 +60,53 @@ class TestingServiceClient:
         except httpx.RequestError as e:
             logger.debug("Testing service results query failed: %s", e)
             return []
+
+    async def get_recent_workflow_runs(
+        self, organization_id: UUID, repository_id: UUID, limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves recent test runs and GitHub workflow runs for the repository.
+        """
+        runs = await self.list_test_runs(organization_id=organization_id, repository_id=repository_id)
+        return runs[:limit] if runs else []
+
+    async def get_historical_failures(
+        self, organization_id: UUID, repository_id: UUID, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves historical test failure records from recent test runs to detect recurring instability.
+        """
+        runs = await self.list_test_runs(organization_id=organization_id, repository_id=repository_id)
+        failed_runs = [r for r in runs if (r.get("failedTests") or r.get("failed_tests") or 0) > 0 or r.get("status") == "FAILED" or r.get("conclusion") == "failure"]
+
+        historical_failures: List[Dict[str, Any]] = []
+        seen = set()
+
+        for run in failed_runs[:5]:
+            run_id = run.get("id")
+            if not run_id:
+                continue
+            try:
+                run_uuid = UUID(str(run_id))
+                results = await self.get_test_results(organization_id, run_uuid)
+                for res in results:
+                    if res.get("status") == "FAILED":
+                        t_name = res.get("name") or res.get("testName") or "UnknownTest"
+                        cls_name = res.get("classname") or ""
+                        key = f"{t_name}::{cls_name}"
+                        if key not in seen:
+                            seen.add(key)
+                            historical_failures.append({
+                                "test_name": t_name,
+                                "classname": cls_name,
+                                "failure_count": 1,
+                                "error_message": res.get("errorMessage") or res.get("error_message"),
+                                "commit_sha": run.get("commitSha") or run.get("commit_sha"),
+                            })
+                            if len(historical_failures) >= limit:
+                                break
+            except Exception as e:
+                logger.debug("Could not inspect run results for historical failures: %s", e)
+
+        return historical_failures
+

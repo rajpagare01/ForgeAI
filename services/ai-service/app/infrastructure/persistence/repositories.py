@@ -3,12 +3,21 @@ import logging
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 import asyncpg
-from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob
+from app.domain.models import (
+    CodeChunk,
+    GraphEdge,
+    Analysis,
+    IndexJob,
+    TestRecommendation,
+    TestValidationFeedback,
+)
 from app.domain.repositories import (
     CodeChunkRepository,
     GraphEdgeRepository,
     AnalysisRepository,
     IndexJobRepository,
+    TestRecommendationRepository,
+    TestValidationFeedbackRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -310,8 +319,9 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 id, organization_id, entity_type, entity_id, model_version,
                 prompt_version, summary, risk_level, retrieved_chunks,
                 execution_duration_ms, trace_id, provider, fallback_used,
-                risk_score, confidence, risk_factors, impact_metadata, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18);
+                risk_score, confidence, risk_factors, impact_metadata,
+                test_strategy, test_effectiveness, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20);
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -333,6 +343,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 analysis.confidence,
                 json.dumps(analysis.risk_factors) if analysis.risk_factors else "[]",
                 json.dumps(analysis.impact_metadata) if analysis.impact_metadata else "{}",
+                json.dumps(analysis.test_strategy) if analysis.test_strategy else "{}",
+                json.dumps(analysis.test_effectiveness) if analysis.test_effectiveness else None,
                 analysis.created_at,
             )
         return analysis
@@ -348,7 +360,7 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                    COALESCE(fallback_used, false) as fallback_used,
                    COALESCE(risk_score, 0.0) as risk_score,
                    COALESCE(confidence, 'MEDIUM') as confidence,
-                   risk_factors, impact_metadata,
+                   risk_factors, impact_metadata, test_strategy, test_effectiveness,
                    created_at
             FROM analyses
             WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
@@ -362,6 +374,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             chunks = json.loads(r["retrieved_chunks"]) if r["retrieved_chunks"] else []
             r_factors = json.loads(r["risk_factors"]) if r.get("risk_factors") else []
             r_impact = json.loads(r["impact_metadata"]) if r.get("impact_metadata") else {}
+            r_strat = json.loads(r["test_strategy"]) if r.get("test_strategy") else {}
+            r_eff = json.loads(r["test_effectiveness"]) if r.get("test_effectiveness") else None
             results.append(
                 Analysis(
                     id=r["id"],
@@ -377,6 +391,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                     confidence=r["confidence"],
                     risk_factors=r_factors,
                     impact_metadata=r_impact,
+                    test_strategy=r_strat,
+                    test_effectiveness=r_eff,
                     retrieved_chunks=chunks,
                     execution_duration_ms=r["execution_duration_ms"],
                     trace_id=r["trace_id"],
@@ -385,6 +401,248 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 )
             )
         return results
+
+    async def get_by_id(self, org_id: UUID, analysis_id: UUID) -> Optional[Analysis]:
+        query = """
+            SELECT id, organization_id, entity_type, entity_id, model_version,
+                   prompt_version, summary, risk_level, retrieved_chunks,
+                   execution_duration_ms, trace_id,
+                   COALESCE(provider, 'GEMINI') as provider,
+                   COALESCE(fallback_used, false) as fallback_used,
+                   COALESCE(risk_score, 0.0) as risk_score,
+                   COALESCE(confidence, 'MEDIUM') as confidence,
+                   risk_factors, impact_metadata, test_strategy, test_effectiveness,
+                   created_at
+            FROM analyses
+            WHERE organization_id = $1 AND id = $2;
+        """
+        async with self.pool.acquire() as conn:
+            r = await conn.fetchrow(query, org_id, analysis_id)
+        if not r:
+            return None
+        chunks = json.loads(r["retrieved_chunks"]) if r["retrieved_chunks"] else []
+        r_factors = json.loads(r["risk_factors"]) if r.get("risk_factors") else []
+        r_impact = json.loads(r["impact_metadata"]) if r.get("impact_metadata") else {}
+        r_strat = json.loads(r["test_strategy"]) if r.get("test_strategy") else {}
+        r_eff = json.loads(r["test_effectiveness"]) if r.get("test_effectiveness") else None
+        return Analysis(
+            id=r["id"],
+            organization_id=r["organization_id"],
+            entity_type=r["entity_type"],
+            entity_id=r["entity_id"],
+            provider=r["provider"],
+            model_version=r["model_version"],
+            prompt_version=r["prompt_version"],
+            summary=r["summary"],
+            risk_level=r["risk_level"],
+            risk_score=float(r["risk_score"]),
+            confidence=r["confidence"],
+            risk_factors=r_factors,
+            impact_metadata=r_impact,
+            test_strategy=r_strat,
+            test_effectiveness=r_eff,
+            retrieved_chunks=chunks,
+            execution_duration_ms=r["execution_duration_ms"],
+            trace_id=r["trace_id"],
+            fallback_used=r["fallback_used"],
+            created_at=r["created_at"],
+        )
+
+
+class AsyncpgTestRecommendationRepository(TestRecommendationRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_recommendations(self, recommendations: List[TestRecommendation]) -> int:
+        if not recommendations:
+            return 0
+        query = """
+            INSERT INTO test_recommendations (
+                id, organization_id, repository_id, analysis_id, pr_number,
+                commit_sha, test_name, test_file, test_method, target_symbol,
+                priority_score, priority_bucket, confidence, evidence_sources,
+                evidence_types, evidence_path, reason, historical_failure_count,
+                cochange_count, runtime_coverage_verified, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21);
+        """
+        args = [
+            (
+                r.id,
+                r.organization_id,
+                r.repository_id,
+                r.analysis_id,
+                getattr(r, "pr_number", 0),
+                getattr(r, "commit_sha", ""),
+                r.test_name,
+                r.test_file,
+                r.test_method,
+                r.target_symbol,
+                float(r.priority_score),
+                r.priority_bucket,
+                r.confidence,
+                json.dumps(r.evidence_sources),
+                json.dumps(r.evidence_types),
+                json.dumps(r.evidence_path),
+                r.reason,
+                r.historical_failure_count,
+                r.cochange_count,
+                r.runtime_coverage_verified,
+                r.created_at,
+            )
+            for r in recommendations
+        ]
+        async with self.pool.acquire() as conn:
+            await conn.executemany(query, args)
+        return len(recommendations)
+
+    async def get_by_analysis(self, org_id: UUID, analysis_id: UUID) -> List[TestRecommendation]:
+        query = """
+            SELECT id, organization_id, repository_id, analysis_id, pr_number,
+                   commit_sha, test_name, test_file, test_method, target_symbol,
+                   priority_score, priority_bucket, confidence, evidence_sources,
+                   evidence_types, evidence_path, reason, historical_failure_count,
+                   cochange_count, runtime_coverage_verified, created_at
+            FROM test_recommendations
+            WHERE organization_id = $1 AND analysis_id = $2
+            ORDER BY priority_score DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, analysis_id)
+        results = []
+        for r in rows:
+            results.append(
+                TestRecommendation(
+                    id=r["id"],
+                    organization_id=r["organization_id"],
+                    repository_id=r["repository_id"],
+                    analysis_id=r["analysis_id"],
+                    test_name=r["test_name"],
+                    test_file=r["test_file"],
+                    test_method=r["test_method"],
+                    target_symbol=r["target_symbol"],
+                    priority_score=float(r["priority_score"]),
+                    priority_bucket=r["priority_bucket"],
+                    confidence=r["confidence"],
+                    evidence_sources=json.loads(r["evidence_sources"]) if r["evidence_sources"] else [],
+                    evidence_types=json.loads(r["evidence_types"]) if r["evidence_types"] else [],
+                    evidence_path=json.loads(r["evidence_path"]) if r["evidence_path"] else [],
+                    reason=r["reason"],
+                    historical_failure_count=r["historical_failure_count"],
+                    cochange_count=r["cochange_count"],
+                    runtime_coverage_verified=r["runtime_coverage_verified"],
+                    created_at=r["created_at"],
+                )
+            )
+        return results
+
+    async def get_by_commit(self, org_id: UUID, repo_id: UUID, commit_sha: str) -> List[TestRecommendation]:
+        query = """
+            SELECT id, organization_id, repository_id, analysis_id, pr_number,
+                   commit_sha, test_name, test_file, test_method, target_symbol,
+                   priority_score, priority_bucket, confidence, evidence_sources,
+                   evidence_types, evidence_path, reason, historical_failure_count,
+                   cochange_count, runtime_coverage_verified, created_at
+            FROM test_recommendations
+            WHERE organization_id = $1 AND repository_id = $2 AND commit_sha = $3
+            ORDER BY priority_score DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, repo_id, commit_sha)
+        results = []
+        for r in rows:
+            results.append(
+                TestRecommendation(
+                    id=r["id"],
+                    organization_id=r["organization_id"],
+                    repository_id=r["repository_id"],
+                    analysis_id=r["analysis_id"],
+                    test_name=r["test_name"],
+                    test_file=r["test_file"],
+                    test_method=r["test_method"],
+                    target_symbol=r["target_symbol"],
+                    priority_score=float(r["priority_score"]),
+                    priority_bucket=r["priority_bucket"],
+                    confidence=r["confidence"],
+                    evidence_sources=json.loads(r["evidence_sources"]) if r["evidence_sources"] else [],
+                    evidence_types=json.loads(r["evidence_types"]) if r["evidence_types"] else [],
+                    evidence_path=json.loads(r["evidence_path"]) if r["evidence_path"] else [],
+                    reason=r["reason"],
+                    historical_failure_count=r["historical_failure_count"],
+                    cochange_count=r["cochange_count"],
+                    runtime_coverage_verified=r["runtime_coverage_verified"],
+                    created_at=r["created_at"],
+                )
+            )
+        return results
+
+
+class AsyncpgTestValidationFeedbackRepository(TestValidationFeedbackRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_feedback(self, feedback: TestValidationFeedback) -> TestValidationFeedback:
+        query = """
+            INSERT INTO test_validation_feedback (
+                id, organization_id, repository_id, analysis_id, commit_sha,
+                workflow_run_id, recommended_count, executed_count, passed_count,
+                failed_count, high_priority_missed_count, prediction_to_failure_correlation,
+                test_selection_efficiency, metrics, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                feedback.id,
+                feedback.organization_id,
+                feedback.repository_id,
+                feedback.analysis_id,
+                feedback.commit_sha,
+                feedback.workflow_run_id,
+                feedback.recommended_count,
+                feedback.executed_count,
+                feedback.passed_count,
+                feedback.failed_count,
+                feedback.high_priority_missed_count,
+                float(feedback.prediction_to_failure_correlation),
+                float(feedback.test_selection_efficiency),
+                json.dumps(feedback.metrics),
+                feedback.created_at,
+            )
+        return feedback
+
+    async def get_by_commit(self, org_id: UUID, repo_id: UUID, commit_sha: str) -> Optional[TestValidationFeedback]:
+        query = """
+            SELECT id, organization_id, repository_id, analysis_id, commit_sha,
+                   workflow_run_id, recommended_count, executed_count, passed_count,
+                   failed_count, high_priority_missed_count, prediction_to_failure_correlation,
+                   test_selection_efficiency, metrics, created_at
+            FROM test_validation_feedback
+            WHERE organization_id = $1 AND repository_id = $2 AND commit_sha = $3
+            ORDER BY created_at DESC
+            LIMIT 1;
+        """
+        async with self.pool.acquire() as conn:
+            r = await conn.fetchrow(query, org_id, repo_id, commit_sha)
+        if not r:
+            return None
+        return TestValidationFeedback(
+            id=r["id"],
+            organization_id=r["organization_id"],
+            repository_id=r["repository_id"],
+            analysis_id=r["analysis_id"],
+            commit_sha=r["commit_sha"],
+            workflow_run_id=r["workflow_run_id"],
+            recommended_count=r["recommended_count"],
+            executed_count=r["executed_count"],
+            passed_count=r["passed_count"],
+            failed_count=r["failed_count"],
+            high_priority_missed_count=r["high_priority_missed_count"],
+            prediction_to_failure_correlation=float(r["prediction_to_failure_correlation"]),
+            test_selection_efficiency=float(r["test_selection_efficiency"]),
+            metrics=json.loads(r["metrics"]) if r["metrics"] else {},
+            created_at=r["created_at"],
+        )
+
 
 
 class AsyncpgIndexJobRepository(IndexJobRepository):

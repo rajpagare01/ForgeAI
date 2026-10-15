@@ -12,17 +12,25 @@ from app.presentation.dtos import (
     AnalysisResponseDTO,
     PushSyncRequest,
     PushSyncResponse,
+    TestRecommendationDTO,
+    TestStrategyDTO,
+    TestValidationRequest,
+    TestValidationResponse,
 )
 from app.core.database import db_pool
+from app.domain.models import TestValidationFeedback
 from app.infrastructure.persistence.repositories import (
     AsyncpgCodeChunkRepository,
     AsyncpgGraphEdgeRepository,
     AsyncpgAnalysisRepository,
     AsyncpgIndexJobRepository,
+    AsyncpgTestRecommendationRepository,
+    AsyncpgTestValidationFeedbackRepository,
 )
 from app.application.indexing_service import IndexingService
 from app.application.retrieval_service import RetrievalService
 from app.application.gemini_orchestration_service import GeminiOrchestrationService
+from app.application.test_intelligence_engine import TestIntelligenceEngine
 from app.workers.index_worker import DurableIndexWorker
 
 logger = logging.getLogger(__name__)
@@ -39,6 +47,8 @@ async def get_services():
     edge_repo = AsyncpgGraphEdgeRepository(pool)
     analysis_repo = AsyncpgAnalysisRepository(pool)
     job_repo = AsyncpgIndexJobRepository(pool)
+    test_rec_repo = AsyncpgTestRecommendationRepository(pool)
+    test_feedback_repo = AsyncpgTestValidationFeedbackRepository(pool)
     indexing_service = IndexingService(chunk_repo, edge_repo, job_repo=job_repo)
     retrieval_service = RetrievalService(chunk_repo, edge_repo)
     orchestration_service = GeminiOrchestrationService(
@@ -46,8 +56,9 @@ async def get_services():
         analysis_repo=analysis_repo,
         indexing_service=indexing_service,
         job_repo=job_repo,
+        test_rec_repo=test_rec_repo,
     )
-    return indexing_service, retrieval_service, orchestration_service
+    return indexing_service, retrieval_service, orchestration_service, analysis_repo, test_rec_repo, test_feedback_repo
 
 
 @router.get("/healthz")
@@ -125,7 +136,7 @@ async def sync_push_event(
     - Enforces tenant and repository isolation
     - Idempotently succeeds if commit state is already indexed
     """
-    indexing_service, _, _ = await get_services()
+    indexing_service, *_ = await get_services()
     files_payload = [{"file_path": f.file_path, "status": f.status, "content": f.content} for f in req.files]
     result = await indexing_service.sync_incremental_push(
         organization_id=org_id,
@@ -187,7 +198,7 @@ async def semantic_search_code(
     Performs cosine similarity search using pgvector across code chunks.
     Tenant isolation is enforced by org_id.
     """
-    _, retrieval_service, _ = await get_services()
+    _, retrieval_service, *_ = await get_services()
     results = await retrieval_service.semantic_search(
         organization_id=org_id,
         query=req.query,
@@ -206,7 +217,7 @@ async def graph_impact_analysis(
     Traverses the knowledge graph up to N hops deep using recursive CTE to identify
     impacted upstream components.
     """
-    _, retrieval_service, _ = await get_services()
+    _, retrieval_service, *_ = await get_services()
     return await retrieval_service.get_impacted_symbols(
         organization_id=org_id,
         repository_id=req.repository_id,
@@ -226,7 +237,7 @@ async def analyze_pull_request(
     Generates an executive impact review for a PR using Hybrid RAG (graph + vectors + Gemini Primary / Groq Fallback)
     and saves an audit record into analyses correlated with the W3C trace_id.
     """
-    _, _, orchestration_service = await get_services()
+    _, _, orchestration_service, *_ = await get_services()
     raw_files = [f.model_dump() for f in req.changed_files] if req.changed_files else None
     analysis = await orchestration_service.analyze_pull_request(
         organization_id=org_id,
@@ -253,6 +264,8 @@ async def analyze_pull_request(
         confidence=analysis.confidence,
         risk_factors=analysis.risk_factors or [],
         impact_metadata=meta,
+        test_strategy=analysis.test_strategy or {},
+        test_effectiveness=analysis.test_effectiveness,
         changed_components=meta.get("changed_components"),
         direct_impact=meta.get("direct_impact"),
         transitive_impact=meta.get("transitive_impact"),
@@ -264,6 +277,103 @@ async def analyze_pull_request(
         retrieved_chunks=analysis.retrieved_chunks,
         execution_duration_ms=analysis.execution_duration_ms,
         trace_id=analysis.trace_id,
+    )
+
+
+@router.get("/test-impact/{analysis_id}", response_model=Dict[str, Any])
+async def get_test_impact_for_analysis(
+    analysis_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves the explainable test intelligence strategy for a completed PR analysis:
+    - MUST RUN, SHOULD RUN, OPTIONAL test groupings
+    - Static AST, runtime CI, and historical failure evidence
+    - Change-to-test derivation paths
+    - Enforces tenant isolation.
+    """
+    pool = await db_pool.get_pool()
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    analysis = await analysis_repo.get_by_id(org_id, analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
+
+    strat = analysis.test_strategy or {}
+    return {
+        "analysis_id": str(analysis.id),
+        "organization_id": str(analysis.organization_id),
+        "entity_id": analysis.entity_id,
+        "risk_level": analysis.risk_level,
+        "risk_score": analysis.risk_score,
+        "confidence": strat.get("confidence", analysis.confidence),
+        "confidence_rationale": strat.get("confidence_rationale", ""),
+        "must_run": strat.get("must_run", []),
+        "should_run": strat.get("should_run", []),
+        "optional": strat.get("optional", []),
+        "static_evidence": strat.get("static_evidence", []),
+        "runtime_evidence": strat.get("runtime_evidence", []),
+        "historical_failures": strat.get("historical_failures", []),
+        "coverage_summary": strat.get("coverage_summary", {}),
+        "test_effectiveness": analysis.test_effectiveness,
+    }
+
+
+@router.post("/test-validation/validate", response_model=TestValidationResponse)
+async def validate_post_pr_test_execution(
+    req: TestValidationRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Feedback Loop: Correlates actual post-PR GitHub Actions / CI test run results with prior test recommendations.
+    Calculates prediction-to-failure correlation and test selection efficiency, and stores persistent feedback.
+    """
+    pool = await db_pool.get_pool()
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    feedback_repo = AsyncpgTestValidationFeedbackRepository(pool)
+
+    analysis = await analysis_repo.get_by_id(org_id, req.analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
+
+    strat = analysis.test_strategy or {}
+    all_recs = []
+    from app.domain.models import TestRecommendation
+    for r_data in (strat.get("must_run", []) + strat.get("should_run", []) + strat.get("optional", [])):
+        all_recs.append(TestRecommendation(**r_data))
+
+    metrics = TestIntelligenceEngine.calculate_validation_metrics(
+        recommended_tests=all_recs,
+        executed_test_results=req.executed_tests,
+        workflow_run_id=req.workflow_run_id,
+    )
+
+    feedback = TestValidationFeedback(
+        organization_id=org_id,
+        repository_id=req.repository_id,
+        analysis_id=req.analysis_id,
+        commit_sha=req.commit_sha,
+        workflow_run_id=req.workflow_run_id,
+        recommended_count=metrics["recommended_count"],
+        executed_count=metrics["executed_count"],
+        passed_count=metrics["passed_count"],
+        failed_count=metrics["failed_count"],
+        high_priority_missed_count=metrics["high_priority_missed_count"],
+        prediction_to_failure_correlation=metrics["prediction_to_failure_correlation"],
+        test_selection_efficiency=metrics["test_selection_efficiency"],
+        metrics=metrics,
+    )
+    await feedback_repo.save_feedback(feedback)
+
+    # Update analysis with test effectiveness metrics
+    analysis.test_effectiveness = metrics
+    await analysis_repo.save_analysis(analysis)
+
+    return TestValidationResponse(
+        status="VALIDATED",
+        analysis_id=req.analysis_id,
+        commit_sha=req.commit_sha,
+        workflow_run_id=req.workflow_run_id,
+        metrics=metrics,
     )
 
 
@@ -294,6 +404,8 @@ async def get_analyses_for_entity(
             confidence=a.confidence,
             risk_factors=a.risk_factors or [],
             impact_metadata=a.impact_metadata or {},
+            test_strategy=a.test_strategy or {},
+            test_effectiveness=a.test_effectiveness,
             changed_components=(a.impact_metadata or {}).get("changed_components"),
             direct_impact=(a.impact_metadata or {}).get("direct_impact"),
             transitive_impact=(a.impact_metadata or {}).get("transitive_impact"),

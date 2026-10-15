@@ -7,6 +7,8 @@ from app.domain.repositories import (
     GraphEdgeRepository,
     AnalysisRepository,
     IndexJobRepository,
+    TestRecommendationRepository,
+    TestValidationFeedbackRepository,
 )
 
 
@@ -151,6 +153,12 @@ class InMemoryAnalysisRepository(AnalysisRepository):
             if a.organization_id == org_id and a.entity_type == entity_type and a.entity_id == entity_id
         ]
 
+    async def get_by_id(self, org_id: UUID, analysis_id: UUID) -> Optional[Analysis]:
+        for a in self.analyses:
+            if a.organization_id == org_id and a.id == analysis_id:
+                return a
+        return None
+
 
 class InMemoryIndexJobRepository(IndexJobRepository):
     def __init__(self):
@@ -227,4 +235,46 @@ class InMemoryIndexJobRepository(IndexJobRepository):
                 job.updated_at = utc_now()
                 recovered += 1
         return recovered
+
+
+class InMemoryTestRecommendationRepository(TestRecommendationRepository):
+    def __init__(self):
+        self.recommendations: List[Any] = []
+
+    async def save_recommendations(self, recommendations: List[Any]) -> int:
+        self.recommendations.extend(recommendations)
+        return len(recommendations)
+
+    async def get_by_analysis(self, org_id: UUID, analysis_id: UUID) -> List[Any]:
+        return [
+            r for r in self.recommendations
+            if getattr(r, "organization_id", None) == org_id and getattr(r, "analysis_id", None) == analysis_id
+        ]
+
+    async def get_by_commit(self, org_id: UUID, repo_id: UUID, commit_sha: str) -> List[Any]:
+        return [
+            r for r in self.recommendations
+            if getattr(r, "organization_id", None) == org_id
+            and getattr(r, "repository_id", None) == repo_id
+            and getattr(r, "commit_sha", None) == commit_sha
+        ]
+
+
+class InMemoryTestValidationFeedbackRepository(TestValidationFeedbackRepository):
+    def __init__(self):
+        self.feedbacks: List[Any] = []
+
+    async def save_feedback(self, feedback: Any) -> Any:
+        self.feedbacks.append(feedback)
+        return feedback
+
+    async def get_by_commit(self, org_id: UUID, repo_id: UUID, commit_sha: str) -> Optional[Any]:
+        for f in reversed(self.feedbacks):
+            if (
+                getattr(f, "organization_id", None) == org_id
+                and getattr(f, "repository_id", None) == repo_id
+                and getattr(f, "commit_sha", None) == commit_sha
+            ):
+                return f
+        return None
 

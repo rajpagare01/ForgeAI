@@ -35,6 +35,10 @@ import {
   History,
   Boxes,
   FileCheck,
+  Flame,
+  Zap,
+  CheckCheck,
+  BarChart3,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -119,6 +123,56 @@ export interface BlastRadiusItem {
   file_path?: string;
 }
 
+export interface TestRecommendationItem {
+  id?: string;
+  test_name: string;
+  test_file: string;
+  test_method?: string;
+  target_symbol?: string;
+  priority_score: number;
+  priority_bucket: "MUST_RUN" | "SHOULD_RUN" | "OPTIONAL";
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  evidence_sources: string[];
+  evidence_types: string[];
+  evidence_path: string[];
+  reason: string;
+  historical_failure_count: number;
+  cochange_count: number;
+  runtime_coverage_verified: boolean;
+}
+
+export interface TestStrategyDTO {
+  must_run: TestRecommendationItem[];
+  should_run: TestRecommendationItem[];
+  optional: TestRecommendationItem[];
+  static_evidence: any[];
+  runtime_evidence: any[];
+  historical_failures: any[];
+  coverage_summary: {
+    coverage_available: boolean;
+    coverage_mechanism: string;
+    runtime_runs_ingested: number;
+    historical_failures_observed: number;
+  };
+  overall_confidence: "HIGH" | "MEDIUM" | "LOW";
+  confidence_rationale: string;
+}
+
+export interface TestValidationResponseDTO {
+  organization_id: string;
+  repository_id: string;
+  commit_sha: string;
+  prediction_to_failure_correlation: number;
+  test_selection_efficiency: number;
+  high_priority_missed_count: number;
+  total_recommended: number;
+  total_actual_executed: number;
+  actual_failed_count: number;
+  recommended_failed_count: number;
+  missed_failures: string[];
+  created_at?: string;
+}
+
 export interface PrAnalysisResponse {
   analysis_id?: string;
   risk?: string;
@@ -131,6 +185,12 @@ export interface PrAnalysisResponse {
   transitive_impact?: BlastRadiusItem[];
   affected_modules?: string[];
   affected_tests?: TestImpactItem[];
+  test_strategy?: TestStrategyDTO;
+  test_effectiveness?: {
+    prediction_to_failure_correlation: number;
+    test_selection_efficiency: number;
+    high_priority_missed_count: number;
+  };
   historical_signals?: HistoricalSignalItem[];
   architectural_concerns?: string[];
   recommendations?: string[];
@@ -218,6 +278,14 @@ export default function AiInsightsPage() {
   const [provenanceFilter, setProvenanceFilter] = useState<
     "ALL" | "PR_DIFF" | "GRAPH" | "VECTOR" | "TEST" | "HISTORY" | "SYNC_STATE"
   >("ALL");
+
+  // Test Intelligence & Validation state
+  const [testBucketFilter, setTestBucketFilter] = useState<
+    "MUST_RUN" | "SHOULD_RUN" | "OPTIONAL" | "ALL" | "FAILURES"
+  >("MUST_RUN");
+  const [isValidatingTests, setIsValidatingTests] = useState<boolean>(false);
+  const [testValidationResult, setTestValidationResult] = useState<TestValidationResponseDTO | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // 1. Fetch authorized repositories
   const fetchRepositories = useCallback(async () => {
@@ -395,6 +463,26 @@ export default function AiInsightsPage() {
       clearTimeout(t3);
       clearTimeout(t4);
       setIsAnalyzingPr(false);
+    }
+  };
+
+  // Validate PR recommendations against actual CI test run results (Post-PR Feedback Loop)
+  const handleValidateTests = async () => {
+    if (!selectedRepoId) return;
+    const commitSha = prChangeSet?.headSha || "latest";
+    setIsValidatingTests(true);
+    setValidationError(null);
+    try {
+      const resp = await apiClient.post<TestValidationResponseDTO>("/api/v1/ai/test-validation/validate", {
+        repository_id: selectedRepoId,
+        commit_sha: commitSha,
+      });
+      setTestValidationResult(resp);
+    } catch (err: any) {
+      console.warn("Validation feedback check failed:", err);
+      setValidationError(err?.message || "Could not validate against actual CI test results.");
+    } finally {
+      setIsValidatingTests(false);
     }
   };
 
@@ -1152,50 +1240,525 @@ export default function AiInsightsPage() {
                     </div>
                   </div>
 
-                  {/* 4. Evidence-Backed Test Impact Intelligence */}
-                  {Array.isArray(prAnalysisResult.affected_tests) && prAnalysisResult.affected_tests.length > 0 && (
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <TestTube className="h-4 w-4 text-blue-400" />
-                          Recommended Tests (Evidence-Backed Impact)
-                        </span>
-                        <span className="text-[11px] font-mono text-slate-400">
-                          {prAnalysisResult.affected_tests.length} tests identified
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                        {prAnalysisResult.affected_tests.map((test, idx) => (
-                          <div
-                            key={idx}
-                            className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 text-xs flex flex-col gap-1.5"
+                  {/* 4. Test Intelligence & Risk-Driven Validation Engine */}
+                  {(() => {
+                    const strategy = prAnalysisResult.test_strategy;
+                    const legacyTests = prAnalysisResult.affected_tests || [];
+                    const mustRunList = strategy?.must_run || legacyTests.filter((t) => t.confidence === "HIGH").map((t) => ({
+                      test_name: t.test_name,
+                      test_file: t.test_file,
+                      priority_score: 85.0,
+                      priority_bucket: "MUST_RUN" as const,
+                      confidence: t.confidence,
+                      evidence_sources: ["STATIC"],
+                      evidence_types: ["AST_CALL"],
+                      evidence_path: [t.reason],
+                      reason: t.reason,
+                      historical_failure_count: 0,
+                      cochange_count: 0,
+                      runtime_coverage_verified: false,
+                    }));
+                    const shouldRunList = strategy?.should_run || legacyTests.filter((t) => t.confidence === "MEDIUM").map((t) => ({
+                      test_name: t.test_name,
+                      test_file: t.test_file,
+                      priority_score: 45.0,
+                      priority_bucket: "SHOULD_RUN" as const,
+                      confidence: t.confidence,
+                      evidence_sources: ["STATIC"],
+                      evidence_types: ["PATH_PAIRING"],
+                      evidence_path: [t.reason],
+                      reason: t.reason,
+                      historical_failure_count: 0,
+                      cochange_count: 0,
+                      runtime_coverage_verified: false,
+                    }));
+                    const optionalList = strategy?.optional || legacyTests.filter((t) => t.confidence === "LOW").map((t) => ({
+                      test_name: t.test_name,
+                      test_file: t.test_file,
+                      priority_score: 15.0,
+                      priority_bucket: "OPTIONAL" as const,
+                      confidence: t.confidence,
+                      evidence_sources: ["STATIC"],
+                      evidence_types: ["HEURISTIC_MODULE"],
+                      evidence_path: [t.reason],
+                      reason: t.reason,
+                      historical_failure_count: 0,
+                      cochange_count: 0,
+                      runtime_coverage_verified: false,
+                    }));
+
+                    const totalTests = mustRunList.length + shouldRunList.length + optionalList.length;
+                    if (totalTests === 0 && !strategy) return null;
+
+                    const activeList =
+                      testBucketFilter === "MUST_RUN"
+                        ? mustRunList
+                        : testBucketFilter === "SHOULD_RUN"
+                        ? shouldRunList
+                        : testBucketFilter === "OPTIONAL"
+                        ? optionalList
+                        : [...mustRunList, ...shouldRunList, ...optionalList];
+
+                    const coverageAvailable = strategy?.coverage_summary?.coverage_available;
+                    const coverageMech = strategy?.coverage_summary?.coverage_mechanism || "STATIC_AST";
+                    const overallConf = strategy?.overall_confidence || prAnalysisResult.confidence || "MEDIUM";
+
+                    const effectiveness = testValidationResult || (prAnalysisResult.test_effectiveness ? {
+                      prediction_to_failure_correlation: prAnalysisResult.test_effectiveness.prediction_to_failure_correlation,
+                      test_selection_efficiency: prAnalysisResult.test_effectiveness.test_selection_efficiency,
+                      high_priority_missed_count: prAnalysisResult.test_effectiveness.high_priority_missed_count,
+                      total_recommended: totalTests,
+                      total_actual_executed: 14,
+                      actual_failed_count: 0,
+                      recommended_failed_count: 0,
+                      missed_failures: [],
+                    } : null);
+
+                    return (
+                      <div className="rounded-xl border border-indigo-500/30 bg-slate-950/70 p-5 space-y-5 shadow-2xl">
+                        {/* Section Header */}
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                          <div>
+                            <div className="flex items-center gap-2.5">
+                              <TestTube className="h-5 w-5 text-indigo-400" />
+                              <span className="text-sm font-bold text-white uppercase tracking-wider">
+                                Test Intelligence & Risk-Driven Validation Engine
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1">
+                              Deterministic test prioritization combining AST symbol call graph, runtime coverage, and historical failure coupling.
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            {/* Coverage Mechanism Badge */}
+                            <Badge
+                              variant="outline"
+                              className={`text-xs font-mono px-3 py-1 flex items-center gap-1.5 ${
+                                coverageAvailable
+                                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                                  : "bg-indigo-950/40 text-indigo-300 border-indigo-500/40"
+                              }`}
+                            >
+                              {coverageAvailable ? (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                  <span>{coverageMech} Runtime Coverage Verified</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Info className="h-3.5 w-3.5 text-indigo-400" />
+                                  <span>Static AST Fallback (Graceful Degradation)</span>
+                                </>
+                              )}
+                            </Badge>
+
+                            {/* Overall Test Strategy Confidence */}
+                            <Badge
+                              variant="outline"
+                              className={`text-xs font-mono px-3 py-1 ${
+                                overallConf === "HIGH"
+                                  ? "bg-emerald-950/30 text-emerald-400 border-emerald-500/40"
+                                  : overallConf === "MEDIUM"
+                                  ? "bg-blue-950/30 text-blue-400 border-blue-500/40"
+                                  : "bg-amber-950/30 text-amber-400 border-amber-500/40"
+                              }`}
+                              title={strategy?.confidence_rationale}
+                            >
+                              Confidence: {overallConf}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Priority Bucket Selector Cards */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {/* MUST RUN */}
+                          <button
+                            type="button"
+                            onClick={() => setTestBucketFilter("MUST_RUN")}
+                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                              testBucketFilter === "MUST_RUN"
+                                ? "border-rose-500/60 bg-rose-950/30 shadow-lg shadow-rose-950/40"
+                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                            }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-mono text-white font-semibold truncate max-w-xs">
-                                {test.test_name}
+                              <span className="text-xs font-bold text-rose-300 uppercase flex items-center gap-1.5">
+                                <Flame className="h-3.5 w-3.5 text-rose-400" />
+                                MUST RUN
                               </span>
-                              <Badge
-                                variant="outline"
-                                className={`text-[9px] font-bold ${
-                                  test.confidence === "HIGH"
-                                    ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
-                                    : test.confidence === "MEDIUM"
-                                    ? "text-blue-400 border-blue-500/40 bg-blue-950/20"
-                                    : "text-amber-400 border-amber-500/40 bg-amber-950/20"
-                                }`}
-                              >
-                                {test.confidence} CONFIDENCE
+                              <Badge variant="outline" className="text-xs font-mono font-bold bg-rose-500/20 text-rose-300 border-rose-500/40">
+                                {mustRunList.length}
                               </Badge>
                             </div>
-                            <div className="text-[11px] text-slate-400 font-mono truncate">{test.test_file}</div>
-                            <div className="text-[10px] text-slate-500 italic border-t border-slate-800/80 pt-1">
-                              Evidence: {test.reason}
+                            <span className="text-[11px] text-slate-400">Score &ge; 60 or High Risk</span>
+                          </button>
+
+                          {/* SHOULD RUN */}
+                          <button
+                            type="button"
+                            onClick={() => setTestBucketFilter("SHOULD_RUN")}
+                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                              testBucketFilter === "SHOULD_RUN"
+                                ? "border-amber-500/60 bg-amber-950/30 shadow-lg shadow-amber-950/40"
+                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-amber-300 uppercase flex items-center gap-1.5">
+                                <Zap className="h-3.5 w-3.5 text-amber-400" />
+                                SHOULD RUN
+                              </span>
+                              <Badge variant="outline" className="text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border-amber-500/40">
+                                {shouldRunList.length}
+                              </Badge>
+                            </div>
+                            <span className="text-[11px] text-slate-400">30 &le; Score &lt; 60</span>
+                          </button>
+
+                          {/* OPTIONAL */}
+                          <button
+                            type="button"
+                            onClick={() => setTestBucketFilter("OPTIONAL")}
+                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                              testBucketFilter === "OPTIONAL"
+                                ? "border-blue-500/60 bg-blue-950/30 shadow-lg shadow-blue-950/40"
+                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-blue-300 uppercase flex items-center gap-1.5">
+                                <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                                OPTIONAL
+                              </span>
+                              <Badge variant="outline" className="text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border-blue-500/40">
+                                {optionalList.length}
+                              </Badge>
+                            </div>
+                            <span className="text-[11px] text-slate-400">Score &lt; 30 (Regression)</span>
+                          </button>
+
+                          {/* ALL / SUMMARY */}
+                          <button
+                            type="button"
+                            onClick={() => setTestBucketFilter("ALL")}
+                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                              testBucketFilter === "ALL"
+                                ? "border-indigo-500/60 bg-indigo-950/30 shadow-lg shadow-indigo-950/40"
+                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-indigo-300 uppercase flex items-center gap-1.5">
+                                <BarChart3 className="h-3.5 w-3.5 text-indigo-400" />
+                                ALL TESTS
+                              </span>
+                              <Badge variant="outline" className="text-xs font-mono font-bold bg-indigo-500/20 text-indigo-300 border-indigo-500/40">
+                                {totalTests}
+                              </Badge>
+                            </div>
+                            <span className="text-[11px] text-slate-400">Total Recommended</span>
+                          </button>
+                        </div>
+
+                        {/* Test Recommendations List */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                            <span>
+                              Showing {activeList.length} tests in{" "}
+                              <span className="font-bold text-white uppercase">{testBucketFilter.replace("_", " ")}</span>
+                            </span>
+                            {strategy?.confidence_rationale && (
+                              <span className="truncate max-w-md italic">{strategy.confidence_rationale}</span>
+                            )}
+                          </div>
+
+                          {activeList.length > 0 ? (
+                            <div className="space-y-3">
+                              {activeList.map((rec: TestRecommendationItem, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="p-4 rounded-xl border border-slate-800 bg-slate-900/70 hover:border-slate-700/80 transition-all space-y-2.5"
+                                >
+                                  {/* Row 1: Header */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                      <span className="font-mono text-white font-bold text-sm">
+                                        {rec.test_name}
+                                      </span>
+                                      {rec.test_method && (
+                                        <Badge variant="outline" className="text-[10px] font-mono text-purple-300 border-purple-500/30">
+                                          #{rec.test_method}
+                                        </Badge>
+                                      )}
+                                      {rec.target_symbol && (
+                                        <Badge variant="outline" className="text-[10px] font-mono text-slate-400">
+                                          Targets: {rec.target_symbol}
+                                        </Badge>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                      {/* Priority Score */}
+                                      <div className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-slate-950 border border-slate-800 font-mono text-xs">
+                                        <span className="text-slate-500">Score:</span>
+                                        <span className="font-bold text-indigo-300">
+                                          {typeof rec.priority_score === "number" ? rec.priority_score.toFixed(1) : rec.priority_score}
+                                        </span>
+                                        <span className="text-slate-600">/ 100</span>
+                                      </div>
+
+                                      {/* Bucket Badge */}
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[10px] font-bold uppercase tracking-wider ${
+                                          rec.priority_bucket === "MUST_RUN"
+                                            ? "bg-rose-500/15 text-rose-300 border-rose-500/40"
+                                            : rec.priority_bucket === "SHOULD_RUN"
+                                            ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+                                            : "bg-blue-500/15 text-blue-300 border-blue-500/40"
+                                        }`}
+                                      >
+                                        {rec.priority_bucket}
+                                      </Badge>
+
+                                      {/* Confidence */}
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[10px] font-mono ${
+                                          rec.confidence === "HIGH"
+                                            ? "text-emerald-400 border-emerald-500/40"
+                                            : rec.confidence === "MEDIUM"
+                                            ? "text-blue-400 border-blue-500/40"
+                                            : "text-amber-400 border-amber-500/40"
+                                        }`}
+                                      >
+                                        {rec.confidence}
+                                      </Badge>
+                                    </div>
+                                  </div>
+
+                                  {/* Row 2: File Path & Evidence Sources */}
+                                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                    <span className="font-mono text-slate-400 text-[11px] truncate max-w-xl">
+                                      {rec.test_file || "Module Test Suite"}
+                                    </span>
+
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {rec.runtime_coverage_verified && (
+                                        <Badge variant="outline" className="text-[10px] font-mono text-emerald-300 border-emerald-500/40 bg-emerald-950/20">
+                                          Runtime Coverage
+                                        </Badge>
+                                      )}
+                                      {rec.historical_failure_count > 0 && (
+                                        <Badge variant="outline" className="text-[10px] font-mono text-rose-300 border-rose-500/40 bg-rose-950/20">
+                                          {rec.historical_failure_count} Prior Failures
+                                        </Badge>
+                                      )}
+                                      {rec.cochange_count > 0 && (
+                                        <Badge variant="outline" className="text-[10px] font-mono text-amber-300 border-amber-500/40 bg-amber-950/20">
+                                          {rec.cochange_count} Co-Commits
+                                        </Badge>
+                                      )}
+                                      {Array.isArray(rec.evidence_sources) && rec.evidence_sources.map((src, sIdx) => (
+                                        <Badge
+                                          key={sIdx}
+                                          variant="outline"
+                                          className={`text-[9px] font-mono uppercase ${
+                                            src === "RUNTIME"
+                                              ? "text-emerald-400 border-emerald-500/30"
+                                              : src === "HISTORICAL"
+                                              ? "text-amber-400 border-amber-500/30"
+                                              : "text-indigo-400 border-indigo-500/30"
+                                          }`}
+                                        >
+                                          {src}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Row 3: Derivation Path (Change -> AST/Runtime/History -> Test) */}
+                                  {Array.isArray(rec.evidence_path) && rec.evidence_path.length > 0 && (
+                                    <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80 text-[11px] font-mono text-slate-300 flex items-start gap-2">
+                                      <ArrowRight className="h-3.5 w-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                                      <div className="space-y-0.5 w-full">
+                                        <div className="text-[10px] uppercase font-bold text-slate-500">
+                                          Derivation Path
+                                        </div>
+                                        <div className="text-slate-300 leading-relaxed">
+                                          {rec.evidence_path.join(" \u2192 ")}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Row 4: Reason / Explanation */}
+                                  <div className="text-[11px] text-slate-400 italic">
+                                    <span className="font-semibold text-slate-300 not-italic">Rationale: </span>
+                                    {rec.reason}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-8 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                              No tests categorized under {testBucketFilter.replace("_", " ")} for this pull request.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Recent CI Test Runs & Historical Failures Ingestion Drawer */}
+                        {strategy && (strategy.runtime_evidence?.length > 0 || strategy.historical_failures?.length > 0) && (
+                          <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <Database className="h-4 w-4 text-purple-400" />
+                                Ingested CI Workflow Executions & Historical Failures
+                              </span>
+                              <span className="text-[11px] font-mono text-slate-400">
+                                {strategy.runtime_evidence?.length || 0} CI runs &bull; {strategy.historical_failures?.length || 0} failures
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                              {/* CI Workflow Runs */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/60 space-y-2">
+                                <div className="text-[11px] font-bold text-slate-300 uppercase">Recent CI Executions</div>
+                                {strategy.runtime_evidence && strategy.runtime_evidence.length > 0 ? (
+                                  <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono text-[11px]">
+                                    {strategy.runtime_evidence.slice(0, 5).map((run: any, rIdx: number) => (
+                                      <div key={rIdx} className="flex items-center justify-between p-1.5 rounded bg-slate-900/80 border border-slate-800/60">
+                                        <span className="text-slate-300 truncate max-w-[180px]">
+                                          {run.workflow || `Run #${run.workflow_run_id || rIdx + 1}`}
+                                        </span>
+                                        <Badge
+                                          variant="outline"
+                                          className={`text-[9px] ${
+                                            run.conclusion === "success"
+                                              ? "text-emerald-400 border-emerald-500/40"
+                                              : run.conclusion === "failure"
+                                              ? "text-rose-400 border-rose-500/40"
+                                              : "text-slate-400"
+                                          }`}
+                                        >
+                                          {run.conclusion || run.status || "COMPLETED"}
+                                        </Badge>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-slate-500 text-[11px] italic">No previous workflow runs ingested</div>
+                                )}
+                              </div>
+
+                              {/* Historical Failures */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/60 space-y-2">
+                                <div className="text-[11px] font-bold text-slate-300 uppercase">Historical Test Failures</div>
+                                {strategy.historical_failures && strategy.historical_failures.length > 0 ? (
+                                  <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono text-[11px]">
+                                    {strategy.historical_failures.map((hf: any, hIdx: number) => (
+                                      <div key={hIdx} className="flex items-center justify-between p-1.5 rounded bg-slate-900/80 border border-slate-800/60">
+                                        <span className="text-rose-300 truncate max-w-[200px]">
+                                          {hf.test_name || hf.name}
+                                        </span>
+                                        <Badge variant="outline" className="text-[9px] text-rose-400 border-rose-500/40">
+                                          {hf.failure_count || 1}x failed
+                                        </Badge>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-slate-500 text-[11px] italic">No historical failures recorded for affected files</div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        ))}
+                        )}
+
+                        {/* 5. Post-PR Test Validation Feedback Loop */}
+                        <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/20 via-slate-950 to-purple-950/20 p-4 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Activity className="h-4 w-4 text-emerald-400" />
+                                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                                  Post-PR Test Validation (Feedback Loop)
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                Compares recommended test selection against actual CI test execution results to calculate selection efficiency and correlation.
+                              </p>
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleValidateTests}
+                              disabled={isValidatingTests}
+                              className="h-8 text-xs px-3 border-emerald-500/40 bg-emerald-950/30 hover:bg-emerald-900/50 text-emerald-200 transition-colors shrink-0"
+                            >
+                              {isValidatingTests ? (
+                                <>
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1.5 text-emerald-400" />
+                                  Validating Against CI...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCheck className="h-3.5 w-3.5 mr-1.5 text-emerald-400" />
+                                  Validate Against CI
+                                </>
+                              )}
+                            </Button>
+                          </div>
+
+                          {validationError && (
+                            <div className="p-2.5 rounded bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs">
+                              {validationError}
+                            </div>
+                          )}
+
+                          {effectiveness && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                              {/* Metric 1 */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                                  Prediction-to-Failure Correlation
+                                </span>
+                                <div className="text-xl font-bold font-mono text-emerald-400">
+                                  {(effectiveness.prediction_to_failure_correlation * 100).toFixed(0)}%
+                                </div>
+                                <span className="text-[10px] text-slate-500">Recommended failing tests / Total failed tests</span>
+                              </div>
+
+                              {/* Metric 2 */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                                  Test Selection Efficiency
+                                </span>
+                                <div className="text-xl font-bold font-mono text-indigo-400">
+                                  {(effectiveness.test_selection_efficiency * 100).toFixed(0)}%
+                                </div>
+                                <span className="text-[10px] text-slate-500">Suite runtime reduction efficiency</span>
+                              </div>
+
+                              {/* Metric 3 */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                                  High Priority Missed Failures
+                                </span>
+                                <div className={`text-xl font-bold font-mono ${effectiveness.high_priority_missed_count === 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                  {effectiveness.high_priority_missed_count}
+                                </div>
+                                <span className="text-[10px] text-slate-500">Failing tests missed by MUST_RUN</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* 5. Historical Change Signals */}
                   {Array.isArray(prAnalysisResult.historical_signals) && prAnalysisResult.historical_signals.length > 0 && (
