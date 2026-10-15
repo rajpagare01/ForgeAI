@@ -309,8 +309,9 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             INSERT INTO analyses (
                 id, organization_id, entity_type, entity_id, model_version,
                 prompt_version, summary, risk_level, retrieved_chunks,
-                execution_duration_ms, trace_id, provider, fallback_used, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+                execution_duration_ms, trace_id, provider, fallback_used,
+                risk_score, confidence, risk_factors, impact_metadata, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18);
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -328,6 +329,10 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 analysis.trace_id,
                 analysis.provider,
                 analysis.fallback_used,
+                float(analysis.risk_score),
+                analysis.confidence,
+                json.dumps(analysis.risk_factors) if analysis.risk_factors else "[]",
+                json.dumps(analysis.impact_metadata) if analysis.impact_metadata else "{}",
                 analysis.created_at,
             )
         return analysis
@@ -341,6 +346,9 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                    execution_duration_ms, trace_id,
                    COALESCE(provider, 'GEMINI') as provider,
                    COALESCE(fallback_used, false) as fallback_used,
+                   COALESCE(risk_score, 0.0) as risk_score,
+                   COALESCE(confidence, 'MEDIUM') as confidence,
+                   risk_factors, impact_metadata,
                    created_at
             FROM analyses
             WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
@@ -352,6 +360,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
         results = []
         for r in rows:
             chunks = json.loads(r["retrieved_chunks"]) if r["retrieved_chunks"] else []
+            r_factors = json.loads(r["risk_factors"]) if r.get("risk_factors") else []
+            r_impact = json.loads(r["impact_metadata"]) if r.get("impact_metadata") else {}
             results.append(
                 Analysis(
                     id=r["id"],
@@ -363,6 +373,10 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                     prompt_version=r["prompt_version"],
                     summary=r["summary"],
                     risk_level=r["risk_level"],
+                    risk_score=float(r["risk_score"]),
+                    confidence=r["confidence"],
+                    risk_factors=r_factors,
+                    impact_metadata=r_impact,
                     retrieved_chunks=chunks,
                     execution_duration_ms=r["execution_duration_ms"],
                     trace_id=r["trace_id"],

@@ -19,8 +19,9 @@ class Settings(BaseSettings):
     # Redis settings (Token bucket & rate limiting)
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # Source Control Service Integration
+    # Source Control & Testing Service Integration
     SOURCE_CONTROL_SERVICE_URL: str = "http://source-control-service:8082"
+    TESTING_SERVICE_URL: str = "http://testing-service:8083"
 
     # Gemini LLM settings (PRIMARY)
     GEMINI_API_KEY: Optional[str] = None

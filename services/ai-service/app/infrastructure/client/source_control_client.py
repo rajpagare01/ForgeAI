@@ -52,3 +52,45 @@ class SourceControlClient:
                 e,
             )
             return None
+
+    async def get_repository_commits(
+        self, organization_id: UUID, repository_id: UUID
+    ) -> Optional[list]:
+        """
+        Retrieves stored commit history for the repository to compute historical change frequency.
+        """
+        url = f"{self.base_url}/api/v1/repositories/{repository_id}/commits"
+        headers = {
+            settings.ORG_HEADER_NAME: str(organization_id),
+            "Accept": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    return resp.json()
+                return []
+        except httpx.RequestError as e:
+            logger.warning("Could not fetch commits from source-control-service: %s", e)
+            return []
+
+    async def get_repository_sync_status(
+        self, organization_id: UUID, repository_id: UUID
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves repository synchronization status (SYNCED, SYNCING, STALE, FAILED).
+        """
+        url = f"{self.base_url}/api/v1/repositories/{repository_id}/sync-status"
+        headers = {
+            settings.ORG_HEADER_NAME: str(organization_id),
+            "Accept": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    return resp.json()
+                return None
+        except httpx.RequestError as e:
+            logger.warning("Could not fetch sync-status from source-control-service: %s", e)
+            return None

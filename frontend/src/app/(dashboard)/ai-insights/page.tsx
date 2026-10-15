@@ -29,6 +29,12 @@ import {
   FileDiff,
   Code2,
   RefreshCw,
+  Activity,
+  Sliders,
+  TestTube,
+  History,
+  Boxes,
+  FileCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +82,93 @@ interface PullRequestChangeSet {
   files: PullRequestFile[];
 }
 
+export interface AnalysisFactor {
+  factor: string;
+  points: number;
+  weight: number;
+  raw_value: number;
+  detail: string;
+}
+
+export interface TestImpactItem {
+  test_name: string;
+  test_file: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  reason: string;
+}
+
+export interface HistoricalSignalItem {
+  file_path: string;
+  commit_count: number;
+  recent_commits?: string[];
+  last_modified?: string;
+  authors?: string[];
+}
+
+export interface ComponentItem {
+  type: string;
+  name: string;
+  file_path?: string;
+}
+
+export interface BlastRadiusItem {
+  source_symbol: string;
+  target_symbol?: string;
+  edge_type: string;
+  depth: number;
+  file_path?: string;
+}
+
+export interface PrAnalysisResponse {
+  analysis_id?: string;
+  risk?: string;
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  risk_score: number;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  summary: string;
+  changed_components?: ComponentItem[];
+  direct_impact?: BlastRadiusItem[];
+  transitive_impact?: BlastRadiusItem[];
+  affected_modules?: string[];
+  affected_tests?: TestImpactItem[];
+  historical_signals?: HistoricalSignalItem[];
+  architectural_concerns?: string[];
+  recommendations?: string[];
+  risk_factors?: AnalysisFactor[];
+  impact_metadata?: {
+    deterministic_risk_score?: number;
+    risk_level?: string;
+    confidence?: string;
+    confidence_reason?: string;
+    direct_impact_count?: number;
+    transitive_impact_count?: number;
+    affected_modules_count?: number;
+    affected_tests_count?: number;
+    historical_signals_count?: number;
+    cross_module_impact?: boolean;
+  };
+  retrieved_chunks?: Array<{
+    chunk_id?: string;
+    file_path?: string;
+    symbol_name?: string;
+    symbol_type?: string;
+    source: "PR_DIFF" | "GRAPH" | "VECTOR" | "TEST" | "HISTORY" | "SYNC_STATE";
+    depth?: number;
+    similarity?: number;
+    edge_type?: string;
+    commit_sha?: string;
+    content?: string;
+    organization_id?: string;
+  }>;
+  provider: string;
+  model_version: string;
+  prompt_version?: string;
+  execution_duration_ms: number;
+  fallback_used: boolean;
+  trace_id?: string;
+  created_at?: string;
+}
+
 export default function AiInsightsPage() {
   const { currentOrg } = useTenant();
   const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact">("pr");
@@ -102,7 +195,7 @@ export default function AiInsightsPage() {
   // PR Analysis & Lifecycle state
   const [lifecycleStep, setLifecycleStep] = useState<LifecycleStep>("idle");
   const [isAnalyzingPr, setIsAnalyzingPr] = useState<boolean>(false);
-  const [prAnalysisResult, setPrAnalysisResult] = useState<any | null>(null);
+  const [prAnalysisResult, setPrAnalysisResult] = useState<PrAnalysisResponse | null>(null);
   const [prError, setPrError] = useState<string | null>(null);
 
   // Advanced override
@@ -122,7 +215,9 @@ export default function AiInsightsPage() {
   const [impactError, setImpactError] = useState<string | null>(null);
 
   // Provenance filter
-  const [provenanceFilter, setProvenanceFilter] = useState<"ALL" | "PR_DIFF" | "GRAPH" | "VECTOR">("ALL");
+  const [provenanceFilter, setProvenanceFilter] = useState<
+    "ALL" | "PR_DIFF" | "GRAPH" | "VECTOR" | "TEST" | "HISTORY" | "SYNC_STATE"
+  >("ALL");
 
   // 1. Fetch authorized repositories
   const fetchRepositories = useCallback(async () => {
@@ -784,23 +879,57 @@ export default function AiInsightsPage() {
           {prAnalysisResult && (
             <div className="space-y-6">
               <Card className="border-purple-500/30 bg-purple-950/10 shadow-xl">
-                <CardHeader>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-base text-white flex items-center gap-2">
-                        <ShieldCheck className="h-5 w-5 text-purple-400" />
-                        Grounded PR Engineering Impact Review
-                      </CardTitle>
+                <CardHeader className="pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-6 w-6 text-purple-400" />
+                        <CardTitle className="text-lg text-white">
+                          Engineering Impact & Risk Intelligence
+                        </CardTitle>
+                      </div>
+
+                      {/* Overall Risk Badge */}
                       <Badge
-                        variant={
+                        variant="outline"
+                        className={`text-xs font-bold px-3 py-1 uppercase tracking-wider border ${
                           prAnalysisResult.risk_level === "LOW"
-                            ? "success"
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
                             : prAnalysisResult.risk_level === "MEDIUM"
-                            ? "warning"
-                            : "destructive"
-                        }
+                            ? "bg-amber-500/15 text-amber-400 border-amber-500/40"
+                            : prAnalysisResult.risk_level === "HIGH"
+                            ? "bg-orange-500/15 text-orange-400 border-orange-500/40"
+                            : "bg-rose-500/15 text-rose-400 border-rose-500/40 animate-pulse"
+                        }`}
                       >
                         Risk: {prAnalysisResult.risk_level}
+                      </Badge>
+
+                      {/* Deterministic Risk Score */}
+                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-900 border border-slate-800 text-xs font-mono">
+                        <Activity className="h-3.5 w-3.5 text-indigo-400" />
+                        <span className="text-slate-400">Score:</span>
+                        <span className="font-bold text-white">
+                          {typeof prAnalysisResult.risk_score === "number"
+                            ? prAnalysisResult.risk_score.toFixed(1)
+                            : "0.0"}
+                        </span>
+                        <span className="text-slate-500">/ 100</span>
+                      </div>
+
+                      {/* Evidence Confidence */}
+                      <Badge
+                        variant="outline"
+                        className={`text-xs font-mono px-2.5 py-1 ${
+                          prAnalysisResult.confidence === "HIGH"
+                            ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                            : prAnalysisResult.confidence === "MEDIUM"
+                            ? "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
+                            : "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                        }`}
+                        title={prAnalysisResult.impact_metadata?.confidence_reason}
+                      >
+                        Confidence: {prAnalysisResult.confidence}
                       </Badge>
                     </div>
 
@@ -828,15 +957,23 @@ export default function AiInsightsPage() {
                     </div>
                   </div>
 
-                  <CardDescription className="text-xs font-mono pt-1">
-                    Model: {prAnalysisResult.model_version} | Duration: {prAnalysisResult.execution_duration_ms}ms
-                    {prAnalysisResult.trace_id && ` | Trace: ${prAnalysisResult.trace_id.substring(0, 16)}...`}
+                  <CardDescription className="text-xs font-mono pt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>Model: {prAnalysisResult.model_version}</span>
+                    <span>Duration: {prAnalysisResult.execution_duration_ms}ms</span>
+                    {prAnalysisResult.impact_metadata?.confidence_reason && (
+                      <span className="text-slate-400 font-sans italic">
+                        Evidence: {prAnalysisResult.impact_metadata.confidence_reason}
+                      </span>
+                    )}
+                    {prAnalysisResult.trace_id && (
+                      <span>Trace: {prAnalysisResult.trace_id.substring(0, 16)}...</span>
+                    )}
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-6 pt-2">
                   {/* Insufficient context warning callout if applicable */}
-                  {prAnalysisResult.summary.includes("INSUFFICIENT_CONTEXT") && (
+                  {prAnalysisResult.summary?.includes("INSUFFICIENT_CONTEXT") && (
                     <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/30 text-xs text-amber-200 flex items-start gap-3">
                       <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
                       <div>
@@ -849,12 +986,279 @@ export default function AiInsightsPage() {
                     </div>
                   )}
 
-                  {/* Summary Body */}
-                  <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-line font-sans shadow-inner">
-                    {prAnalysisResult.summary}
+                  {/* 1. Deterministic Risk Factors Breakdown */}
+                  {Array.isArray(prAnalysisResult.risk_factors) && prAnalysisResult.risk_factors.length > 0 && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sliders className="h-4 w-4 text-purple-400" />
+                          Deterministic Risk Factors Breakdown
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          Score: {prAnalysisResult.risk_score.toFixed(1)} / 100
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                        {prAnalysisResult.risk_factors.map((rf, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-lg border border-slate-800/80 bg-slate-900/60 text-xs flex flex-col justify-between gap-1.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-slate-200">{rf.factor}</span>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] font-mono ${
+                                  rf.points > 10
+                                    ? "text-rose-400 border-rose-500/40 bg-rose-950/20"
+                                    : rf.points > 0
+                                    ? "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                                    : "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                }`}
+                              >
+                                +{rf.points} pts
+                              </Badge>
+                            </div>
+                            <p className="text-[11px] text-slate-400 leading-snug">{rf.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. Changed Components & Affected Modules */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Changed Components */}
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                      <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <FileCode className="h-4 w-4 text-indigo-400" />
+                        Directly Changed Components
+                      </div>
+                      {prAnalysisResult.changed_components && prAnalysisResult.changed_components.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                          {prAnalysisResult.changed_components.map((comp, idx) => (
+                            <div
+                              key={idx}
+                              className="px-2 py-1 rounded border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-300 flex items-center gap-1.5"
+                            >
+                              <Badge variant="outline" className="text-[9px] font-mono text-indigo-400 px-1 py-0">
+                                {comp.type}
+                              </Badge>
+                              <span className="truncate max-w-xs">{comp.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 italic">No specific symbols identified</div>
+                      )}
+                    </div>
+
+                    {/* Affected Modules */}
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Boxes className="h-4 w-4 text-purple-400" />
+                          Architectural Areas & Modules
+                        </span>
+                        {prAnalysisResult.impact_metadata?.cross_module_impact && (
+                          <Badge variant="destructive" className="text-[10px] uppercase font-mono">
+                            Cross-Module Impact
+                          </Badge>
+                        )}
+                      </div>
+                      {prAnalysisResult.affected_modules && prAnalysisResult.affected_modules.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {prAnalysisResult.affected_modules.map((mod, idx) => (
+                            <Badge
+                              key={idx}
+                              variant="outline"
+                              className="text-xs font-mono px-2.5 py-1 bg-purple-950/20 text-purple-300 border-purple-500/30"
+                            >
+                              {mod}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 italic">No specific architectural modules isolated</div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Grounded Provenance Explorer */}
+                  {/* 3. Multi-Hop Blast Radius (Direct vs Transitive) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Direct Impact (Depth = 1) */}
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Network className="h-4 w-4 text-emerald-400" />
+                          Direct Blast Radius (Depth 1)
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-mono">
+                          {prAnalysisResult.direct_impact?.length || 0} callers
+                        </Badge>
+                      </div>
+                      {prAnalysisResult.direct_impact && prAnalysisResult.direct_impact.length > 0 ? (
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {prAnalysisResult.direct_impact.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="p-2 rounded border border-slate-800/80 bg-slate-900/60 text-xs font-mono flex items-center justify-between"
+                            >
+                              <span className="text-emerald-300 font-medium truncate max-w-xs">
+                                {item.source_symbol}
+                              </span>
+                              <Badge variant="outline" className="text-[9px] text-slate-400">
+                                {item.edge_type || "DEPENDS_ON"}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 italic">No direct downstream dependents found</div>
+                      )}
+                    </div>
+
+                    {/* Transitive Impact (Depth = 2, 3) */}
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Network className="h-4 w-4 text-indigo-400" />
+                          Transitive Blast Radius (Depth 2-3)
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-mono">
+                          {prAnalysisResult.transitive_impact?.length || 0} callers
+                        </Badge>
+                      </div>
+                      {prAnalysisResult.transitive_impact && prAnalysisResult.transitive_impact.length > 0 ? (
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {prAnalysisResult.transitive_impact.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="p-2 rounded border border-slate-800/80 bg-slate-900/60 text-xs font-mono flex items-center justify-between"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <Badge variant="outline" className="text-[9px] text-indigo-400 border-indigo-500/40">
+                                  {item.depth} hops
+                                </Badge>
+                                <span className="text-slate-300 truncate max-w-xs">{item.source_symbol}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-500">{item.edge_type}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 italic">No multi-hop transitive dependents found</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4. Evidence-Backed Test Impact Intelligence */}
+                  {Array.isArray(prAnalysisResult.affected_tests) && prAnalysisResult.affected_tests.length > 0 && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <TestTube className="h-4 w-4 text-blue-400" />
+                          Recommended Tests (Evidence-Backed Impact)
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {prAnalysisResult.affected_tests.length} tests identified
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {prAnalysisResult.affected_tests.map((test, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 text-xs flex flex-col gap-1.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-white font-semibold truncate max-w-xs">
+                                {test.test_name}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={`text-[9px] font-bold ${
+                                  test.confidence === "HIGH"
+                                    ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                    : test.confidence === "MEDIUM"
+                                    ? "text-blue-400 border-blue-500/40 bg-blue-950/20"
+                                    : "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                                }`}
+                              >
+                                {test.confidence} CONFIDENCE
+                              </Badge>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono truncate">{test.test_file}</div>
+                            <div className="text-[10px] text-slate-500 italic border-t border-slate-800/80 pt-1">
+                              Evidence: {test.reason}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 5. Historical Change Signals */}
+                  {Array.isArray(prAnalysisResult.historical_signals) && prAnalysisResult.historical_signals.length > 0 && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <History className="h-4 w-4 text-amber-400" />
+                          Historical Change Signals (Commit Churn Evidence)
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {prAnalysisResult.historical_signals.length} files tracked
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {prAnalysisResult.historical_signals.map((sig, idx) => (
+                          <div
+                            key={idx}
+                            className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60 text-xs font-mono flex flex-col gap-1"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-300 truncate max-w-[180px]">{sig.file_path}</span>
+                              <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                                {sig.commit_count} prior commits
+                              </Badge>
+                            </div>
+                            {sig.recent_commits && sig.recent_commits.length > 0 && (
+                              <div className="text-[10px] text-slate-500 truncate">
+                                Latest: {sig.recent_commits[0]}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 6. Architectural Concerns Alert */}
+                  {Array.isArray(prAnalysisResult.architectural_concerns) && prAnalysisResult.architectural_concerns.length > 0 && (
+                    <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 text-xs text-rose-200 space-y-2">
+                      <div className="font-bold text-rose-100 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-rose-400" />
+                        Architectural Concerns Flagged
+                      </div>
+                      <ul className="list-disc list-inside space-y-1 text-rose-300">
+                        {prAnalysisResult.architectural_concerns.map((concern, idx) => (
+                          <li key={idx}>{concern}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* 7. Grounded AI Reasoning Review Body */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Cpu className="h-4 w-4 text-purple-400" />
+                      Grounded LLM Reasoning (Facts, Inferences & Recommendations)
+                    </div>
+                    <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-line font-sans shadow-inner">
+                      {prAnalysisResult.summary}
+                    </div>
+                  </div>
+
+                  {/* 8. Grounded Provenance Explorer (Multi-Category) */}
                   {Array.isArray(prAnalysisResult.retrieved_chunks) && prAnalysisResult.retrieved_chunks.length > 0 && (
                     <div className="space-y-3 pt-2 border-t border-slate-800/80">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -864,8 +1268,18 @@ export default function AiInsightsPage() {
                         </h4>
 
                         {/* Filter pills */}
-                        <div className="flex items-center gap-1 text-[11px]">
-                          {(["ALL", "PR_DIFF", "GRAPH", "VECTOR"] as const).map((filter) => (
+                        <div className="flex items-center gap-1 text-[11px] flex-wrap">
+                          {(
+                            [
+                              "ALL",
+                              "PR_DIFF",
+                              "GRAPH",
+                              "VECTOR",
+                              "TEST",
+                              "HISTORY",
+                              "SYNC_STATE",
+                            ] as const
+                          ).map((filter) => (
                             <button
                               key={filter}
                               onClick={() => setProvenanceFilter(filter)}
@@ -887,16 +1301,22 @@ export default function AiInsightsPage() {
                             key={i}
                             className="p-3 rounded-lg border border-slate-800 bg-slate-950 text-xs font-mono flex flex-col gap-1.5"
                           >
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
                               <div className="flex items-center gap-2">
                                 <Badge
                                   variant="outline"
                                   className={`text-[9px] font-bold ${
                                     chunk.source === "PR_DIFF"
-                                      ? "text-emerald-400 border-emerald-500/40"
+                                      ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
                                       : chunk.source === "GRAPH"
-                                      ? "text-purple-400 border-purple-500/40"
-                                      : "text-indigo-400 border-indigo-500/40"
+                                      ? "text-purple-400 border-purple-500/40 bg-purple-950/20"
+                                      : chunk.source === "TEST"
+                                      ? "text-blue-400 border-blue-500/40 bg-blue-950/20"
+                                      : chunk.source === "HISTORY"
+                                      ? "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                                      : chunk.source === "SYNC_STATE"
+                                      ? "text-cyan-400 border-cyan-500/40 bg-cyan-950/20"
+                                      : "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
                                   }`}
                                 >
                                   {chunk.source || "VECTOR"}
@@ -925,9 +1345,19 @@ export default function AiInsightsPage() {
                             )}
 
                             <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-900">
-                              <span>Symbol: <code className="text-slate-400">{chunk.symbol_name || chunk.file_path}</code></span>
+                              <span>
+                                Symbol:{" "}
+                                <code className="text-slate-400">
+                                  {chunk.symbol_name || chunk.file_path}
+                                </code>
+                              </span>
                               {chunk.commit_sha && (
-                                <span>Commit: <code className="text-slate-400">{chunk.commit_sha.substring(0, 7)}</code></span>
+                                <span>
+                                  Commit:{" "}
+                                  <code className="text-slate-400">
+                                    {chunk.commit_sha.substring(0, 7)}
+                                  </code>
+                                </span>
                               )}
                             </div>
                           </div>

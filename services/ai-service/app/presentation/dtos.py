@@ -53,6 +53,17 @@ class AnalysisResponseDTO(BaseModel):
     prompt_version: str
     summary: str
     risk_level: Optional[str] = None
+    risk_score: float = 0.0
+    confidence: str = "MEDIUM"
+    risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
+    impact_metadata: Dict[str, Any] = Field(default_factory=dict)
+    changed_components: Optional[Dict[str, Any]] = None
+    direct_impact: Optional[List[Dict[str, Any]]] = None
+    transitive_impact: Optional[List[Dict[str, Any]]] = None
+    affected_modules: Optional[List[str]] = None
+    affected_tests: Optional[List[Dict[str, Any]]] = None
+    historical_signals: Optional[List[Dict[str, Any]]] = None
+    architectural_concerns: Optional[List[str]] = None
     fallback_used: bool = False
     retrieved_chunks: Optional[List[Dict[str, Any]]] = None
     execution_duration_ms: int

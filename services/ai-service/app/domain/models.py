@@ -73,6 +73,10 @@ class Analysis(BaseModel):
     prompt_version: str
     summary: str
     risk_level: Optional[str] = None
+    risk_score: float = 0.0
+    confidence: str = "MEDIUM"
+    risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
+    impact_metadata: Dict[str, Any] = Field(default_factory=dict)
     retrieved_chunks: Optional[List[Dict[str, Any]]] = None
     execution_duration_ms: int = 0
     trace_id: Optional[str] = None
