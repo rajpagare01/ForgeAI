@@ -316,6 +316,112 @@ class GitHubInstallationSecurityTest {
                 .hasMessageContaining("GitHub App is not configured");
     }
 
+    @Test
+    @DisplayName("Regression Check: Push event for valid mapped installation assigns repo to authentic tenant")
+    void pushEventWithMappedInstallationMapsToAuthenticTenant() throws Exception {
+        UUID authenticOrg = UUID.randomUUID();
+        long mappedInstId = 5050L;
+        installationRepository.save(GitHubInstallation.builder()
+                .installationId(mappedInstId)
+                .organizationId(authenticOrg)
+                .accountLogin("tenant-corp")
+                .accountType("Organization")
+                .status(InstallationStatus.ACTIVE)
+                .build());
+
+        com.forgeai.sourcecontrol.domain.repository.RepositoryRepository mockRepoRepo =
+                org.mockito.Mockito.mock(com.forgeai.sourcecontrol.domain.repository.RepositoryRepository.class);
+        org.mockito.Mockito.when(mockRepoRepo.findByGithubRepoId(12345L)).thenReturn(Optional.empty());
+        org.mockito.Mockito.when(mockRepoRepo.save(org.mockito.ArgumentMatchers.any(com.forgeai.sourcecontrol.domain.model.Repository.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.forgeai.sourcecontrol.application.handler.PushEventHandler pushHandler =
+                new com.forgeai.sourcecontrol.application.handler.PushEventHandler(
+                        mockRepoRepo,
+                        installationRepository,
+                        org.mockito.Mockito.mock(com.forgeai.sourcecontrol.domain.repository.CommitRepository.class),
+                        org.mockito.Mockito.mock(com.forgeai.sourcecontrol.infrastructure.outbox.OutboxService.class)
+                );
+
+        String payload = """
+            {
+                "repository": {
+                    "id": 12345,
+                    "name": "sample-repo",
+                    "full_name": "tenant-corp/sample-repo",
+                    "default_branch": "main",
+                    "private": true
+                },
+                "installation": {
+                    "id": %d
+                },
+                "commits": []
+            }
+            """.formatted(mappedInstId);
+
+        pushHandler.handle(objectMapper.readTree(payload), "deliv-push-auth");
+
+        org.mockito.ArgumentCaptor<com.forgeai.sourcecontrol.domain.model.Repository> captor =
+                org.mockito.ArgumentCaptor.forClass(com.forgeai.sourcecontrol.domain.model.Repository.class);
+        org.mockito.Mockito.verify(mockRepoRepo).save(captor.capture());
+
+        com.forgeai.sourcecontrol.domain.model.Repository savedRepo = captor.getValue();
+        assertThat(savedRepo.getOrganizationId()).isEqualTo(authenticOrg);
+        assertThat(savedRepo.getInstallationId()).isEqualTo(mappedInstId);
+    }
+
+    @Test
+    @DisplayName("Regression Check: Push event for unknown unmapped installation strictly quarantines under zero UUID")
+    void pushEventWithUnknownInstallationQuarantinesUnderZeroUuid() throws Exception {
+        long unknownInstId = 9090L;
+
+        com.forgeai.sourcecontrol.domain.repository.RepositoryRepository mockRepoRepo =
+                org.mockito.Mockito.mock(com.forgeai.sourcecontrol.domain.repository.RepositoryRepository.class);
+        org.mockito.Mockito.when(mockRepoRepo.findByGithubRepoId(99999L)).thenReturn(Optional.empty());
+        org.mockito.Mockito.when(mockRepoRepo.save(org.mockito.ArgumentMatchers.any(com.forgeai.sourcecontrol.domain.model.Repository.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.forgeai.sourcecontrol.application.handler.PushEventHandler pushHandler =
+                new com.forgeai.sourcecontrol.application.handler.PushEventHandler(
+                        mockRepoRepo,
+                        installationRepository,
+                        org.mockito.Mockito.mock(com.forgeai.sourcecontrol.domain.repository.CommitRepository.class),
+                        org.mockito.Mockito.mock(com.forgeai.sourcecontrol.infrastructure.outbox.OutboxService.class)
+                );
+
+        String payload = """
+            {
+                "repository": {
+                    "id": 99999,
+                    "name": "unknown-repo",
+                    "full_name": "attacker-org/unknown-repo",
+                    "default_branch": "main",
+                    "private": true
+                },
+                "installation": {
+                    "id": %d
+                },
+                "commits": []
+            }
+            """.formatted(unknownInstId);
+
+        pushHandler.handle(objectMapper.readTree(payload), "deliv-push-quarantine");
+
+        org.mockito.ArgumentCaptor<com.forgeai.sourcecontrol.domain.model.Repository> captor =
+                org.mockito.ArgumentCaptor.forClass(com.forgeai.sourcecontrol.domain.model.Repository.class);
+        org.mockito.Mockito.verify(mockRepoRepo).save(captor.capture());
+
+        com.forgeai.sourcecontrol.domain.model.Repository savedRepo = captor.getValue();
+        // Mandatory: Must be quarantined under 00000000-0000-0000-0000-000000000000, never an arbitrary tenant
+        assertThat(savedRepo.getOrganizationId()).isEqualTo(QUARANTINE_ORG_ID);
+        assertThat(savedRepo.getInstallationId()).isEqualTo(unknownInstId);
+
+        Optional<GitHubInstallation> quarantinedInst = installationRepository.findByInstallationId(unknownInstId);
+        assertThat(quarantinedInst).isPresent();
+        assertThat(quarantinedInst.get().getOrganizationId()).isEqualTo(QUARANTINE_ORG_ID);
+        assertThat(quarantinedInst.get().getStatus()).isEqualTo(InstallationStatus.SUSPENDED);
+    }
+
     private static String getSampleRsaKey() {
         try {
             java.security.KeyPairGenerator gen = java.security.KeyPairGenerator.getInstance("RSA");

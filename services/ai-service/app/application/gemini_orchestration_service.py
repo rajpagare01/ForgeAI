@@ -42,14 +42,7 @@ class GeminiOrchestrationService:
         """
         start_time = time.time()
 
-        # 1. Graph impact
-        impacted_symbols = await self.retrieval_service.get_impacted_symbols(
-            organization_id=organization_id,
-            changed_symbols=changed_symbols,
-            max_depth=3,
-        )
-
-        # 2. Semantic retrieval for PR description context (scoped to tenant and repository)
+        # 1. Semantic retrieval for PR description context (scoped to tenant and repository)
         retrieved_chunks = await self.retrieval_service.semantic_search(
             organization_id=organization_id,
             query=f"{title}\n{description}",
@@ -57,8 +50,24 @@ class GeminiOrchestrationService:
             repository_id=repository_id,
         )
 
-        # 3. Grounding Check: If no evidence exists in the repository, return explicit insufficient-context result
-        if not retrieved_chunks and not impacted_symbols and not changed_symbols:
+        # 2. Automatically derive affected symbols from retrieved code chunks if not manually provided
+        effective_symbols = list(changed_symbols) if changed_symbols else []
+        if not effective_symbols and retrieved_chunks:
+            for c in retrieved_chunks:
+                sym = c.get("symbol_name")
+                if sym and sym not in effective_symbols:
+                    effective_symbols.append(sym)
+
+        # 3. Graph impact (scoped to tenant and repository)
+        impacted_symbols = await self.retrieval_service.get_impacted_symbols(
+            organization_id=organization_id,
+            repository_id=repository_id,
+            changed_symbols=effective_symbols,
+            max_depth=3,
+        )
+
+        # 4. Grounding Check: If no evidence exists in the repository, return explicit insufficient-context result
+        if not retrieved_chunks and not impacted_symbols and not effective_symbols:
             duration_ms = int((time.time() - start_time) * 1000)
             summary_text = (
                 "### Architectural Review (Insufficient Context)\n"
@@ -105,7 +114,7 @@ PR Number: #{pr_number}
 PR Title: {title}
 PR Description: {description}
 Directly Changed Symbols:
-{', '.join(changed_symbols) if changed_symbols else 'None provided'}
+{', '.join(effective_symbols) if effective_symbols else 'None provided (inferred from retrieved context)'}
 
 ======================================================================
 RETRIEVED ENGINEERING DATA (UNTRUSTED REPOSITORY ARTIFACTS):

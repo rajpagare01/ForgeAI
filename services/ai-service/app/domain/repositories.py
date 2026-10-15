@@ -35,7 +35,7 @@ class GraphEdgeRepository(ABC):
 
     @abstractmethod
     async def find_impact_tree(
-        self, org_id: UUID, target_symbol: str, max_depth: int = 3
+        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3
     ) -> List[Dict[str, Any]]:
         pass
 

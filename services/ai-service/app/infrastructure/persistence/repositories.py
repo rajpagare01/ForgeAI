@@ -206,29 +206,30 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
         return len(edges)
 
     async def find_impact_tree(
-        self, org_id: UUID, target_symbol: str, max_depth: int = 3
+        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3
     ) -> List[Dict[str, Any]]:
         """
         Recursive CTE traversing knowledge graph up to max_depth hops.
-        Enforces tenant isolation by constraining every level to organization_id = $1.
+        Enforces tenant AND repository isolation by constraining every level to:
+        organization_id = $1 AND repository_id = $2.
         """
         query = """
             WITH RECURSIVE impact_tree AS (
                 SELECT source_symbol, target_symbol, edge_type, 1 AS depth
                 FROM graph_edges
-                WHERE organization_id = $1 AND target_symbol = $2
+                WHERE organization_id = $1 AND repository_id = $2 AND target_symbol = $3
                 UNION
                 SELECT ge.source_symbol, ge.target_symbol, ge.edge_type, it.depth + 1
                 FROM graph_edges ge
                 JOIN impact_tree it ON ge.target_symbol = it.source_symbol
-                WHERE ge.organization_id = $1 AND it.depth < $3
+                WHERE ge.organization_id = $1 AND ge.repository_id = $2 AND it.depth < $4
             )
             SELECT DISTINCT source_symbol, edge_type, depth
             FROM impact_tree
             ORDER BY depth ASC;
         """
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(query, org_id, target_symbol, max_depth)
+            rows = await conn.fetch(query, org_id, repository_id, target_symbol, max_depth)
         return [
             {
                 "source_symbol": r["source_symbol"],
@@ -322,10 +323,14 @@ class AsyncpgIndexJobRepository(IndexJobRepository):
                 id, organization_id, repository_id, commit_sha, status,
                 attempt_count, max_attempts, last_error, files, created_at, updated_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
-            RETURNING id;
+            ON CONFLICT (organization_id, repository_id, commit_sha)
+            DO UPDATE SET updated_at = NOW()
+            RETURNING id, organization_id, repository_id, commit_sha, status,
+                      attempt_count, max_attempts, last_error, files,
+                      created_at, updated_at, started_at, completed_at;
         """
         async with self.pool.acquire() as conn:
-            await conn.execute(
+            row = await conn.fetchrow(
                 query,
                 job.id,
                 job.organization_id,
@@ -339,6 +344,8 @@ class AsyncpgIndexJobRepository(IndexJobRepository):
                 job.created_at,
                 job.updated_at,
             )
+            if row:
+                return self._row_to_job(row)
         return job
 
     async def get_job_by_id(self, job_id: UUID) -> Optional[IndexJob]:

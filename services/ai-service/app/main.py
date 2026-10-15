@@ -24,19 +24,9 @@ async def lifespan(app: FastAPI):
     try:
         await db_pool.init()
         pool = db_pool.pool
-        import os
-        migrations_dir = os.path.join(os.path.dirname(__file__), "..", "migrations")
-        if os.path.exists(migrations_dir):
-            migration_files = sorted([f for f in os.listdir(migrations_dir) if f.endswith(".sql")])
-            for mf in migration_files:
-                try:
-                    with open(os.path.join(migrations_dir, mf), "r") as f:
-                        schema_sql = f.read()
-                    async with pool.acquire() as conn:
-                        await conn.execute(schema_sql)
-                    logger.info(f"Database migration {mf} executed successfully.")
-                except Exception as se:
-                    logger.warning(f"Schema migration {mf} skipped or failed: {se}")
+        from app.core.migration_runner import run_migrations
+        await run_migrations(pool)
+
         # Initialize background index worker with durable job repository
         from app.infrastructure.persistence.repositories import AsyncpgIndexJobRepository
         chunk_repo = AsyncpgCodeChunkRepository(pool)
@@ -47,7 +37,8 @@ async def lifespan(app: FastAPI):
         await worker.start_worker()
         ai_router.index_worker = worker
     except Exception as e:
-        logger.warning(f"Could not connect to database on startup: {e}. Endpoints will initialize on demand.")
+        logger.error(f"Startup initialization failed: {e}", exc_info=True)
+        raise RuntimeError(f"AI Service startup failed: {e}") from e
 
     yield
 

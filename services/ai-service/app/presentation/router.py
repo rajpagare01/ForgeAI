@@ -69,25 +69,39 @@ async def enqueue_indexing_job(
             index_worker = DurableIndexWorker(indexing_service, job_repo=job_repo)
             await index_worker.start_worker()
         except Exception as e:
-            logger.error(f"Failed to lazily initialize DurableIndexWorker: {e}")
+            logger.error(f"Failed to initialize DurableIndexWorker with persistent store: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Durable indexing queue unavailable: failed to initialize database-backed store: {e}",
+            )
 
     files_payload = [{"file_path": f.file_path, "content": f.content} for f in req.files]
-    job_id = None
-    if index_worker:
+    try:
         job = await index_worker.enqueue_index_job(
             organization_id=org_id,
             repository_id=req.repository_id,
             commit_sha=req.commit_sha,
             files=files_payload,
         )
-        job_id = job.id
+    except Exception as e:
+        logger.error(f"Failed to durably persist index job: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Durable index queue failed to persist job: {e}",
+        )
+
+    if not job or not job.id:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to obtain valid job ID from durable queue",
+        )
 
     return EnqueueIndexJobResponse(
         status="ENQUEUED",
         repository_id=req.repository_id,
         commit_sha=req.commit_sha,
         files_enqueued=len(req.files),
-        job_id=job_id,
+        job_id=job.id,
     )
 
 
@@ -154,6 +168,7 @@ async def graph_impact_analysis(
     _, retrieval_service, _ = await get_services()
     return await retrieval_service.get_impacted_symbols(
         organization_id=org_id,
+        repository_id=req.repository_id,
         changed_symbols=req.changed_symbols,
         max_depth=req.max_depth,
     )

@@ -163,12 +163,17 @@ export default function AiInsightsPage() {
   const handleImpact = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!symbolsInput.trim()) return;
+    if (!selectedRepoId) {
+      setImpactError("Please select an authorized repository.");
+      return;
+    }
 
     setIsAnalyzingImpact(true);
     setImpactError(null);
     const symbols = symbolsInput.split(",").map((s) => s.trim()).filter(Boolean);
     try {
       const results = await apiClient.post<any[]>("/api/v1/ai/impact", {
+        repository_id: selectedRepoId,
         changed_symbols: symbols,
         max_depth: 3,
       });

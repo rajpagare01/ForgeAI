@@ -29,6 +29,7 @@ class SemanticSearchRequest(BaseModel):
 
 
 class ImpactAnalysisRequest(BaseModel):
+    repository_id: UUID
     changed_symbols: List[str]
     max_depth: int = 3
 

@@ -40,16 +40,19 @@ class RetrievalService:
     async def get_impacted_symbols(
         self,
         organization_id: UUID,
+        repository_id: UUID,
         changed_symbols: List[str],
         max_depth: int = 3,
     ) -> List[Dict[str, Any]]:
         """
         Runs recursive CTE on graph_edges for all changed symbols to find impacted upstream callers/users.
+        Enforces both organization_id and repository_id isolation.
         """
         all_impacted: Dict[str, Dict[str, Any]] = {}
         for sym in changed_symbols:
             tree = await self.graph_edge_repo.find_impact_tree(
                 org_id=organization_id,
+                repository_id=repository_id,
                 target_symbol=sym,
                 max_depth=max_depth,
             )

@@ -25,7 +25,13 @@ class DurableIndexWorker:
         job_repo: Optional[IndexJobRepository] = None,
     ):
         self.indexing_service = indexing_service
-        self.job_repo = job_repo or InMemoryIndexJobRepository()
+        if job_repo is None:
+            raise ValueError(
+                "job_repo is required to initialize DurableIndexWorker. "
+                "Production paths must provide AsyncpgIndexJobRepository; "
+                "unit tests may pass InMemoryIndexJobRepository explicitly."
+            )
+        self.job_repo = job_repo
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
         self._poll_interval = 0.5

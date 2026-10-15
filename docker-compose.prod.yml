@@ -6,14 +6,14 @@ services:
     image: pgvector/pgvector:pg16
     container_name: forgeai-postgres-prod
     environment:
-      POSTGRES_USER: forgeai
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: ${POSTGRES_USER:-forgeai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       POSTGRES_DB: postgres
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./scripts/docker/init-multi-postgres.sh:/docker-entrypoint-initdb.d/init-multi-postgres.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forgeai -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgeai} -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -61,8 +61,8 @@ services:
     container_name: forgeai-identity-prod
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_identity
-      SPRING_DATASOURCE_USERNAME: forgeai
-      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       SERVER_PORT: 8081
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
@@ -96,8 +96,8 @@ services:
     container_name: forgeai-project-prod
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_project
-      SPRING_DATASOURCE_USERNAME: forgeai
-      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       SERVER_PORT: 8085
     depends_on:
       postgres:
@@ -129,14 +129,14 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: source_control_db
-      DB_USER: forgeai
-      DB_PASSWORD: password
+      DB_USER: ${POSTGRES_USER:-forgeai}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       SERVER_PORT: 8082
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       # GitHub App credentials — inject these to enable GitHub integration
       # Leave unset to run in unconfigured mode (GitHub features return 503)
-      GITHUB_APP_ID: ${GITHUB_APP_ID:-0}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
       GITHUB_PRIVATE_KEY_PATH: ${GITHUB_PRIVATE_KEY_PATH:-/app/secrets/github-app-private-key.pem}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
@@ -174,8 +174,8 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: testing_db
-      DB_USER: forgeai
-      DB_PASSWORD: password
+      DB_USER: ${POSTGRES_USER:-forgeai}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       SERVER_PORT: 8083
     depends_on:
       postgres:
@@ -204,7 +204,7 @@ services:
       dockerfile: Dockerfile
     container_name: forgeai-ai-prod
     environment:
-      DATABASE_URL: postgresql://forgeai:${POSTGRES_PASSWORD:-password}@postgres:5432/ai_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-forgeai}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}@postgres:5432/ai_db
       REDIS_URL: redis://redis:6379/0
       PORT: 8084
       ENVIRONMENT: ${ENVIRONMENT:-production}

@@ -22,13 +22,23 @@ import java.util.UUID;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class PushEventHandler {
 
     private final RepositoryRepository repositoryRepository;
     private final GitHubInstallationRepository installationRepository;
     private final CommitRepository commitRepository;
     private final OutboxService outboxService;
+
+    public PushEventHandler(
+            RepositoryRepository repositoryRepository,
+            GitHubInstallationRepository installationRepository,
+            CommitRepository commitRepository,
+            OutboxService outboxService) {
+        this.repositoryRepository = repositoryRepository;
+        this.installationRepository = installationRepository;
+        this.commitRepository = commitRepository;
+        this.outboxService = outboxService;
+    }
 
     @Transactional
     public void handle(JsonNode rootNode, String deliveryId) {
@@ -146,24 +156,14 @@ public class PushEventHandler {
         }
 
         if (orgId == null) {
-            Optional<GitHubInstallation> defaultInst = installationRepository.findByInstallationId(1001L);
-            if (defaultInst.isPresent() && !UUID.fromString("00000000-0000-0000-0000-000000000000").equals(defaultInst.get().getOrganizationId())) {
-                orgId = defaultInst.get().getOrganizationId();
-                installationId = 1001L;
-            }
-        }
-
-        if (orgId == null) {
             UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
             log.warn("Push received for unmapped repository/installation {} (repo: {}). Quarantining under tenant {}.", installationId, fullName, QUARANTINE_ORG_ID);
             orgId = QUARANTINE_ORG_ID;
-            if (installationId == null || installationId <= 0) {
-                installationId = 1001L;
-            }
-            if (installationRepository.findByInstallationId(installationId).isEmpty()) {
+            long effectiveInstId = (installationId != null && installationId > 0) ? installationId : 0L;
+            if (effectiveInstId > 0 && installationRepository.findByInstallationId(effectiveInstId).isEmpty()) {
                 GitHubInstallation inst = GitHubInstallation.builder()
                         .organizationId(QUARANTINE_ORG_ID)
-                        .installationId(installationId)
+                        .installationId(effectiveInstId)
                         .accountLogin(fullName.contains("/") ? fullName.split("/")[0] : "quarantine")
                         .accountType("Organization")
                         .status(InstallationStatus.SUSPENDED)
@@ -172,6 +172,7 @@ public class PushEventHandler {
                         .build();
                 installationRepository.save(inst);
             }
+            installationId = effectiveInstId;
         }
 
         Repository repo = Repository.builder()

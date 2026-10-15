@@ -79,9 +79,9 @@ class InMemoryGraphEdgeRepository(GraphEdgeRepository):
         return len(edges)
 
     async def find_impact_tree(
-        self, org_id: UUID, target_symbol: str, max_depth: int = 3
+        self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3
     ) -> List[Dict[str, Any]]:
-        # Simulates the recursive CTE with organization_id = org_id isolation
+        # Simulates the recursive CTE with organization_id and repository_id isolation
         visited: Dict[str, Dict[str, Any]] = {}
         queue = [(target_symbol, 1)]
 
@@ -91,7 +91,11 @@ class InMemoryGraphEdgeRepository(GraphEdgeRepository):
                 continue
 
             for edge in self.edges:
-                if edge.organization_id == org_id and edge.target_symbol == curr_target:
+                if (
+                    edge.organization_id == org_id
+                    and edge.repository_id == repository_id
+                    and edge.target_symbol == curr_target
+                ):
                     src = edge.source_symbol
                     if src not in visited or depth < visited[src]["depth"]:
                         visited[src] = {
@@ -126,6 +130,13 @@ class InMemoryIndexJobRepository(IndexJobRepository):
         self.jobs: Dict[UUID, IndexJob] = {}
 
     async def create_job(self, job: IndexJob) -> IndexJob:
+        for existing in self.jobs.values():
+            if (
+                existing.organization_id == job.organization_id
+                and existing.repository_id == job.repository_id
+                and existing.commit_sha == job.commit_sha
+            ):
+                return existing
         self.jobs[job.id] = job
         return job
 

@@ -215,6 +215,7 @@ public class TokenRotationService {
     # Assert calling dependencies identified via recursive CTE traversal
     impacted = await retrieval_service.get_impacted_symbols(
         organization_id=org_id,
+        repository_id=repo_id,
         changed_symbols=["com.forgeai.auth.TokenRotationService#rotateWithGracePeriod"],
         max_depth=3,
     )
