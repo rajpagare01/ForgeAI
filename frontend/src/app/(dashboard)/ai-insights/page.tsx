@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useTenant } from "@/lib/tenant-context";
 import { apiClient } from "@/lib/api-client";
-import { Repository, PullRequest } from "@/types";
+import { Repository } from "@/types";
 import {
   Sparkles,
   Search,
@@ -19,46 +19,95 @@ import {
   AlertTriangle,
   FolderGit2,
   ExternalLink,
+  ChevronDown,
+  ChevronRight,
+  GitCommit,
+  Layers,
+  Database,
+  Cpu,
+  ArrowRight,
+  FileDiff,
+  Code2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+type LifecycleStep = "idle" | "fetching" | "deriving" | "indexing" | "graph" | "reasoning" | "complete";
+
+interface PullRequestFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  content?: string;
+}
+
+interface PullRequestChangeSet {
+  repositoryId: string;
+  repositoryFullName: string;
+  number: number;
+  title: string;
+  body: string;
+  state: string;
+  sourceBranch: string;
+  targetBranch: string;
+  baseSha: string;
+  headSha: string;
+  author: string;
+  additions: number;
+  deletions: number;
+  changedFilesCount: number;
+  files: PullRequestFile[];
+}
+
 export default function AiInsightsPage() {
   const { currentOrg } = useTenant();
-  const [activeTab, setActiveTab] = useState<"search" | "impact" | "pr">("search");
+  const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact">("pr");
 
-  // Authorized repositories belonging to current organization
+  // Authorized repositories
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
   const [isLoadingRepos, setIsLoadingRepos] = useState<boolean>(true);
 
-  // Real Pull Requests for selected repository
+  // Real Pull Requests
   const [pullRequests, setPullRequests] = useState<any[]>([]);
   const [selectedPrNumber, setSelectedPrNumber] = useState<number | "">("");
   const [isLoadingPrs, setIsLoadingPrs] = useState<boolean>(false);
 
-  // Semantic search state
+  // Authoritative PR Change Set
+  const [prChangeSet, setPrChangeSet] = useState<PullRequestChangeSet | null>(null);
+  const [isLoadingChangeSet, setIsLoadingChangeSet] = useState<boolean>(false);
+
+  // PR Analysis & Lifecycle state
+  const [lifecycleStep, setLifecycleStep] = useState<LifecycleStep>("idle");
+  const [isAnalyzingPr, setIsAnalyzingPr] = useState<boolean>(false);
+  const [prAnalysisResult, setPrAnalysisResult] = useState<any | null>(null);
+  const [prError, setPrError] = useState<string | null>(null);
+
+  // Advanced override
+  const [showAdvancedOverride, setShowAdvancedOverride] = useState<boolean>(false);
+  const [manualSymbolsInput, setManualSymbolsInput] = useState<string>("");
+
+  // Semantic search tab state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Impact analysis state
-  const [symbolsInput, setSymbolsInput] = useState("");
+  // Impact analysis tab state
+  const [impactSymbolsInput, setImpactSymbolsInput] = useState("");
   const [impactResults, setImpactResults] = useState<any[]>([]);
   const [isAnalyzingImpact, setIsAnalyzingImpact] = useState(false);
   const [impactError, setImpactError] = useState<string | null>(null);
 
-  // PR analysis state
-  const [prTitle, setPrTitle] = useState("");
-  const [prDescription, setPrDescription] = useState("");
-  const [prAnalysisResult, setPrAnalysisResult] = useState<any | null>(null);
-  const [isAnalyzingPr, setIsAnalyzingPr] = useState(false);
-  const [prError, setPrError] = useState<string | null>(null);
+  // Provenance filter
+  const [provenanceFilter, setProvenanceFilter] = useState<"ALL" | "PR_DIFF" | "GRAPH" | "VECTOR">("ALL");
 
-  // 1. Fetch authorized repositories for the authenticated organization
+  // 1. Fetch authorized repositories
   const fetchRepositories = useCallback(async () => {
     setIsLoadingRepos(true);
     try {
@@ -95,6 +144,8 @@ export default function AiInsightsPage() {
   useEffect(() => {
     if (!selectedRepoId) {
       setPullRequests([]);
+      setPrChangeSet(null);
+      setSelectedPrNumber("");
       return;
     }
     const fetchPrs = async () => {
@@ -105,18 +156,17 @@ export default function AiInsightsPage() {
           setPullRequests(prs);
           if (prs.length > 0) {
             const first = prs[0];
-            setSelectedPrNumber(first.prNumber || first.number || 1);
-            setPrTitle(first.title || "");
-            setPrDescription(first.body || first.description || "Production Pull Request Assessment");
+            const num = first.prNumber || first.number || 1;
+            setSelectedPrNumber(num);
           } else {
             setSelectedPrNumber("");
-            setPrTitle("");
-            setPrDescription("");
+            setPrChangeSet(null);
           }
         }
       } catch (err: any) {
         console.warn("Could not fetch pull requests for repo:", err);
         setPullRequests([]);
+        setPrChangeSet(null);
       } finally {
         setIsLoadingPrs(false);
       }
@@ -124,25 +174,82 @@ export default function AiInsightsPage() {
     fetchPrs();
   }, [selectedRepoId]);
 
-  // Handle PR select dropdown
-  const handleSelectPr = (prNumStr: string) => {
-    if (!prNumStr) {
-      setSelectedPrNumber("");
+  // 3. Fetch authoritative change set when selected PR changes
+  useEffect(() => {
+    if (!selectedRepoId || !selectedPrNumber) {
+      setPrChangeSet(null);
       return;
     }
-    const num = Number(prNumStr);
-    setSelectedPrNumber(num);
-    const found = pullRequests.find((p) => (p.prNumber || p.number) === num);
-    if (found) {
-      setPrTitle(found.title || "");
-      setPrDescription(found.body || found.description || "");
+    const fetchChangeSet = async () => {
+      setIsLoadingChangeSet(true);
+      try {
+        const data = await apiClient.get<PullRequestChangeSet>(
+          `/api/v1/pull-requests/${selectedPrNumber}/changes?repositoryId=${selectedRepoId}`
+        );
+        if (data && typeof data === "object") {
+          setPrChangeSet(data);
+        }
+      } catch (err: any) {
+        console.warn("Could not fetch authoritative PR change set:", err);
+        setPrChangeSet(null);
+      } finally {
+        setIsLoadingChangeSet(false);
+      }
+    };
+    fetchChangeSet();
+  }, [selectedRepoId, selectedPrNumber]);
+
+  // Handle Automatic Real PR Analysis
+  const handleAnalyzePr = async () => {
+    if (!selectedRepoId || !selectedPrNumber) {
+      setPrError("Please select an authorized repository and pull request.");
+      return;
+    }
+
+    setIsAnalyzingPr(true);
+    setPrError(null);
+    setPrAnalysisResult(null);
+
+    // Lifecycle animation sequence
+    setLifecycleStep("fetching");
+    const t1 = setTimeout(() => setLifecycleStep("deriving"), 600);
+    const t2 = setTimeout(() => setLifecycleStep("indexing"), 1200);
+    const t3 = setTimeout(() => setLifecycleStep("graph"), 1800);
+    const t4 = setTimeout(() => setLifecycleStep("reasoning"), 2400);
+
+    try {
+      const payload: any = {
+        repository_id: selectedRepoId,
+        pr_number: Number(selectedPrNumber),
+      };
+
+      if (manualSymbolsInput.trim()) {
+        payload.changed_symbols = manualSymbolsInput
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+
+      const result = await apiClient.post<any>("/api/v1/ai/pr-analysis", payload);
+      setPrAnalysisResult(result);
+      setLifecycleStep("complete");
+    } catch (err: any) {
+      console.warn("PR analysis failed:", err);
+      setPrError(err?.message || "PR Analysis request failed on AI Service.");
+      setLifecycleStep("idle");
+    } finally {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      setIsAnalyzingPr(false);
     }
   };
 
+  // Search handler
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-
     setIsSearching(true);
     setSearchError(null);
     try {
@@ -153,25 +260,20 @@ export default function AiInsightsPage() {
       });
       setSearchResults(Array.isArray(results) ? results : []);
     } catch (err: any) {
-      console.warn("Semantic search failed:", err);
       setSearchError(err?.message || "Semantic search request failed on AI Service.");
     } finally {
       setIsSearching(false);
     }
   };
 
+  // Impact handler
   const handleImpact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!symbolsInput.trim()) return;
-    if (!selectedRepoId) {
-      setImpactError("Please select an authorized repository.");
-      return;
-    }
-
+    if (!impactSymbolsInput.trim() || !selectedRepoId) return;
     setIsAnalyzingImpact(true);
     setImpactError(null);
-    const symbols = symbolsInput.split(",").map((s) => s.trim()).filter(Boolean);
     try {
+      const symbols = impactSymbolsInput.split(",").map((s) => s.trim()).filter(Boolean);
       const results = await apiClient.post<any[]>("/api/v1/ai/impact", {
         repository_id: selectedRepoId,
         changed_symbols: symbols,
@@ -179,39 +281,20 @@ export default function AiInsightsPage() {
       });
       setImpactResults(Array.isArray(results) ? results : []);
     } catch (err: any) {
-      console.warn("Impact analysis failed:", err);
       setImpactError(err?.message || "Impact analysis request failed on AI Service.");
     } finally {
       setIsAnalyzingImpact(false);
     }
   };
 
-  const handlePrAnalysis = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedRepoId) {
-      setPrError("Please select an authorized repository.");
-      return;
-    }
-    setIsAnalyzingPr(true);
-    setPrError(null);
-    try {
-      const result = await apiClient.post<any>("/api/v1/ai/pr-analysis", {
-        repository_id: selectedRepoId,
-        pr_number: Number(selectedPrNumber) || 1,
-        title: prTitle || "Feature Pull Request",
-        description: prDescription || "Automated impact assessment",
-        changed_symbols: symbolsInput ? symbolsInput.split(",").map((s) => s.trim()) : [],
-      });
-      setPrAnalysisResult(result);
-    } catch (err: any) {
-      console.warn("PR analysis failed:", err);
-      setPrError(err?.message || "PR Analysis request failed on AI Service.");
-    } finally {
-      setIsAnalyzingPr(false);
-    }
-  };
-
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId);
+
+  // Filtered provenance chunks
+  const filteredChunks = React.useMemo(() => {
+    if (!prAnalysisResult || !Array.isArray(prAnalysisResult.retrieved_chunks)) return [];
+    if (provenanceFilter === "ALL") return prAnalysisResult.retrieved_chunks;
+    return prAnalysisResult.retrieved_chunks.filter((c: any) => c.source === provenanceFilter);
+  }, [prAnalysisResult, provenanceFilter]);
 
   return (
     <div className="space-y-8">
@@ -225,14 +308,14 @@ export default function AiInsightsPage() {
             </h1>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Hybrid RAG retrieval, AST call graph impact, and grounded LLM reasoning (Gemini Primary + Groq Fallback) for{" "}
+            Automatic real GitHub PR intelligence, AST static analysis, repository-scoped blast radius, and grounded LLM reasoning for{" "}
             <span className="text-purple-300 font-medium">{currentOrg.name}</span>.
           </p>
         </div>
 
         {/* Authorized Repository Selector */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5">
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 shadow-sm">
             <FolderGit2 className="h-4 w-4 text-purple-400" />
             <span className="text-xs text-slate-400">Repository:</span>
             {isLoadingRepos ? (
@@ -267,21 +350,22 @@ export default function AiInsightsPage() {
         </div>
       </div>
 
-      {/* Grounding & Fallibility Advisory */}
-      <div className="flex items-start gap-3 rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-4 text-xs text-indigo-200">
-        <Info className="h-5 w-5 shrink-0 text-indigo-400 mt-0.5" />
-        <div>
-          <span className="font-semibold text-white">Grounded Intelligence Contract: </span>
-          All semantic insights and blast-radius summaries are strictly grounded in verified repository chunks and AST call trees.
-          If primary Google Gemini inference is degraded, Groq Cloud failover engages transparently with honest provider provenance recorded in audit logs.
-        </div>
-      </div>
-
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
         <button
+          onClick={() => setActiveTab("pr")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+            activeTab === "pr"
+              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+          }`}
+        >
+          <GitPullRequest className="h-4 w-4" />
+          Automatic PR Intelligence
+        </button>
+        <button
           onClick={() => setActiveTab("search")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
             activeTab === "search"
               ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
               : "text-slate-400 hover:text-white hover:bg-slate-800/60"
@@ -292,7 +376,7 @@ export default function AiInsightsPage() {
         </button>
         <button
           onClick={() => setActiveTab("impact")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
             activeTab === "impact"
               ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
               : "text-slate-400 hover:text-white hover:bg-slate-800/60"
@@ -301,20 +385,421 @@ export default function AiInsightsPage() {
           <Network className="h-4 w-4" />
           AST Call Graph Blast Radius
         </button>
-        <button
-          onClick={() => setActiveTab("pr")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
-            activeTab === "pr"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
-          }`}
-        >
-          <GitPullRequest className="h-4 w-4" />
-          PR Impact Review (Hybrid RAG)
-        </button>
       </div>
 
-      {/* Tab 1: Semantic Vector Search */}
+      {/* ========================================================================= */}
+      {/* TAB 1: AUTOMATIC REAL GITHUB PULL REQUEST INTELLIGENCE                    */}
+      {/* ========================================================================= */}
+      {activeTab === "pr" && (
+        <div className="space-y-6">
+          {/* PR Selector & Metadata Header */}
+          <Card className="border-indigo-500/20 bg-slate-900/60">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base text-white flex items-center gap-2">
+                    <GitPullRequest className="h-5 w-5 text-indigo-400" />
+                    Authoritative GitHub Pull Request
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Select a real GitHub pull request to automatically obtain change sets, statically derive symbols, and compute blast radius.
+                  </CardDescription>
+                </div>
+
+                {/* PR Dropdown */}
+                <div className="flex items-center gap-2">
+                  {isLoadingPrs ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-400 py-1.5 px-3 bg-slate-950 border border-slate-800 rounded-lg">
+                      <Loader2 className="h-3 w-3 animate-spin text-purple-400" />
+                      Loading PRs...
+                    </div>
+                  ) : pullRequests.length > 0 ? (
+                    <select
+                      aria-label="Authoritative Pull Request Selection"
+                      value={selectedPrNumber}
+                      onChange={(e) => setSelectedPrNumber(Number(e.target.value) || "")}
+                      className="bg-slate-950 border border-slate-800 text-xs text-white rounded-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer max-w-xs truncate"
+                    >
+                      {pullRequests.map((pr) => (
+                        <option key={pr.id || pr.number} value={pr.prNumber || pr.number}>
+                          #{pr.prNumber || pr.number}: {pr.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="text-xs text-slate-500 italic bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                      No pull requests synchronized for this repository
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {/* Authoritative Changeset Details Card */}
+            <CardContent className="space-y-4 pt-0">
+              {isLoadingChangeSet ? (
+                <div className="flex items-center justify-center p-6 text-xs text-slate-400">
+                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400 mr-2" />
+                  Fetching authoritative change set from GitHub / Source Control...
+                </div>
+              ) : prChangeSet ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white">
+                          #{prChangeSet.number}: {prChangeSet.title}
+                        </span>
+                        <Badge
+                          variant={prChangeSet.state === "OPEN" ? "success" : "outline"}
+                          className="text-[10px]"
+                        >
+                          {prChangeSet.state}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 font-mono">
+                        <GitBranch className="h-3 w-3 text-indigo-400" />
+                        <span>{prChangeSet.sourceBranch || "head"}</span>
+                        <ArrowRight className="h-3 w-3 text-slate-600" />
+                        <span>{prChangeSet.targetBranch || "main"}</span>
+                        {prChangeSet.headSha && (
+                          <span className="text-[10px] text-slate-500 ml-2">
+                            (head: {prChangeSet.headSha.substring(0, 7)})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stats pills */}
+                    <div className="flex items-center gap-2 text-xs font-mono">
+                      <span className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
+                        {prChangeSet.changedFilesCount || prChangeSet.files?.length || 0} files changed
+                      </span>
+                      <span className="px-2.5 py-1 rounded-md bg-emerald-950/50 border border-emerald-800/40 text-emerald-400">
+                        +{prChangeSet.additions || 0}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-md bg-rose-950/50 border border-rose-800/40 text-rose-400">
+                        -{prChangeSet.deletions || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Changed Files Chips */}
+                  {prChangeSet.files && prChangeSet.files.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Authoritative Changed Files ({prChangeSet.files.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                        {prChangeSet.files.map((file, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-300"
+                          >
+                            <FileCode className="h-3 w-3 text-indigo-400" />
+                            <span className="truncate max-w-xs">{file.filename}</span>
+                            <span
+                              className={`text-[9px] px-1 rounded uppercase font-bold ${
+                                file.status === "added"
+                                  ? "text-emerald-400 bg-emerald-950/80"
+                                  : file.status === "removed"
+                                  ? "text-rose-400 bg-rose-950/80"
+                                  : "text-amber-400 bg-amber-950/80"
+                              }`}
+                            >
+                              {file.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Primary Action Button */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+                    <Button
+                      onClick={handleAnalyzePr}
+                      disabled={isAnalyzingPr || !selectedRepoId || !selectedPrNumber}
+                      variant="glow"
+                      className="w-full sm:w-auto px-6 py-2.5 text-xs font-semibold flex items-center gap-2"
+                    >
+                      {isAnalyzingPr ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin text-white" />
+                          Running Real PR Intelligence Pipeline...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 text-purple-200" />
+                          Analyze Pull Request
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Advanced toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedOverride(!showAdvancedOverride)}
+                      className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+                    >
+                      {showAdvancedOverride ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                      Advanced Override (Manual Symbols)
+                    </button>
+                  </div>
+
+                  {/* Collapsible Advanced Override Section */}
+                  {showAdvancedOverride && (
+                    <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-2 mt-2">
+                      <div className="text-[11px] text-slate-400">
+                        Optional: Override static AST symbol derivation with manual symbols for debugging.
+                      </div>
+                      <Input
+                        placeholder="e.g. RepositoryApplicationService#getPullRequestChanges, TokenRotationService"
+                        value={manualSymbolsInput}
+                        onChange={(e) => setManualSymbolsInput(e.target.value)}
+                        className="text-xs font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {prError && (
+                <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+                  <span>{prError}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Lifecycle Execution Pipeline Indicator */}
+          {isAnalyzingPr && (
+            <Card className="border-indigo-500/30 bg-slate-900/80 p-5">
+              <div className="text-xs font-semibold text-white mb-3 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                Live PR Intelligence Pipeline Progression:
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-[11px]">
+                <div
+                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                    lifecycleStep === "fetching"
+                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
+                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                  }`}
+                >
+                  <GitPullRequest className="h-3 w-3 shrink-0" />
+                  <span>1. Authoritative PR</span>
+                </div>
+                <div
+                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                    lifecycleStep === "deriving"
+                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
+                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                  }`}
+                >
+                  <Code2 className="h-3 w-3 shrink-0" />
+                  <span>2. Tree-sitter AST</span>
+                </div>
+                <div
+                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                    lifecycleStep === "indexing"
+                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
+                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                  }`}
+                >
+                  <Database className="h-3 w-3 shrink-0" />
+                  <span>3. Durable Indexing</span>
+                </div>
+                <div
+                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                    lifecycleStep === "graph"
+                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
+                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                  }`}
+                >
+                  <Network className="h-3 w-3 shrink-0" />
+                  <span>4. Graph CTE</span>
+                </div>
+                <div
+                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                    lifecycleStep === "reasoning"
+                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
+                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                  }`}
+                >
+                  <Cpu className="h-3 w-3 shrink-0" />
+                  <span>5. Gemini Reasoning</span>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Analysis Results */}
+          {prAnalysisResult && (
+            <div className="space-y-6">
+              <Card className="border-purple-500/30 bg-purple-950/10 shadow-xl">
+                <CardHeader>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base text-white flex items-center gap-2">
+                        <ShieldCheck className="h-5 w-5 text-purple-400" />
+                        Grounded PR Engineering Impact Review
+                      </CardTitle>
+                      <Badge
+                        variant={
+                          prAnalysisResult.risk_level === "LOW"
+                            ? "success"
+                            : prAnalysisResult.risk_level === "MEDIUM"
+                            ? "warning"
+                            : "destructive"
+                        }
+                      >
+                        Risk: {prAnalysisResult.risk_level}
+                      </Badge>
+                    </div>
+
+                    {/* Transparency Badges */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="font-mono text-xs">
+                        Provider:{" "}
+                        <span className="text-purple-300 font-bold ml-1">
+                          {prAnalysisResult.provider === "GROQ"
+                            ? "Groq Cloud"
+                            : prAnalysisResult.provider === "GEMINI"
+                            ? "Google Gemini"
+                            : prAnalysisResult.provider}
+                        </span>
+                      </Badge>
+                      {prAnalysisResult.fallback_used ? (
+                        <Badge variant="destructive" className="font-mono text-xs animate-pulse">
+                          Fallback: Yes (Groq)
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="font-mono text-xs text-emerald-400 border-emerald-500/40">
+                          Primary: Gemini
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <CardDescription className="text-xs font-mono pt-1">
+                    Model: {prAnalysisResult.model_version} | Duration: {prAnalysisResult.execution_duration_ms}ms
+                    {prAnalysisResult.trace_id && ` | Trace: ${prAnalysisResult.trace_id.substring(0, 16)}...`}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="space-y-6">
+                  {/* Insufficient context warning callout if applicable */}
+                  {prAnalysisResult.summary.includes("INSUFFICIENT_CONTEXT") && (
+                    <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/30 text-xs text-amber-200 flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-amber-100">Grounded Evidence Warning: Insufficient Context</div>
+                        <div>
+                          No indexed code chunks or knowledge graph edges matched this repository. ForgeAI does not fabricate facts.
+                          Please ensure the repository has been indexed into ForgeAI before performing deep impact analysis.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary Body */}
+                  <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-line font-sans shadow-inner">
+                    {prAnalysisResult.summary}
+                  </div>
+
+                  {/* Grounded Provenance Explorer */}
+                  {Array.isArray(prAnalysisResult.retrieved_chunks) && prAnalysisResult.retrieved_chunks.length > 0 && (
+                    <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 text-purple-400" />
+                          Evidence & Provenance Explorer ({prAnalysisResult.retrieved_chunks.length} records)
+                        </h4>
+
+                        {/* Filter pills */}
+                        <div className="flex items-center gap-1 text-[11px]">
+                          {(["ALL", "PR_DIFF", "GRAPH", "VECTOR"] as const).map((filter) => (
+                            <button
+                              key={filter}
+                              onClick={() => setProvenanceFilter(filter)}
+                              className={`px-2.5 py-1 rounded text-[10px] font-mono transition-colors ${
+                                provenanceFilter === filter
+                                  ? "bg-purple-600 text-white font-bold"
+                                  : "bg-slate-900 text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              {filter}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto">
+                        {filteredChunks.map((chunk: any, i: number) => (
+                          <div
+                            key={i}
+                            className="p-3 rounded-lg border border-slate-800 bg-slate-950 text-xs font-mono flex flex-col gap-1.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] font-bold ${
+                                    chunk.source === "PR_DIFF"
+                                      ? "text-emerald-400 border-emerald-500/40"
+                                      : chunk.source === "GRAPH"
+                                      ? "text-purple-400 border-purple-500/40"
+                                      : "text-indigo-400 border-indigo-500/40"
+                                  }`}
+                                >
+                                  {chunk.source || "VECTOR"}
+                                </Badge>
+                                <span className="text-white font-semibold truncate max-w-sm">
+                                  {chunk.file_path || chunk.symbol_name || "Repository Artifact"}
+                                </span>
+                              </div>
+
+                              {chunk.similarity !== undefined && (
+                                <span className="text-[10px] text-slate-400">
+                                  Similarity: {(chunk.similarity * 100).toFixed(1)}%
+                                </span>
+                              )}
+                              {chunk.depth !== undefined && (
+                                <span className="text-[10px] text-slate-400">
+                                  Depth: {chunk.depth} hops ({chunk.edge_type})
+                                </span>
+                              )}
+                            </div>
+
+                            {chunk.content && (
+                              <div className="text-[11px] text-slate-400 bg-slate-900/80 p-2 rounded truncate">
+                                {chunk.content}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-900">
+                              <span>Symbol: <code className="text-slate-400">{chunk.symbol_name || chunk.file_path}</code></span>
+                              {chunk.commit_sha && (
+                                <span>Commit: <code className="text-slate-400">{chunk.commit_sha.substring(0, 7)}</code></span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: SEMANTIC VECTOR SEARCH                                             */}
+      {/* ========================================================================= */}
       {activeTab === "search" && (
         <div className="space-y-6">
           <Card>
@@ -391,7 +876,9 @@ export default function AiInsightsPage() {
         </div>
       )}
 
-      {/* Tab 2: Graph Impact Analysis */}
+      {/* ========================================================================= */}
+      {/* TAB 3: GRAPH IMPACT ANALYSIS                                              */}
+      {/* ========================================================================= */}
       {activeTab === "impact" && (
         <div className="space-y-6">
           <Card>
@@ -405,15 +892,15 @@ export default function AiInsightsPage() {
               <form onSubmit={handleImpact} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-slate-300">
-                    Changed Symbols (comma separated)
+                    Target Symbols (comma separated)
                   </label>
                   <Input
                     placeholder="e.g. JwtRevocationGatewayFilter, RedisRevocationStore, WebhookIngestionService"
-                    value={symbolsInput}
-                    onChange={(e) => setSymbolsInput(e.target.value)}
+                    value={impactSymbolsInput}
+                    onChange={(e) => setImpactSymbolsInput(e.target.value)}
                   />
                 </div>
-                <Button type="submit" variant="glow" disabled={isAnalyzingImpact || !symbolsInput.trim()}>
+                <Button type="submit" variant="glow" disabled={isAnalyzingImpact || !impactSymbolsInput.trim()}>
                   {isAnalyzingImpact ? <Loader2 className="h-4 w-4 animate-spin" /> : "Compute Blast Radius"}
                 </Button>
               </form>
@@ -448,188 +935,6 @@ export default function AiInsightsPage() {
                 ))}
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab 3: PR Impact Review (Hybrid RAG) */}
-      {activeTab === "pr" && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Grounded PR Impact Assessment</CardTitle>
-              <CardDescription>
-                Audited against authoritative Source Control data for{" "}
-                <span className="text-purple-300 font-semibold">{selectedRepo?.fullName || "Selected Repository"}</span>.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handlePrAnalysis} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Select Real Pull Request */}
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-300">
-                      Authoritative Pull Request
-                    </label>
-                    {isLoadingPrs ? (
-                      <div className="flex items-center gap-2 p-2 border border-slate-800 rounded-lg text-xs text-slate-400">
-                        <Loader2 className="h-3 w-3 animate-spin text-purple-400" />
-                        Fetching repository PRs...
-                      </div>
-                    ) : pullRequests.length > 0 ? (
-                      <select
-                        aria-label="Authoritative Pull Request Selection"
-                        value={selectedPrNumber}
-                        onChange={(e) => handleSelectPr(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-                      >
-                        {pullRequests.map((pr) => (
-                          <option key={pr.id || pr.number} value={pr.prNumber || pr.number}>
-                            #{pr.prNumber || pr.number}: {pr.title}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        type="number"
-                        placeholder="Pull Request #"
-                        value={selectedPrNumber}
-                        onChange={(e) => setSelectedPrNumber(Number(e.target.value) || "")}
-                      />
-                    )}
-                  </div>
-
-                  {/* PR Title */}
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-slate-300">PR Title</label>
-                    <Input
-                      placeholder="e.g. feat(gateway): token revocation filter"
-                      value={prTitle}
-                      onChange={(e) => setPrTitle(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">PR Description / Commit Log</label>
-                  <textarea
-                    placeholder="PR summary or commit log..."
-                    value={prDescription}
-                    onChange={(e) => setPrDescription(e.target.value)}
-                    className="h-20 w-full rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">Changed Symbols (Optional)</label>
-                  <Input
-                    placeholder="e.g. OutboxPublisherRelay, TestRunApplicationService"
-                    value={symbolsInput}
-                    onChange={(e) => setSymbolsInput(e.target.value)}
-                  />
-                </div>
-
-                <Button type="submit" variant="glow" disabled={isAnalyzingPr || !selectedRepoId || !prTitle}>
-                  {isAnalyzingPr ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Evaluating with Gemini Primary / Groq Fallback...
-                    </>
-                  ) : (
-                    "Generate Grounded AI Assessment"
-                  )}
-                </Button>
-              </form>
-
-              {prError && (
-                <div className="mt-4 p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300">
-                  {prError}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Analysis Result Display */}
-          {prAnalysisResult && (
-            <Card className="border-purple-500/30 bg-purple-950/10">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base text-white">AI Analysis & Risk Audit</CardTitle>
-                    <Badge
-                      variant={
-                        prAnalysisResult.risk_level === "LOW"
-                          ? "success"
-                          : prAnalysisResult.risk_level === "MEDIUM"
-                          ? "warning"
-                          : "destructive"
-                      }
-                    >
-                      Risk: {prAnalysisResult.risk_level}
-                    </Badge>
-                  </div>
-
-                  {/* Provider & Fallback Transparency Badges */}
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="font-mono text-xs">
-                      Provider:{" "}
-                      <span className="text-purple-300 font-bold ml-1">
-                        {prAnalysisResult.provider === "GROQ"
-                          ? "Groq Cloud"
-                          : prAnalysisResult.provider === "GEMINI"
-                          ? "Google Gemini"
-                          : prAnalysisResult.provider}
-                      </span>
-                    </Badge>
-                    {prAnalysisResult.fallback_used ? (
-                      <Badge variant="destructive" className="font-mono text-xs animate-pulse">
-                        Fallback: Yes (Groq)
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="font-mono text-xs text-emerald-400 border-emerald-500/40">
-                        Primary: Gemini
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                <CardDescription className="text-xs font-mono pt-1">
-                  Model: {prAnalysisResult.model_version} | Duration: {prAnalysisResult.execution_duration_ms}ms
-                  {prAnalysisResult.trace_id && ` | Trace: ${prAnalysisResult.trace_id.substring(0, 16)}...`}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Summary Body */}
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-line">
-                  {prAnalysisResult.summary}
-                </div>
-
-                {/* Grounded Provenance References */}
-                {Array.isArray(prAnalysisResult.retrieved_chunks) && prAnalysisResult.retrieved_chunks.length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <FileCode className="h-3.5 w-3.5 text-purple-400" />
-                      Supporting Provenance & Evidence ({prAnalysisResult.retrieved_chunks.length} chunks)
-                    </h4>
-                    <div className="grid grid-cols-1 gap-2">
-                      {prAnalysisResult.retrieved_chunks.map((chunk: any, i: number) => (
-                        <div
-                          key={i}
-                          className="p-2.5 rounded-lg border border-slate-800/80 bg-slate-950 text-xs font-mono flex items-center justify-between"
-                        >
-                          <span className="text-indigo-300 truncate max-w-md">{chunk.file_path}</span>
-                          <span className="text-slate-500 text-[10px]">
-                            {chunk.symbol_name ? `symbol: ${chunk.symbol_name}` : `commit: ${chunk.commit_sha?.substring(0, 8)}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           )}
         </div>
       )}

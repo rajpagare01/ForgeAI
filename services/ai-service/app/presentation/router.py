@@ -36,9 +36,15 @@ async def get_services():
     chunk_repo = AsyncpgCodeChunkRepository(pool)
     edge_repo = AsyncpgGraphEdgeRepository(pool)
     analysis_repo = AsyncpgAnalysisRepository(pool)
+    job_repo = AsyncpgIndexJobRepository(pool)
     indexing_service = IndexingService(chunk_repo, edge_repo)
     retrieval_service = RetrievalService(chunk_repo, edge_repo)
-    orchestration_service = GeminiOrchestrationService(retrieval_service, analysis_repo)
+    orchestration_service = GeminiOrchestrationService(
+        retrieval_service=retrieval_service,
+        analysis_repo=analysis_repo,
+        indexing_service=indexing_service,
+        job_repo=job_repo,
+    )
     return indexing_service, retrieval_service, orchestration_service
 
 
@@ -186,6 +192,7 @@ async def analyze_pull_request(
     and saves an audit record into analyses correlated with the W3C trace_id.
     """
     _, _, orchestration_service = await get_services()
+    raw_files = [f.model_dump() for f in req.changed_files] if req.changed_files else None
     analysis = await orchestration_service.analyze_pull_request(
         organization_id=org_id,
         repository_id=req.repository_id,
@@ -193,6 +200,7 @@ async def analyze_pull_request(
         title=req.title,
         description=req.description,
         changed_symbols=req.changed_symbols,
+        changed_files=raw_files,
         trace_id=trace_id,
     )
     return AnalysisResponseDTO(

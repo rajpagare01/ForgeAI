@@ -143,6 +143,18 @@ class InMemoryIndexJobRepository(IndexJobRepository):
     async def get_job_by_id(self, job_id: UUID) -> Optional[IndexJob]:
         return self.jobs.get(job_id)
 
+    async def get_job_by_commit(
+        self, organization_id: UUID, repository_id: UUID, commit_sha: str
+    ) -> Optional[IndexJob]:
+        for job in reversed(list(self.jobs.values())):
+            if (
+                job.organization_id == organization_id
+                and job.repository_id == repository_id
+                and job.commit_sha == commit_sha
+            ):
+                return job
+        return None
+
     async def acquire_next_queued_job(self) -> Optional[IndexJob]:
         from app.domain.models import IndexJobStatus, utc_now
         for job in sorted(self.jobs.values(), key=lambda j: j.created_at):

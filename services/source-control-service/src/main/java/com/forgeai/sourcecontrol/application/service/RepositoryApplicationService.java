@@ -5,6 +5,7 @@ import com.forgeai.sourcecontrol.domain.exception.DuplicateResourceException;
 import com.forgeai.sourcecontrol.domain.exception.ResourceNotFoundException;
 import com.forgeai.sourcecontrol.domain.model.GitHubInstallation;
 import com.forgeai.sourcecontrol.domain.model.InstallationStatus;
+import com.forgeai.sourcecontrol.domain.model.PullRequest;
 import com.forgeai.sourcecontrol.domain.model.Repository;
 import com.forgeai.sourcecontrol.domain.repository.GitHubInstallationRepository;
 import com.forgeai.sourcecontrol.domain.repository.RepositoryRepository;
@@ -198,6 +199,124 @@ public class RepositoryApplicationService {
         log.info("[GitHub] Synchronized {} pull requests for repo: {}", savedList.size(), repo.getFullName());
         return savedList;
     }
+
+    @Transactional
+    public com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet getPullRequestChanges(
+            UUID organizationId, UUID repositoryId, int prNumber) {
+        requireTenant(organizationId);
+        Repository repo = getRepository(organizationId, repositoryId);
+
+        if (gitHubAppConfig.isConfigured()) {
+            try {
+                var detail = gitHubAppClient.getPullRequestDetail(repo.getInstallationId(), repo.getFullName(), prNumber);
+                List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestFile> enrichedFiles = new java.util.ArrayList<>();
+                if (detail.files() != null) {
+                    for (var f : detail.files()) {
+                        String content = null;
+                        if (!"removed".equalsIgnoreCase(f.status())) {
+                            content = gitHubAppClient.getFileContent(repo.getInstallationId(), repo.getFullName(), f.filename(), detail.headSha())
+                                    .orElse(null);
+                        }
+                        enrichedFiles.add(new com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestFile(
+                                f.filename(), f.status(), f.additions(), f.deletions(), f.changes(),
+                                f.patch(), f.rawUrl(), f.contentsUrl(), content
+                        ));
+                    }
+                }
+
+                // Update or save local pull request record
+                Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing =
+                        pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), prNumber);
+                com.forgeai.sourcecontrol.domain.model.PullRequestStatus status =
+                        "closed".equalsIgnoreCase(detail.state())
+                                ? com.forgeai.sourcecontrol.domain.model.PullRequestStatus.CLOSED
+                                : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN;
+
+                if (existing.isPresent()) {
+                    var pr = existing.get();
+                    pr.setTitle(detail.title());
+                    pr.setBody(detail.body());
+                    pr.setSourceBranch(detail.sourceBranch());
+                    pr.setTargetBranch(detail.targetBranch());
+                    pr.setStatus(status);
+                    pr.setUpdatedAt(Instant.now());
+                    pullRequestRepository.save(pr);
+                } else {
+                    var pr = com.forgeai.sourcecontrol.domain.model.PullRequest.builder()
+                            .organizationId(organizationId)
+                            .repositoryId(repo.getId())
+                            .githubPrId(detail.githubPrId())
+                            .number(detail.number())
+                            .title(detail.title())
+                            .body(detail.body())
+                            .sourceBranch(detail.sourceBranch())
+                            .targetBranch(detail.targetBranch())
+                            .status(status)
+                            .authorGithubId(detail.authorLogin())
+                            .createdAt(detail.createdAt() != null ? detail.createdAt() : Instant.now())
+                            .updatedAt(detail.updatedAt() != null ? detail.updatedAt() : Instant.now())
+                            .build();
+                    pullRequestRepository.save(pr);
+                }
+
+                return com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet.builder()
+                        .repositoryId(repo.getId())
+                        .repositoryFullName(repo.getFullName())
+                        .number(detail.number())
+                        .title(detail.title())
+                        .body(detail.body())
+                        .state(detail.state())
+                        .sourceBranch(detail.sourceBranch())
+                        .targetBranch(detail.targetBranch())
+                        .baseSha(detail.baseSha())
+                        .headSha(detail.headSha())
+                        .author(detail.authorLogin())
+                        .additions(detail.additions())
+                        .deletions(detail.deletions())
+                        .changedFilesCount(detail.changedFilesCount())
+                        .files(enrichedFiles)
+                        .createdAt(detail.createdAt())
+                        .updatedAt(detail.updatedAt())
+                        .build();
+
+            } catch (Exception e) {
+                log.warn("[GitHub] Could not fetch real-time PR changeset from GitHub API ({}); falling back to persisted PR record", e.getMessage());
+            }
+        }
+
+        // Fallback to persisted pull request record
+        var pr = pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), prNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Pull request #" + prNumber + " not found for repository " + repositoryId));
+
+        return com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet.builder()
+                .repositoryId(repo.getId())
+                .repositoryFullName(repo.getFullName())
+                .number(pr.getNumber())
+                .title(pr.getTitle())
+                .body(pr.getBody())
+                .state(pr.getStatus() != null ? pr.getStatus().name() : "OPEN")
+                .sourceBranch(pr.getSourceBranch())
+                .targetBranch(pr.getTargetBranch())
+                .baseSha("")
+                .headSha("")
+                .author(pr.getAuthorGithubId())
+                .additions(0)
+                .deletions(0)
+                .changedFilesCount(0)
+                .files(List.of())
+                .createdAt(pr.getCreatedAt())
+                .updatedAt(pr.getUpdatedAt())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public PullRequest getPullRequest(UUID organizationId, UUID repositoryId, int prNumber) {
+        requireTenant(organizationId);
+        Repository repo = getRepository(organizationId, repositoryId);
+        return pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), prNumber)
+                .orElseThrow(() -> new ResourceNotFoundException("Pull request #" + prNumber + " not found for repository " + repositoryId));
+    }
+
 
     // -------------------------------------------------------------------------
     // Installation claim

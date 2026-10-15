@@ -24,4 +24,20 @@ public class PullRequestController {
         UUID organizationId = TenantContext.getOrganizationId();
         return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, repositoryId));
     }
+
+    @GetMapping("/{number}")
+    public ResponseEntity<PullRequest> getPullRequest(
+            @PathVariable int number,
+            @RequestParam UUID repositoryId) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.getPullRequest(organizationId, repositoryId, number));
+    }
+
+    @GetMapping("/{number}/changes")
+    public ResponseEntity<com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet> getPullRequestChanges(
+            @PathVariable int number,
+            @RequestParam UUID repositoryId) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        return ResponseEntity.ok(repositoryApplicationService.getPullRequestChanges(organizationId, repositoryId, number));
+    }
 }

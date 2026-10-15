@@ -362,6 +362,24 @@ class AsyncpgIndexJobRepository(IndexJobRepository):
                 return self._row_to_job(row)
         return None
 
+    async def get_job_by_commit(
+        self, organization_id: UUID, repository_id: UUID, commit_sha: str
+    ) -> Optional[IndexJob]:
+        query = """
+            SELECT id, organization_id, repository_id, commit_sha, status,
+                   attempt_count, max_attempts, last_error, files,
+                   created_at, updated_at, started_at, completed_at
+            FROM ai_indexing_jobs
+            WHERE organization_id = $1 AND repository_id = $2 AND commit_sha = $3
+            ORDER BY created_at DESC
+            LIMIT 1;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, org_id, repository_id, commit_sha)
+            if row:
+                return self._row_to_job(row)
+        return None
+
     async def acquire_next_queued_job(self) -> Optional[IndexJob]:
         query = """
             WITH next_job AS (

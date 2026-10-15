@@ -62,6 +62,12 @@ class IndexJobRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_job_by_commit(
+        self, organization_id: UUID, repository_id: UUID, commit_sha: str
+    ) -> Optional[IndexJob]:
+        pass
+
+    @abstractmethod
     async def acquire_next_queued_job() -> Optional[IndexJob]:
         pass
 

@@ -37,9 +37,10 @@ class ImpactAnalysisRequest(BaseModel):
 class PRAnalysisRequest(BaseModel):
     repository_id: UUID
     pr_number: int
-    title: str
-    description: str
-    changed_symbols: List[str] = Field(default_factory=list)
+    title: Optional[str] = None
+    description: Optional[str] = None
+    changed_symbols: Optional[List[str]] = None
+    changed_files: Optional[List[IndexFileInput]] = None
 
 
 class AnalysisResponseDTO(BaseModel):

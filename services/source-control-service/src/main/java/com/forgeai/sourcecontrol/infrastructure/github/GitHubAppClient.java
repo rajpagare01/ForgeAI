@@ -338,6 +338,116 @@ public class GitHubAppClient {
         return list;
     }
 
+    public GitHubPullRequestDetail getPullRequestDetail(Long installationId, String fullName, int prNumber) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        String url = GITHUB_API + "/repos/" + fullName + "/pulls/" + prNumber;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        JsonNode p = execute(request, "get pull request #" + prNumber + " for " + fullName);
+        Long prId = p.path("id").asLong();
+        int number = p.path("number").asInt(prNumber);
+        String title = p.path("title").asText("");
+        String prBody = p.path("body").asText(null);
+        String state = p.path("state").asText("open");
+        String source = p.path("head").path("ref").asText("unknown");
+        String target = p.path("base").path("ref").asText("main");
+        String baseSha = p.path("base").path("sha").asText("");
+        String headSha = p.path("head").path("sha").asText("");
+        String author = p.path("user").path("login").asText("unknown");
+        int additions = p.path("additions").asInt(0);
+        int deletions = p.path("deletions").asInt(0);
+        int changedFilesCount = p.path("changed_files").asInt(0);
+        Instant createdAt = parseInstant(p.path("created_at").asText(null));
+        Instant updatedAt = parseInstant(p.path("updated_at").asText(null));
+
+        List<GitHubPullRequestFile> files = getPullRequestFiles(installationId, fullName, prNumber);
+
+        return new GitHubPullRequestDetail(
+                prId, number, title, prBody, state, source, target,
+                baseSha, headSha, author, additions, deletions,
+                changedFilesCount > 0 ? changedFilesCount : files.size(),
+                createdAt, updatedAt, files
+        );
+    }
+
+    public List<GitHubPullRequestFile> getPullRequestFiles(Long installationId, String fullName, int prNumber) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        String url = GITHUB_API + "/repos/" + fullName + "/pulls/" + prNumber + "/files?per_page=100";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        JsonNode body = execute(request, "list files for PR #" + prNumber + " in " + fullName);
+        List<GitHubPullRequestFile> list = new ArrayList<>();
+        if (body.isArray()) {
+            for (JsonNode f : body) {
+                String filename = f.path("filename").asText();
+                String status = f.path("status").asText("modified");
+                int additions = f.path("additions").asInt(0);
+                int deletions = f.path("deletions").asInt(0);
+                int changes = f.path("changes").asInt(0);
+                String patch = f.path("patch").asText(null);
+                String rawUrl = f.path("raw_url").asText(null);
+                String contentsUrl = f.path("contents_url").asText(null);
+                list.add(new GitHubPullRequestFile(filename, status, additions, deletions, changes, patch, rawUrl, contentsUrl, null));
+            }
+        }
+        return list;
+    }
+
+    public Optional<String> getFileContent(Long installationId, String fullName, String path, String ref) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        String encodedPath = java.net.URLEncoder.encode(path, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20").replace("%2F", "/");
+        String url = GITHUB_API + "/repos/" + fullName + "/contents/" + encodedPath + (ref != null && !ref.isBlank() ? "?ref=" + ref : "");
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github.raw+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                return Optional.ofNullable(response.body());
+            } else if (response.statusCode() == 404) {
+                return Optional.empty();
+            } else if (response.statusCode() == 401 || response.statusCode() == 403) {
+                throw new GitHubAccessDeniedException("GitHub API access denied (HTTP " + response.statusCode() + ") for fetching file: " + path);
+            } else {
+                log.warn("Failed to fetch file content for {} (ref: {}): HTTP {}", path, ref, response.statusCode());
+                return Optional.empty();
+            }
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Exception fetching file content for {} (ref: {}): {}", path, ref, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
     private Instant parseInstant(String s) {
         if (s == null || s.isBlank() || "null".equals(s)) return null;
         try {

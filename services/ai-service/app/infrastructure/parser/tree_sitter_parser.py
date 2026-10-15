@@ -40,6 +40,105 @@ class TreeSitterParser:
                 "edges": [],
             }
 
+    def derive_changed_symbols(self, files: List[Dict[str, Any]]) -> List[str]:
+        """
+        Statically derives affected symbols (classes, methods, functions, modules)
+        from changed files and/or unified diff patches.
+        Deterministic static analysis, does not execute repository code.
+        """
+        derived_symbols: List[str] = []
+        seen = set()
+
+        def add_symbol(sym: str):
+            if sym and sym not in seen:
+                seen.add(sym)
+                derived_symbols.append(sym)
+
+        for f in files:
+            file_path = f.get("filename") or f.get("file_path") or ""
+            if not file_path:
+                continue
+
+            status = (f.get("status") or "modified").lower()
+            patch = f.get("patch") or ""
+            content = f.get("content") or ""
+
+            # 1. Handle deleted file
+            if status == "removed":
+                if patch:
+                    self._extract_symbols_from_diff_lines(patch, file_path, add_symbol, prefix="-")
+                add_symbol(file_path)
+                continue
+
+            # 2. Parse code if content is available
+            if content and file_path.endswith((".java", ".py")):
+                try:
+                    parsed = self.parse_code(file_path, content)
+                    symbols = parsed.get("symbols", [])
+
+                    if patch:
+                        added_lines = [
+                            line[1:].strip()
+                            for line in patch.splitlines()
+                            if line.startswith("+") and not line.startswith("+++") and len(line[1:].strip()) > 3
+                        ]
+                        matched_symbols = []
+                        for s in symbols:
+                            sym_name = s.get("symbol_name")
+                            sym_content = s.get("content", "")
+                            bare_name = sym_name.split("#")[-1].split(".")[-1]
+                            if bare_name and bare_name in patch:
+                                matched_symbols.append(sym_name)
+                            elif any(al in sym_content for al in added_lines[:15]):
+                                matched_symbols.append(sym_name)
+
+                        if matched_symbols:
+                            for ms in matched_symbols:
+                                add_symbol(ms)
+                        else:
+                            classes = [s["symbol_name"] for s in symbols if s.get("symbol_type") == "CLASS"]
+                            if classes:
+                                for c in classes:
+                                    add_symbol(c)
+                            else:
+                                add_symbol(file_path)
+                    else:
+                        for s in symbols:
+                            add_symbol(s.get("symbol_name"))
+                except Exception as e:
+                    logger.warning("Error parsing %s with tree-sitter: %s; falling back to file path", file_path, e)
+                    add_symbol(file_path)
+
+            elif patch:
+                self._extract_symbols_from_diff_lines(patch, file_path, add_symbol, prefix="+")
+                if not any(s for s in derived_symbols if s.startswith(file_path.split("/")[-1].split(".")[0])):
+                    add_symbol(file_path)
+            else:
+                add_symbol(file_path)
+
+        return derived_symbols
+
+    def _extract_symbols_from_diff_lines(self, patch: str, file_path: str, add_fn, prefix: str = "+"):
+        import re
+        for line in patch.splitlines():
+            if line.startswith(prefix) and not line.startswith(prefix * 3):
+                text = line[1:].strip()
+                # Java class/method declaration
+                m_java_class = re.search(r'\b(?:class|interface|enum|record)\s+([A-Za-z0-9_]+)', text)
+                if m_java_class:
+                    add_fn(m_java_class.group(1))
+                m_java_method = re.search(r'\b(?:public|protected|private|static|\s)+\s+[\w\<\>\[\],\s]+\s+([A-Za-z0-9_]+)\s*\(', text)
+                if m_java_method and m_java_method.group(1) not in ("if", "for", "while", "switch", "catch"):
+                    add_fn(m_java_method.group(1))
+
+                # Python class/function declaration
+                m_py_class = re.search(r'^class\s+([A-Za-z0-9_]+)', text)
+                if m_py_class:
+                    add_fn(m_py_class.group(1))
+                m_py_func = re.search(r'^def\s+([A-Za-z0-9_]+)', text)
+                if m_py_func:
+                    add_fn(m_py_func.group(1))
+
     def _extract_python_ast(self, root_node, code_bytes: bytes, file_path: str) -> Dict[str, Any]:
         symbols: List[Dict[str, Any]] = []
         edges: List[Dict[str, Any]] = []
