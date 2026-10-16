@@ -342,6 +342,174 @@ public class TraceabilityAggregationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Traceability chain not found for requirement: " + requirementId));
     }
 
+    @Transactional(readOnly = true)
+    public TaskTraceabilityResponse getTaskTraceability(UUID organizationId, UUID taskId) {
+        validateTenant(organizationId);
+        if (taskId == null) {
+            throw new IllegalArgumentException("taskId cannot be null");
+        }
+
+        Task task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+
+        ProjectTraceabilityResponse full = getProjectTraceability(organizationId, task.getProjectId());
+
+        // Find parent requirement and chain
+        RequirementResponse parentReq = null;
+        TraceabilitySpineChainDto parentChain = null;
+        if (task.getRequirementId() != null) {
+            parentChain = full.chains().stream()
+                    .filter(c -> c.requirement() != null && task.getRequirementId().equals(c.requirement().id()))
+                    .findFirst()
+                    .orElse(null);
+            if (parentChain != null) {
+                parentReq = parentChain.requirement();
+            }
+        }
+
+        // Explicit Code Links
+        List<CodeLinkResponse> codeLinks = codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, task.getId()).stream()
+                .map(CodeLinkResponse::from)
+                .collect(Collectors.toList());
+
+        // Traceability links relating to this task
+        String taskIdStr = task.getId().toString();
+        String taskKeyLower = task.getTaskKey() != null ? task.getTaskKey().toLowerCase() : "";
+        List<TraceabilityLinkDto> taskLinks = full.links().stream()
+                .filter(l -> taskIdStr.equals(l.sourceId()) || taskIdStr.equals(l.targetId()) ||
+                        (l.externalReference() != null && (!taskKeyLower.isEmpty() && matchesText(l.externalReference(), taskKeyLower) ||
+                                codeLinks.stream().anyMatch(cl -> cl.externalRef().equalsIgnoreCase(l.externalReference())))))
+                .collect(Collectors.toList());
+
+        // Related Commits
+        Set<String> commitShas = new HashSet<>();
+        for (CodeLinkResponse cl : codeLinks) {
+            if (cl.linkType() == CodeLinkType.COMMIT && cl.externalRef() != null) {
+                commitShas.add(cl.externalRef().toLowerCase());
+            }
+        }
+        for (TraceabilityLinkDto l : taskLinks) {
+            if ("COMMIT".equalsIgnoreCase(l.targetType()) && l.targetId() != null) {
+                commitShas.add(l.targetId().toLowerCase());
+            }
+        }
+
+        List<RemoteCommitDto> relatedCommits = new ArrayList<>();
+        if (parentChain != null && parentChain.commits() != null) {
+            for (RemoteCommitDto c : parentChain.commits()) {
+                if (c.getCommitSha() != null && (commitShas.contains(c.getCommitSha().toLowerCase()) ||
+                        (!taskKeyLower.isEmpty() && matchesText(c.getMessage(), taskKeyLower)))) {
+                    relatedCommits.add(c);
+                }
+            }
+        }
+
+        // Related Pull Requests
+        Set<Integer> prNumbers = new HashSet<>();
+        for (CodeLinkResponse cl : codeLinks) {
+            if (cl.linkType() == CodeLinkType.PULL_REQUEST && cl.externalRef() != null) {
+                try {
+                    prNumbers.add(Integer.parseInt(cl.externalRef()));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        for (TraceabilityLinkDto l : taskLinks) {
+            if ("PULL_REQUEST".equalsIgnoreCase(l.targetType()) && l.targetId() != null) {
+                try {
+                    prNumbers.add(Integer.parseInt(l.targetId()));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+
+        List<RemotePullRequestDto> relatedPrs = new ArrayList<>();
+        if (parentChain != null && parentChain.pullRequests() != null) {
+            for (RemotePullRequestDto pr : parentChain.pullRequests()) {
+                if (pr.getPrNumber() != null && (prNumbers.contains(pr.getPrNumber()) ||
+                        (!taskKeyLower.isEmpty() && (matchesText(pr.getTitle(), taskKeyLower) ||
+                                matchesText(pr.getBody(), taskKeyLower) ||
+                                matchesText(pr.getHeadBranch(), taskKeyLower))))) {
+                    relatedPrs.add(pr);
+                }
+            }
+        }
+
+        // Test runs for related PRs / commits
+        Set<String> prHeadShas = relatedPrs.stream()
+                .map(RemotePullRequestDto::getHeadSha)
+                .filter(Objects::nonNull)
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
+        List<RemoteTestRunDto> relatedTestRuns = new ArrayList<>();
+        if (parentChain != null && parentChain.testRuns() != null) {
+            for (RemoteTestRunDto tr : parentChain.testRuns()) {
+                if (parentChain.testRuns().size() <= 2 ||
+                        (tr.getId() != null && commitShas.stream().anyMatch(sha -> sha.startsWith(tr.getId().toString().toLowerCase())))) {
+                    relatedTestRuns.add(tr);
+                }
+            }
+        }
+
+        // Test cases from parent requirement
+        List<RemoteRequirementTestTraceDto.RemoteTestCaseTraceSummary> testCases =
+                parentChain != null && parentChain.testCases() != null ? parentChain.testCases() : Collections.emptyList();
+
+        // AI Analyses for related PRs
+        List<RemoteAiAnalysisDto> relatedAnalyses = new ArrayList<>();
+        if (parentChain != null && parentChain.aiAnalyses() != null) {
+            for (RemotePullRequestDto pr : relatedPrs) {
+                String prKey = pr.getRepositoryId() + "#" + pr.getPrNumber();
+                for (RemoteAiAnalysisDto a : parentChain.aiAnalyses()) {
+                    if (prKey.equals(a.getEntityId())) {
+                        relatedAnalyses.add(a);
+                    }
+                }
+            }
+        }
+
+        // Remediation actions for related analyses
+        Set<UUID> analysisIds = relatedAnalyses.stream()
+                .map(RemoteAiAnalysisDto::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<RemoteEngineeringActionDto> relatedActions = parentChain != null && parentChain.remediationActions() != null
+                ? parentChain.remediationActions().stream()
+                        .filter(act -> act.getAnalysisId() != null && analysisIds.contains(act.getAnalysisId()))
+                        .collect(Collectors.toList())
+                : Collections.emptyList();
+
+        // Gaps applicable to this task
+        List<TraceabilityGap> applicableGaps = full.gaps().stream()
+                .filter(g -> taskIdStr.equals(g.getArtifactId()) ||
+                        (g.getArtifactId() != null && g.getArtifactId().startsWith(taskIdStr)) ||
+                        (!taskKeyLower.isEmpty() && task.getTaskKey().equalsIgnoreCase(g.getArtifactName())) ||
+                        (!taskKeyLower.isEmpty() && g.getArtifactName() != null && g.getArtifactName().toLowerCase().contains(taskKeyLower)) ||
+                        (task.getRequirementId() != null && task.getRequirementId().toString().equals(g.getArtifactId())))
+                .collect(Collectors.toList());
+
+        String evidenceStatus = full.health() != null ? full.health().getEvidenceStatus() : "AVAILABLE";
+        RequirementHealth health = parentChain != null ? parentChain.health() : null;
+
+        return new TaskTraceabilityResponse(
+                task.getId(),
+                organizationId,
+                task.getProjectId(),
+                TaskResponse.from(task),
+                parentReq,
+                codeLinks,
+                relatedCommits,
+                relatedPrs,
+                relatedTestRuns,
+                testCases,
+                relatedAnalyses,
+                relatedActions,
+                applicableGaps,
+                taskLinks,
+                evidenceStatus,
+                health,
+                Instant.now()
+        );
+    }
+
     @Transactional
     public int syncTraceability(UUID organizationId, UUID projectId) {
         validateTenant(organizationId);
@@ -975,7 +1143,13 @@ public class TraceabilityAggregationService {
         }
 
         String evidenceStatus = "AVAILABLE";
-        if (!allPrs.isEmpty() && !aiDataAvailable) {
+        boolean scDown = sourceControlClient.isUnavailable();
+        boolean testDown = testingServiceClient.isUnavailable();
+        boolean aiDown = aiServiceClient.isUnavailable();
+
+        if (scDown || testDown || aiDown) {
+            evidenceStatus = (scDown && testDown && aiDown) ? "UNAVAILABLE" : "DEGRADED";
+        } else if (!allPrs.isEmpty() && !aiDataAvailable) {
             evidenceStatus = "PARTIAL";
         }
 
@@ -1009,9 +1183,12 @@ public class TraceabilityAggregationService {
         ProjectHealthStatus status;
         List<String> reasons = new ArrayList<>();
 
-        if (totalRequirements == 0 && tasks.isEmpty() && allPrs.isEmpty()) {
-            status = ProjectHealthStatus.GREEN;
-            score = 100.0;
+        if ("UNAVAILABLE".equals(evidenceStatus)) {
+            status = ProjectHealthStatus.RED;
+            reasons.add("Downstream evidence services are unavailable (circuit open); verification cannot be performed.");
+        } else if (totalRequirements == 0 && tasks.isEmpty() && allPrs.isEmpty()) {
+            status = "DEGRADED".equals(evidenceStatus) ? ProjectHealthStatus.AMBER : ProjectHealthStatus.GREEN;
+            score = "DEGRADED".equals(evidenceStatus) ? 75.0 : 100.0;
             reasons.add("Project initialized with zero requirements and clean delivery slate.");
         } else if (blockedCount > 0 || blockedTasks > 0) {
             status = ProjectHealthStatus.RED;
@@ -1019,6 +1196,9 @@ public class TraceabilityAggregationService {
         } else if (score < 50.0) {
             status = ProjectHealthStatus.RED;
             reasons.add("Traceability health score is critically low (" + score + "/100).");
+        } else if ("DEGRADED".equals(evidenceStatus)) {
+            status = ProjectHealthStatus.AMBER;
+            reasons.add("Downstream evidence is degraded due to downstream service outage; provisional health status applied.");
         } else if (score < 80.0 || highRiskCount > 0 || reqsWithoutTests > 0 || failingPrs > 0 || unresolvedSecurityFindings > 0) {
             status = ProjectHealthStatus.AMBER;
             if (highRiskCount > 0) reasons.add(highRiskCount + " requirement(s) have high AI risk.");
@@ -1033,6 +1213,15 @@ public class TraceabilityAggregationService {
             reasons.add("All requirements have continuous delivery traceability and verified test evidence.");
         }
 
+        if (scDown) {
+            reasons.add("Source control service is currently unavailable; downstream repository data degraded.");
+        }
+        if (testDown) {
+            reasons.add("Testing service is currently unavailable; verification evidence degraded.");
+        }
+        if (aiDown) {
+            reasons.add("AI service is currently unavailable; AI intelligence degraded.");
+        }
         if ("PARTIAL".equals(evidenceStatus)) {
             reasons.add("Downstream AI intelligence partially available; metrics reflected from available records.");
         }

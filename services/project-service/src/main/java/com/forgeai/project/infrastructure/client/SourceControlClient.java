@@ -20,6 +20,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * SourceControlClient — resilient HTTP client for Source Control Service.
+ * <p>
+ * Resilience: synchronous with a 5-second per-request timeout, plus an in-process
+ * {@link SimpleCircuitBreaker} that fast-fails after 3 consecutive failures and probes
+ * after 30 seconds. This prevents cascading failures when source-control-service is
+ * unavailable without introducing uncontrolled retry storms.
+ * <p>
+ * When the circuit is OPEN, all methods return empty collections / Optional.empty().
+ * Callers should treat this as "downstream UNAVAILABLE" and set evidenceStatus accordingly.
+ */
 @Slf4j
 @Component
 public class SourceControlClient {
@@ -27,6 +38,9 @@ public class SourceControlClient {
     private final String baseUrl;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    // 3 consecutive failures → open; re-probe after 30 seconds
+    private final SimpleCircuitBreaker circuitBreaker =
+            new SimpleCircuitBreaker("source-control-service", 3, Duration.ofSeconds(30));
 
     public SourceControlClient(
             @Value("${services.source-control.url:http://localhost:8082}") String baseUrl,
@@ -38,45 +52,49 @@ public class SourceControlClient {
                 .build();
     }
 
+    /**
+     * Returns true when the downstream circuit is open (unavailable).
+     * Traceability callers use this to distinguish "genuinely no data" from "unavailable downstream".
+     */
+    public boolean isUnavailable() {
+        return circuitBreaker.isOpen();
+    }
+
     public List<RemoteRepositoryDto> listRepositories(UUID organizationId) {
         if (organizationId == null) {
             return Collections.emptyList();
         }
-        try {
+        return circuitBreaker.execute(() -> {
             HttpRequest request = buildRequest("/api/v1/repositories", organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteRepositoryDto>>() {});
             }
             log.warn("Source-control listRepositories returned status {}", response.statusCode());
-        } catch (Exception e) {
-            log.warn("Failed to fetch repositories from source-control-service: {}", e.getMessage());
-        }
-        return Collections.emptyList();
+            return Collections.<RemoteRepositoryDto>emptyList();
+        }, Collections.emptyList());
     }
 
     public Optional<RemoteRepositoryDto> getRepository(UUID organizationId, UUID repositoryId) {
         if (organizationId == null || repositoryId == null) {
             return Optional.empty();
         }
-        try {
+        return circuitBreaker.execute(() -> {
             HttpRequest request = buildRequest("/api/v1/repositories/" + repositoryId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return Optional.of(objectMapper.readValue(response.body(), RemoteRepositoryDto.class));
             }
             log.warn("Source-control getRepository returned status {}", response.statusCode());
-        } catch (Exception e) {
-            log.warn("Failed to fetch repository {} from source-control-service: {}", repositoryId, e.getMessage());
-        }
-        return Optional.empty();
+            return Optional.<RemoteRepositoryDto>empty();
+        }, Optional.empty());
     }
 
     public List<RemotePullRequestDto> listPullRequests(UUID organizationId, UUID repositoryId) {
         if (organizationId == null) {
             return Collections.emptyList();
         }
-        try {
+        return circuitBreaker.execute(() -> {
             String path = repositoryId != null
                     ? "/api/v1/repositories/" + repositoryId + "/pull-requests"
                     : "/api/v1/pull-requests";
@@ -86,30 +104,26 @@ public class SourceControlClient {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemotePullRequestDto>>() {});
             }
             log.warn("Source-control listPullRequests returned status {}", response.statusCode());
-        } catch (Exception e) {
-            log.warn("Failed to fetch pull requests from source-control-service: {}", e.getMessage());
-        }
-        return Collections.emptyList();
+            return Collections.<RemotePullRequestDto>emptyList();
+        }, Collections.emptyList());
     }
 
     public List<RemoteCommitDto> listCommits(UUID organizationId, UUID repositoryId) {
         if (organizationId == null || repositoryId == null) {
             return Collections.emptyList();
         }
-        try {
+        return circuitBreaker.execute(() -> {
             HttpRequest request = buildRequest("/api/v1/repositories/" + repositoryId + "/commits", organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteCommitDto>>() {});
             }
             log.warn("Source-control listCommits returned status {}", response.statusCode());
-        } catch (Exception e) {
-            log.warn("Failed to fetch commits from source-control-service: {}", e.getMessage());
-        }
-        return Collections.emptyList();
+            return Collections.<RemoteCommitDto>emptyList();
+        }, Collections.emptyList());
     }
 
-    private HttpRequest buildRequest(String path, UUID organizationId) {
+    private HttpRequest buildRequest(String path, UUID organizationId) throws Exception {
         String traceId = MDC.get("traceId");
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))

@@ -11,8 +11,11 @@ import com.forgeai.project.infrastructure.client.AiServiceClient;
 import com.forgeai.project.infrastructure.client.SourceControlClient;
 import com.forgeai.project.infrastructure.client.TestingServiceClient;
 import com.forgeai.project.infrastructure.client.dto.*;
+import com.forgeai.project.infrastructure.client.SimpleCircuitBreaker;
 import com.forgeai.project.presentation.dto.CreateProjectRepositoryLinkRequest;
 import com.forgeai.project.presentation.dto.CreateSnapshotRequest;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -419,4 +422,159 @@ public class TraceabilityHardeningPassTest {
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessageContaining("immutable governance record");
     }
+
+    @Test
+    @DisplayName("Task-Level Continuous Traceability & Tenant Isolation")
+    void testTaskTraceabilityEndpointAndProvenance() throws Exception {
+        UUID orgId = UUID.randomUUID();
+        UUID otherOrgId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID repoId = UUID.randomUUID();
+
+        // 1. Setup repository mock
+        RemoteRepositoryDto repoDto = RemoteRepositoryDto.builder()
+                .id(repoId)
+                .organizationId(orgId)
+                .name("ForgeAI")
+                .fullName("rajpagare01/ForgeAI")
+                .build();
+        Mockito.when(sourceControlClient.getRepository(eq(orgId), eq(repoId)))
+                .thenReturn(Optional.of(repoDto));
+
+        // 2. Setup PR mock
+        RemotePullRequestDto prDto = RemotePullRequestDto.builder()
+                .id(UUID.randomUUID())
+                .organizationId(orgId)
+                .repositoryId(repoId)
+                .prNumber(401)
+                .title("feat: [REQ-401] [TASK-401] OAuth2 hardening")
+                .body("Resolves TASK-401")
+                .headBranch("feature/oauth2-hardening")
+                .headSha("7b23c4d5e6f70819")
+                .isMerged(true)
+                .build();
+        Mockito.when(sourceControlClient.listPullRequests(eq(orgId), eq(repoId)))
+                .thenReturn(List.of(prDto));
+
+        // 3. Setup commit mock
+        RemoteCommitDto commitDto = RemoteCommitDto.builder()
+                .commitSha("7b23c4d5e6f70819")
+                .message("fix(auth): [TASK-401] fix token expiry check")
+                .authorName("Security Engineer")
+                .authorEmail("sec@forgeai.internal")
+                .build();
+        Mockito.when(sourceControlClient.listCommits(eq(orgId), eq(repoId)))
+                .thenReturn(List.of(commitDto));
+
+        // 4. Create Project
+        String projResp = mockMvc.perform(post("/api/v1/projects")
+                        .header("X-Org-Id", orgId.toString())
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateProjectCommand("Task Trace Project", "TTRC", "Trace test"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Project project = objectMapper.readValue(projResp, Project.class);
+
+        // Link repository to project
+        mockMvc.perform(post("/api/v1/projects/" + project.getId() + "/repositories")
+                        .header("X-Org-Id", orgId.toString())
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateProjectRepositoryLinkRequest(repoId, "main-repo"))))
+                .andExpect(status().isCreated());
+
+        // Create Requirement
+        String reqResp = mockMvc.perform(post("/api/v1/projects/" + project.getId() + "/requirements")
+                        .header("X-Org-Id", orgId.toString())
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateRequirementCommand("REQ-401", "Secure OAuth2 tokens", "Security Token Spec"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Requirement req = objectMapper.readValue(reqResp, Requirement.class);
+
+        // Create Task
+        String taskResp = mockMvc.perform(post("/api/v1/projects/" + project.getId() + "/tasks")
+                        .header("X-Org-Id", orgId.toString())
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateTaskCommand(req.getId(), "TASK-401", "Implement token rotation", "Desc", TaskPriority.CRITICAL, null))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Task task = objectMapper.readValue(taskResp, Task.class);
+
+        // Add explicit PR code link
+        mockMvc.perform(post("/api/v1/tasks/" + task.getId() + "/links")
+                        .header("X-Org-Id", orgId.toString())
+                        .header("X-User-Id", userId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LinkCodeArtifactCommand(CodeLinkType.PULL_REQUEST, "401", repoId, "USER"))))
+                .andExpect(status().isCreated());
+
+        // 5. Query task-level continuous traceability endpoint
+        mockMvc.perform(get("/api/v1/tasks/" + task.getId() + "/traceability")
+                        .header("X-Org-Id", orgId.toString())
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskId").value(task.getId().toString()))
+                .andExpect(jsonPath("$.task.taskKey").value("TASK-401"))
+                .andExpect(jsonPath("$.requirement.identifier").value("REQ-401"))
+                .andExpect(jsonPath("$.links").isArray())
+                .andExpect(jsonPath("$.evidenceStatus").exists())
+                .andExpect(jsonPath("$.commits").isArray())
+                .andExpect(jsonPath("$.pullRequests").isArray());
+
+        // 6. Multi-tenant isolation verification: otherOrgId cannot access task traceability
+        mockMvc.perform(get("/api/v1/tasks/" + task.getId() + "/traceability")
+                        .header("X-Org-Id", otherOrgId.toString())
+                        .header("X-User-Id", userId.toString()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("SimpleCircuitBreaker State Transitions & Fast-Fail Protection")
+    void testSimpleCircuitBreakerResilience() throws Exception {
+        SimpleCircuitBreaker cb = new SimpleCircuitBreaker("resilience-unit-test", 2, Duration.ofMillis(100));
+
+        assertThat(cb.currentState()).isEqualTo(SimpleCircuitBreaker.State.CLOSED);
+        assertThat(cb.isOpen()).isFalse();
+
+        // 1st failure: executing a call that throws
+        String result1 = cb.execute(() -> {
+            throw new RuntimeException("Connection timeout");
+        }, "FALLBACK_1");
+        assertThat(result1).isEqualTo("FALLBACK_1");
+        assertThat(cb.currentState()).isEqualTo(SimpleCircuitBreaker.State.CLOSED);
+
+        // 2nd failure -> threshold (2) reached -> transition to OPEN
+        String result2 = cb.execute(() -> {
+            throw new RuntimeException("Service 503 Unavailable");
+        }, "FALLBACK_2");
+        assertThat(result2).isEqualTo("FALLBACK_2");
+        assertThat(cb.currentState()).isEqualTo(SimpleCircuitBreaker.State.OPEN);
+        assertThat(cb.isOpen()).isTrue();
+
+        // Call while OPEN returns fallback immediately without executing supplier
+        AtomicBoolean supplierExecuted = new AtomicBoolean(false);
+        String result3 = cb.execute(() -> {
+            supplierExecuted.set(true);
+            return "LIVE";
+        }, "FAST_FAIL_FALLBACK");
+        assertThat(result3).isEqualTo("FAST_FAIL_FALLBACK");
+        assertThat(supplierExecuted.get()).isFalse();
+
+        // Wait for resetTimeout to expire (> 100ms)
+        Thread.sleep(150);
+
+        // State transitions to HALF_OPEN upon probe
+        assertThat(cb.currentState()).isEqualTo(SimpleCircuitBreaker.State.HALF_OPEN);
+
+        // Successful trial in HALF_OPEN resets to CLOSED
+        String resultSuccess = cb.execute(() -> "SUCCESS", "FALLBACK");
+        assertThat(resultSuccess).isEqualTo("SUCCESS");
+        assertThat(cb.currentState()).isEqualTo(SimpleCircuitBreaker.State.CLOSED);
+        assertThat(cb.isOpen()).isFalse();
+    }
 }
+

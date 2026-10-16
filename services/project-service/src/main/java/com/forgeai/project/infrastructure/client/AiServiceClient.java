@@ -22,6 +22,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * AiServiceClient — resilient HTTP client for the AI Service.
+ * <p>
+ * Resilience: synchronous with a 5-second per-request timeout, plus an in-process
+ * {@link SimpleCircuitBreaker} that fast-fails after 3 consecutive failures and probes
+ * after 30 seconds. When the circuit is OPEN, all methods return empty collections /
+ * Optional.empty(). Callers treat this as "AI evidence UNAVAILABLE" and must not silently
+ * treat missing AI analyses as zero risk or passing merge readiness.
+ */
 @Slf4j
 @Component
 public class AiServiceClient {
@@ -29,6 +38,9 @@ public class AiServiceClient {
     private final String baseUrl;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    // 3 consecutive failures → open; re-probe after 30 seconds
+    private final SimpleCircuitBreaker circuitBreaker =
+            new SimpleCircuitBreaker("ai-service", 3, Duration.ofSeconds(30));
 
     public AiServiceClient(
             @Value("${services.ai.url:http://localhost:8084}") String baseUrl,
@@ -40,11 +52,20 @@ public class AiServiceClient {
                 .build();
     }
 
+    /**
+     * Returns true when the downstream circuit is open (unavailable).
+     * Traceability callers use this to distinguish "genuinely no AI data" from
+     * "AI service unavailable" — the latter must be reflected in evidenceStatus.
+     */
+    public boolean isUnavailable() {
+        return circuitBreaker.isOpen();
+    }
+
     public List<RemoteAiAnalysisDto> getAnalysesForPullRequest(UUID organizationId, UUID repositoryId, int prNumber) {
         if (organizationId == null || repositoryId == null) {
             return Collections.emptyList();
         }
-        try {
+        return circuitBreaker.execute(() -> {
             String entityId = repositoryId + "#" + prNumber;
             String encodedEntityId = URLEncoder.encode(entityId, StandardCharsets.UTF_8);
             HttpRequest request = buildRequest("/api/v1/ai/analyses/PR/" + encodedEntityId, organizationId);
@@ -53,47 +74,41 @@ public class AiServiceClient {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteAiAnalysisDto>>() {});
             }
             log.warn("AI-service getAnalysesForPullRequest returned status {}", response.statusCode());
-        } catch (Exception e) {
-            log.warn("Failed to fetch analyses for repo {} PR {}: {}", repositoryId, prNumber, e.getMessage());
-        }
-        return Collections.emptyList();
+            return Collections.<RemoteAiAnalysisDto>emptyList();
+        }, Collections.emptyList());
     }
 
     public Optional<RemoteMergeReadinessDto> getMergeReadiness(UUID organizationId, UUID analysisId) {
         if (organizationId == null || analysisId == null) {
             return Optional.empty();
         }
-        try {
+        return circuitBreaker.execute(() -> {
             HttpRequest request = buildRequest("/api/v1/ai/merge-readiness/" + analysisId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return Optional.of(objectMapper.readValue(response.body(), RemoteMergeReadinessDto.class));
             }
             log.warn("AI-service getMergeReadiness returned status {}", response.statusCode());
-        } catch (Exception e) {
-            log.warn("Failed to fetch merge readiness for analysis {}: {}", analysisId, e.getMessage());
-        }
-        return Optional.empty();
+            return Optional.<RemoteMergeReadinessDto>empty();
+        }, Optional.empty());
     }
 
     public List<RemoteEngineeringActionDto> getEngineeringActions(UUID organizationId, UUID analysisId) {
         if (organizationId == null || analysisId == null) {
             return Collections.emptyList();
         }
-        try {
+        return circuitBreaker.execute(() -> {
             HttpRequest request = buildRequest("/api/v1/ai/analyses/" + analysisId + "/actions", organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteEngineeringActionDto>>() {});
             }
             log.warn("AI-service getEngineeringActions returned status {}", response.statusCode());
-        } catch (Exception e) {
-            log.warn("Failed to fetch engineering actions for analysis {}: {}", analysisId, e.getMessage());
-        }
-        return Collections.emptyList();
+            return Collections.<RemoteEngineeringActionDto>emptyList();
+        }, Collections.emptyList());
     }
 
-    private HttpRequest buildRequest(String path, UUID organizationId) {
+    private HttpRequest buildRequest(String path, UUID organizationId) throws Exception {
         String traceId = MDC.get("traceId");
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))

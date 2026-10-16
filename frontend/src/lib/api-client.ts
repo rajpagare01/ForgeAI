@@ -333,6 +333,10 @@ class ApiClient {
   public getRequirementTraceability<T = unknown>(requirementId: string): Promise<T> {
     return this.get<T>(`/api/v1/requirements/${requirementId}/traceability`);
   }
+
+  public getTaskTraceability<T = unknown>(taskId: string): Promise<T> {
+    return this.get<T>(`/api/v1/tasks/${taskId}/traceability`);
+  }
 }
 
 export const apiClient = new ApiClient(GATEWAY_URL);

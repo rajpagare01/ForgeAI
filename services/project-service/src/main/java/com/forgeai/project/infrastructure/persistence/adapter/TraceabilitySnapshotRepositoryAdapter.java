@@ -41,4 +41,9 @@ public class TraceabilitySnapshotRepositoryAdapter implements TraceabilitySnapsh
                 .map(EntityDomainMapper::toDomain)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public void delete(UUID organizationId, UUID id) {
+        throw new UnsupportedOperationException("Traceability snapshots are immutable historical governance records and cannot be deleted: id=" + id);
+    }
 }

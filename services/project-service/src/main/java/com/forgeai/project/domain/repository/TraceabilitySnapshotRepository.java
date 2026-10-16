@@ -10,4 +10,5 @@ public interface TraceabilitySnapshotRepository {
     TraceabilitySnapshot save(TraceabilitySnapshot snapshot);
     Optional<TraceabilitySnapshot> findById(UUID organizationId, UUID id);
     List<TraceabilitySnapshot> findByProjectId(UUID organizationId, UUID projectId);
+    void delete(UUID organizationId, UUID id);
 }

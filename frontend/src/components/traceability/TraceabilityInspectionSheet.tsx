@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
-import { TraceabilityNode } from "@/types";
+import React, { useState, useEffect } from "react";
+import { TraceabilityNode, TaskTraceabilityResponse } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { apiClient } from "@/lib/api-client";
 import {
   X,
   FileText,
@@ -20,6 +21,13 @@ import {
   Check,
   FolderTree,
   Terminal,
+  Link2,
+  Activity,
+  Layers,
+  ShieldCheck,
+  ExternalLink,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 
 interface TraceabilityInspectionSheetProps {
@@ -33,8 +41,31 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
   isOpen,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<"ast" | "junit" | "git">("ast");
+  const [activeTab, setActiveTab] = useState<"ast" | "junit" | "git" | "taskTrace">("ast");
   const [copiedTrace, setCopiedTrace] = useState<boolean>(false);
+  const [taskTrace, setTaskTrace] = useState<TaskTraceabilityResponse | null>(null);
+  const [loadingTaskTrace, setLoadingTaskTrace] = useState<boolean>(false);
+  const [taskTraceError, setTaskTraceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen && node?.task?.id) {
+      setLoadingTaskTrace(true);
+      setTaskTraceError(null);
+      apiClient.getTaskTraceability<TaskTraceabilityResponse>(node.task.id)
+        .then((data) => {
+          setTaskTrace(data);
+          setLoadingTaskTrace(false);
+        })
+        .catch((err) => {
+          setTaskTraceError(err.message || "Failed to fetch task traceability");
+          setLoadingTaskTrace(false);
+        });
+    } else {
+      setTaskTrace(null);
+      setLoadingTaskTrace(false);
+      setTaskTraceError(null);
+    }
+  }, [isOpen, node?.task?.id]);
 
   if (!isOpen || !node) return null;
 
@@ -144,7 +175,7 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
             </div>
 
             {/* Drawer Tabs */}
-            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-800/60">
+            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-800/60 flex-wrap">
               <button
                 onClick={() => setActiveTab("ast")}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -177,6 +208,17 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
               >
                 <GitPullRequest className="h-3.5 w-3.5" />
                 PR & Commit Lineage
+              </button>
+              <button
+                onClick={() => setActiveTab("taskTrace")}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  activeTab === "taskTrace"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                Task Continuous Traceability
               </button>
             </div>
           </div>
@@ -233,12 +275,10 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                     {node.aiBlastRadius.flaggedRisks.map((risk, idx) => (
                       <div
                         key={idx}
-                        className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-800 bg-slate-900/60 text-xs text-slate-300"
+                        className="p-3 rounded-lg border border-slate-800/80 bg-slate-900/40 text-xs text-slate-300 flex items-start gap-2.5"
                       >
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px]">
-                          !
-                        </span>
-                        <span>{risk}</span>
+                        <Sparkles className="h-4 w-4 text-purple-400 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">{risk}</span>
                       </div>
                     ))}
                   </div>
@@ -246,57 +286,48 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
               </div>
             )}
 
-            {/* Tab 2: Verification Output */}
+            {/* Tab 2: JUnit & Verification Log */}
             {activeTab === "junit" && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
-                      Verification Test Suite Output
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Ingested from runner ID: <span className="font-mono text-white">{node.verification.testRunId}</span>
-                    </p>
-                  </div>
-
-                  {hasTests && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCopyTrace(verificationConsoleLog)}
-                      className="gap-1.5 text-xs h-8"
-                    >
-                      {copiedTrace ? (
-                        <>
-                          <Check className="h-3.5 w-3.5 text-emerald-400" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3.5 w-3.5" />
-                          Copy Raw Output
-                        </>
-                      )}
-                    </Button>
-                  )}
+                  <h3 className="text-xs font-semibold uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                    <Terminal className="h-4 w-4 text-emerald-400" />
+                    Verification Console Logs
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-slate-400 hover:text-white h-7 gap-1"
+                    onClick={() => handleCopyTrace(verificationConsoleLog)}
+                  >
+                    {copiedTrace ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        <span>Copy Logs</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
 
-                {/* Raw Terminal Output Box */}
-                <div className="rounded-xl border border-slate-800 bg-black/90 p-4 font-mono text-xs overflow-x-auto shadow-inner">
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-[11px] text-slate-500">
-                    <span>CONSOLE OUTPUT / STACK TRACE</span>
-                    <span>{hasTests ? "Automated Test Suite Engine" : "No Tests"}</span>
+                {/* Terminal Console View */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs overflow-x-auto shadow-inner">
+                  <div className="flex items-center gap-1.5 pb-3 mb-3 border-b border-slate-800/80 text-slate-500">
+                    <div className="h-2.5 w-2.5 rounded-full bg-rose-500/80" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
+                    <span className="ml-2 text-[10px] text-slate-500">junit-trace-stream.log</span>
                   </div>
-                  <pre
-                    className={`leading-5 whitespace-pre ${
-                      node.verification.status === "FAILED" ? "text-rose-300" : "text-emerald-300"
-                    }`}
-                  >
+                  <pre className="text-slate-300 whitespace-pre leading-relaxed">
                     {verificationConsoleLog}
                   </pre>
                 </div>
 
-                {/* Test Breakdown Pills */}
+                {/* Metrics Breakdown */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/60 text-center">
                     <div className="text-xs text-slate-400">Total Executed</div>
@@ -368,6 +399,250 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                     W3C traceparent header injected across distributed microservices.
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* Tab 4: Task Continuous Traceability */}
+            {activeTab === "taskTrace" && (
+              <div className="space-y-6">
+                {/* Degradation / Outage Notification */}
+                {taskTrace && taskTrace.evidenceStatus !== "AVAILABLE" && (
+                  <div className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
+                    taskTrace.evidenceStatus === "UNAVAILABLE"
+                      ? "border-rose-800/60 bg-rose-950/40 text-rose-300"
+                      : "border-amber-800/60 bg-amber-950/40 text-amber-300"
+                  }`}>
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold uppercase tracking-wider text-[11px]">
+                        Downstream Evidence Status: {taskTrace.evidenceStatus}
+                      </div>
+                      <p className="mt-0.5 text-slate-300">
+                        {taskTrace.evidenceStatus === "UNAVAILABLE"
+                          ? "Downstream services are currently unavailable (circuit open). Real-time verification evidence cannot be collected."
+                          : "Downstream evidence is degraded or partially available; displaying all known trace links and historical records."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {loadingTaskTrace && (
+                  <div className="p-8 text-center space-y-3">
+                    <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
+                    <p className="text-xs text-slate-400 font-mono">
+                      Querying task-level continuous traceability spine...
+                    </p>
+                  </div>
+                )}
+
+                {taskTraceError && (
+                  <div className="p-4 rounded-xl border border-rose-900/60 bg-rose-950/30 text-rose-300 text-xs flex items-center justify-between">
+                    <span>{taskTraceError}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs border-rose-800 hover:bg-rose-900/50"
+                      onClick={() => {
+                        if (node.task.id) {
+                          setLoadingTaskTrace(true);
+                          setTaskTraceError(null);
+                          apiClient.getTaskTraceability<TaskTraceabilityResponse>(node.task.id)
+                            .then((d) => { setTaskTrace(d); setLoadingTaskTrace(false); })
+                            .catch((e) => { setTaskTraceError(e.message); setLoadingTaskTrace(false); });
+                        }
+                      }}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                )}
+
+                {!loadingTaskTrace && !taskTrace && !taskTraceError && (
+                  <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-800 rounded-xl">
+                    No task ID linked to this node, or task traceability record not available.
+                  </div>
+                )}
+
+                {taskTrace && (
+                  <>
+                    {/* Task & Parent Requirement Summary */}
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-mono text-xs text-purple-300 border-purple-500/40">
+                            {taskTrace.task.taskKey}
+                          </Badge>
+                          <span className="font-semibold text-sm text-white">
+                            {taskTrace.task.title}
+                          </span>
+                        </div>
+                        <Badge variant="secondary" className="font-mono text-[10px]">
+                          {taskTrace.task.status}
+                        </Badge>
+                      </div>
+
+                      {taskTrace.requirement && (
+                        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                          <span className="flex items-center gap-1.5">
+                            <Layers className="h-3.5 w-3.5 text-indigo-400" />
+                            Parent Requirement:
+                          </span>
+                          <span className="font-mono text-indigo-300">
+                            {taskTrace.requirement.identifier || taskTrace.requirement.reqKey} - {taskTrace.requirement.title}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Granular Link Provenance with Origin Badges */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase text-slate-400 tracking-wider mb-3 flex items-center gap-2">
+                        <Link2 className="h-4 w-4 text-sky-400" />
+                        Granular Traceability Link Provenance ({taskTrace.links.length})
+                      </h4>
+                      {taskTrace.links.length === 0 ? (
+                        <p className="text-xs text-slate-500 italic">No explicit traceability links recorded.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {taskTrace.links.map((link) => (
+                            <div
+                              key={link.id}
+                              className="p-3 rounded-lg border border-slate-800/90 bg-slate-900/40 text-xs space-y-1.5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 font-mono text-[11px] text-slate-300">
+                                  <span>{link.sourceType}</span>
+                                  <ArrowRight className="h-3 w-3 text-slate-500" />
+                                  <span>{link.targetType}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge
+                                    variant="outline"
+                                    className={`font-mono text-[10px] ${
+                                      link.linkOrigin === "REQUIREMENT_TASK_RELATION"
+                                        ? "text-indigo-400 border-indigo-700/60"
+                                        : link.linkOrigin === "EXPLICIT_USER_LINK"
+                                        ? "text-emerald-400 border-emerald-700/60"
+                                        : "text-amber-400 border-amber-700/60"
+                                    }`}
+                                  >
+                                    {link.linkOrigin}
+                                  </Badge>
+                                  <Badge variant="secondary" className="font-mono text-[10px]">
+                                    {link.confidence}
+                                  </Badge>
+                                </div>
+                              </div>
+                              {link.evidence && (
+                                <p className="text-[11px] text-slate-400 font-sans">
+                                  Evidence: {link.evidence}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Code Links */}
+                    {taskTrace.codeLinks && taskTrace.codeLinks.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-2">
+                          <GitCommit className="h-4 w-4 text-indigo-400" />
+                          Associated Code Links ({taskTrace.codeLinks.length})
+                        </h4>
+                        <div className="space-y-1.5">
+                          {taskTrace.codeLinks.map((cl) => (
+                            <div
+                              key={cl.id}
+                              className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/40 flex items-center justify-between text-xs font-mono"
+                            >
+                              <span className="text-slate-300 font-bold">{cl.linkType}</span>
+                              <span className="text-sky-300 truncate max-w-[280px]">{cl.externalRef}</span>
+                              <Badge variant="outline" className="text-[9px] text-slate-400">
+                                {cl.origin || "EXPLICIT"}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Related Commits & Pull Requests */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/60">
+                        <div className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1.5">
+                          <GitCommit className="h-3.5 w-3.5 text-sky-400" />
+                          Commits ({taskTrace.commits.length})
+                        </div>
+                        {taskTrace.commits.length === 0 ? (
+                          <p className="text-[11px] text-slate-500 italic">No commits matched</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {taskTrace.commits.slice(0, 3).map((c, i) => (
+                              <div key={i} className="text-[11px] font-mono text-slate-300 truncate">
+                                {c.commitSha.substring(0, 8)} - {c.message}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/60">
+                        <div className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1.5">
+                          <GitPullRequest className="h-3.5 w-3.5 text-purple-400" />
+                          Pull Requests ({taskTrace.pullRequests.length})
+                        </div>
+                        {taskTrace.pullRequests.length === 0 ? (
+                          <p className="text-[11px] text-slate-500 italic">No PRs matched</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {taskTrace.pullRequests.slice(0, 3).map((pr, i) => (
+                              <div key={i} className="text-[11px] font-mono text-slate-300 truncate flex items-center justify-between">
+                                <span>PR #{pr.prNumber}</span>
+                                <Badge variant="outline" className="text-[9px]">
+                                  {pr.state}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Active Gaps Applicable to Task */}
+                    {taskTrace.gaps && taskTrace.gaps.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-2">
+                          <ShieldAlert className="h-4 w-4 text-amber-400" />
+                          Active Traceability Gaps ({taskTrace.gaps.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {taskTrace.gaps.map((gap, i) => (
+                            <div
+                              key={i}
+                              className="p-3 rounded-lg border border-amber-800/60 bg-amber-950/20 text-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-semibold text-amber-300">{gap.gapType}</span>
+                                <Badge
+                                  variant={gap.severity === "HIGH" ? "destructive" : "outline"}
+                                  className="text-[10px]"
+                                >
+                                  {gap.severity}
+                                </Badge>
+                              </div>
+                              <p className="text-slate-300 text-[11px]">{gap.evidence}</p>
+                              <p className="text-amber-200/80 text-[11px] italic">
+                                Action: {gap.recommendation}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>

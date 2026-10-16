@@ -34,6 +34,7 @@ export interface Requirement {
   id: string;
   projectId: string;
   reqKey: string; // e.g. REQ-501
+  identifier?: string;
   title: string;
   description: string;
   category: "SECURITY" | "FUNCTIONAL" | "PERFORMANCE" | "COMPLIANCE";
@@ -174,6 +175,7 @@ export interface TraceabilityNode {
     status: "ACTIVE" | "VERIFIED" | "DRAFT";
   };
   task: {
+    id?: string;
     key: string;
     title: string;
     status: TaskStatus;
@@ -375,5 +377,78 @@ export interface TraceabilitySnapshot {
   snapshotData: string;
   createdAt: string;
 }
+
+export interface TaskTraceabilityResponse {
+  taskId: string;
+  organizationId: string;
+  projectId: string;
+  task: Task;
+  requirement?: Requirement;
+  codeLinks: Array<{
+    id: string;
+    linkType: string;
+    externalRef: string;
+    repositoryId?: string;
+    origin?: string;
+  }>;
+  commits: Array<{
+    id?: string;
+    commitSha: string;
+    message: string;
+    authorName?: string;
+  }>;
+  pullRequests: Array<{
+    id?: string;
+    prNumber: number;
+    title: string;
+    state: string;
+    headSha: string;
+    isMerged?: boolean;
+  }>;
+  testRuns: Array<{
+    id?: string;
+    status: string;
+    totalTests?: number;
+    passedTests?: number;
+    failedTests?: number;
+  }>;
+  testCases: Array<{
+    testCaseId?: string;
+    testName: string;
+    classname: string;
+    latestStatus: string;
+  }>;
+  aiAnalyses: Array<{
+    id?: string;
+    riskLevel?: string;
+    riskScore?: number;
+    summary?: string;
+    mergeReadiness?: Record<string, any>;
+    securityAssessment?: Record<string, any>;
+    reliabilityAssessment?: Record<string, any>;
+  }>;
+  remediationActions: Array<{
+    id?: string;
+    actionId?: string;
+    title?: string;
+    status?: string;
+    severity?: string;
+  }>;
+  gaps: TraceabilityGap[];
+  links: Array<{
+    id: string;
+    sourceType: string;
+    sourceId: string;
+    targetType: string;
+    targetId: string;
+    linkOrigin: string;
+    confidence: string;
+    evidence?: string;
+  }>;
+  evidenceStatus: string;
+  health?: RequirementHealth;
+  generatedAt: string;
+}
+
 
 
