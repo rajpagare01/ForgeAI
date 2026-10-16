@@ -42,3 +42,12 @@ outbox:
   publisher:
     batch-size: 50
     max-attempts: 5
+
+services:
+  source-control:
+    url: ${SOURCE_CONTROL_SERVICE_URL:http://localhost:8082}
+  testing:
+    url: ${TESTING_SERVICE_URL:http://localhost:8083}
+  ai:
+    url: ${AI_SERVICE_URL:http://localhost:8084}
+

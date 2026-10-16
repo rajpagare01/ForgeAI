@@ -1,0 +1,59 @@
+package com.forgeai.project.presentation.controller;
+
+import com.forgeai.project.application.service.TraceabilityAggregationService;
+import com.forgeai.project.domain.model.ProjectRepositoryLink;
+import com.forgeai.project.infrastructure.security.TenantContext;
+import com.forgeai.project.presentation.dto.CreateProjectRepositoryLinkRequest;
+import com.forgeai.project.presentation.dto.ProjectRepositoryLinkDto;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/projects/{projectId}/repositories")
+@RequiredArgsConstructor
+public class ProjectRepositoryController {
+
+    private final TraceabilityAggregationService traceabilityAggregationService;
+
+    @GetMapping
+    public ResponseEntity<List<ProjectRepositoryLinkDto>> listRepositories(@PathVariable UUID projectId) {
+        UUID orgId = getRequiredOrgId();
+        return ResponseEntity.ok(traceabilityAggregationService.listProjectRepositories(orgId, projectId));
+    }
+
+    @PostMapping
+    public ResponseEntity<ProjectRepositoryLinkDto> linkRepository(
+            @PathVariable UUID projectId,
+            @Valid @RequestBody CreateProjectRepositoryLinkRequest request) {
+        UUID orgId = getRequiredOrgId();
+        ProjectRepositoryLink link = traceabilityAggregationService.linkRepository(
+                orgId, projectId, request.repositoryId(), request.repositoryName()
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(ProjectRepositoryLinkDto.from(link));
+    }
+
+    @DeleteMapping("/{repositoryId}")
+    public ResponseEntity<Void> unlinkRepository(
+            @PathVariable UUID projectId,
+            @PathVariable UUID repositoryId) {
+        UUID orgId = getRequiredOrgId();
+        traceabilityAggregationService.unlinkRepository(orgId, projectId, repositoryId);
+        return ResponseEntity.noContent().build();
+    }
+
+    private UUID getRequiredOrgId() {
+        UUID orgId = TenantContext.getOrganizationId();
+        if (orgId == null) {
+            throw new IllegalArgumentException("Missing required X-Org-Id tenant context header");
+        }
+        return orgId;
+    }
+}

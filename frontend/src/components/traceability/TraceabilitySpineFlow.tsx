@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { TraceabilityNode, RiskLevel } from "@/types";
+import { TraceabilityNode, TraceabilitySpineChain, RiskLevel } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,162 +11,111 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  ArrowRight,
   Sparkles,
   GitCommit,
   ShieldAlert,
   Search,
   Filter,
   FolderTree,
+  RefreshCw,
 } from "lucide-react";
 import { TraceabilityInspectionSheet } from "./TraceabilityInspectionSheet";
 
-export const SAMPLE_TRACEABILITY_DATA: TraceabilityNode[] = [
-  {
-    requirement: {
-      key: "REQ-501",
-      title: "Stateless Multi-Tenant JWT Revocation Invariant",
-      status: "VERIFIED",
-    },
-    task: {
-      key: "TASK-201",
-      title: "Implement Distributed Redis Revocation Token Filter",
-      status: "DONE",
-      priority: "CRITICAL",
-    },
-    sourceControl: {
-      prNumber: 42,
-      prTitle: "feat(gateway): add reactive Redis JWT revocation filter",
-      commitSha: "a91b4c3e8f7a90b1c2d3e4f5a6b7c8d9e0f1a2b3",
-      author: "rajpagare01",
-    },
-    verification: {
-      testRunId: "TR-8921",
-      status: "PASSED",
-      passedTests: 13,
-      totalTests: 13,
-    },
-    aiBlastRadius: {
-      riskLevel: "LOW",
-      score: 18,
-      affectedSymbolsCount: 4,
-      flaggedRisks: [
-        "Redis reactive command latency verified < 2ms",
-        "Zero schema breaking changes",
-      ],
-    },
-  },
-  {
-    requirement: {
-      key: "REQ-502",
-      title: "AST Impact Analysis for Pull Request Gateways",
-      status: "ACTIVE",
-    },
-    task: {
-      key: "TASK-205",
-      title: "Integrate Tree-sitter Parser with AI Blast Radius Engine",
-      status: "IN_REVIEW",
-      priority: "HIGH",
-    },
-    sourceControl: {
-      prNumber: 47,
-      prTitle: "feat(ai-service): parse Java AST and compute dependency edges",
-      commitSha: "f83c1209e74d1a2b3c4d5e6f7a8b9c0d1e2f3a4b",
-      author: "rajpagare01",
-    },
-    verification: {
-      testRunId: "TR-8925",
-      status: "PASSED",
-      passedTests: 24,
-      totalTests: 24,
-    },
-    aiBlastRadius: {
-      riskLevel: "MEDIUM",
-      score: 42,
-      affectedSymbolsCount: 12,
-      flaggedRisks: [
-        "Recursive AST traversal requires depth safeguard for > 500 lines",
-        "Public API signature altered in AnalysisController",
-      ],
-    },
-  },
-  {
-    requirement: {
-      key: "REQ-409",
-      title: "Zero-Downtime PostgreSQL Schema Migration Validation",
-      status: "VERIFIED",
-    },
-    task: {
-      key: "TASK-188",
-      title: "Harmonize CHAR(40) and JSONB column types with Hibernate 6",
-      status: "DONE",
-      priority: "HIGH",
-    },
-    sourceControl: {
-      prNumber: 39,
-      prTitle: "fix(persistence): annotate SHA and JSON outbox entities",
-      commitSha: "b5a2d7a7b0b267cf1857cb38fd003843374f0140",
-      author: "rajpagare01",
-    },
-    verification: {
-      testRunId: "TR-8919",
-      status: "PASSED",
-      passedTests: 38,
-      totalTests: 38,
-    },
-    aiBlastRadius: {
-      riskLevel: "LOW",
-      score: 8,
-      affectedSymbolsCount: 6,
-      flaggedRisks: ["Strict Hibernate ddl validate verified against Flyway V1"],
-    },
-  },
-  {
-    requirement: {
-      key: "REQ-515",
-      title: "Asynchronous Webhook Ingestion & Event Outbox Pipeline",
-      status: "ACTIVE",
-    },
-    task: {
-      key: "TASK-220",
-      title: "Kafka Event Publisher for Source Control Webhooks",
-      status: "IN_PROGRESS",
-      priority: "CRITICAL",
-    },
-    sourceControl: {
-      prNumber: 51,
-      prTitle: "refactor(source-control): replace direct dispatch with Outbox table",
-      commitSha: "c7e2b1094f8a3d1b2c5e6f7a8b9c0d1e2f3a4b5c",
-      author: "dev-lead",
-    },
-    verification: {
-      testRunId: "TR-8930",
-      status: "RUNNING",
-      passedTests: 18,
-      totalTests: 22,
-    },
-    aiBlastRadius: {
-      riskLevel: "HIGH",
-      score: 78,
-      affectedSymbolsCount: 26,
-      flaggedRisks: [
-        "Transactional boundary touches 3 separate entities",
-        "Potential deadlock on high concurrency outbox polling",
-        "Missing idempotency key in message envelope",
-      ],
-    },
-  },
-];
+interface TraceabilitySpineFlowProps {
+  chains?: TraceabilitySpineChain[];
+  isLoading?: boolean;
+  onSync?: () => void;
+}
 
-export const TraceabilitySpineFlow: React.FC = () => {
-  const [selectedNode, setSelectedNode] = useState<TraceabilityNode | null>(
-    SAMPLE_TRACEABILITY_DATA[0]
-  );
+function convertChainToNode(chain: TraceabilitySpineChain): TraceabilityNode {
+  const req = chain.requirement;
+  const task = chain.tasks && chain.tasks.length > 0 ? chain.tasks[0] : null;
+  const pr = chain.pullRequests && chain.pullRequests.length > 0 ? chain.pullRequests[0] : null;
+  const commit = chain.commits && chain.commits.length > 0 ? chain.commits[0] : null;
+  const testRun = chain.testRuns && chain.testRuns.length > 0 ? chain.testRuns[0] : null;
+  const ai = chain.aiAnalyses && chain.aiAnalyses.length > 0 ? chain.aiAnalyses[0] : null;
+
+  // Determine verification stats
+  let testStatus: "PASSED" | "FAILED" | "RUNNING" = "PASSED";
+  let passedTests = chain.testCases.filter((tc) => tc.latestStatus === "PASSED").length;
+  let totalTests = chain.testCases.length;
+
+  if (testRun) {
+    totalTests = testRun.totalTests || totalTests;
+    passedTests = testRun.passedTests || passedTests;
+    testStatus = testRun.status === "COMPLETED"
+      ? (testRun.failedTests && testRun.failedTests > 0 ? "FAILED" : "PASSED")
+      : (testRun.status === "FAILED" ? "FAILED" : "RUNNING");
+  } else if (totalTests === 0) {
+    testStatus = "FAILED";
+  }
+
+  // Determine AI blast radius
+  const riskLevel: RiskLevel = (ai?.riskLevel as RiskLevel) || "LOW";
+  const score = ai?.riskScore !== undefined ? Math.round(ai.riskScore * 100) : 10;
+  const flaggedRisks: string[] = [];
+
+  if (chain.gaps && chain.gaps.length > 0) {
+    chain.gaps.forEach((g) => flaggedRisks.push(`[${g.severity}] ${g.evidence}: ${g.recommendation}`));
+  } else if (ai?.summary) {
+    flaggedRisks.push(ai.summary);
+  } else {
+    flaggedRisks.push("No regression risks flagged for this delivery spine segment.");
+  }
+
+  return {
+    requirement: {
+      key: req.identifier,
+      title: req.title,
+      status: (req.status === "VERIFIED" || req.status === "COMPLETED" ? "VERIFIED" : req.status === "ACTIVE" ? "ACTIVE" : "DRAFT") as any,
+    },
+    task: {
+      key: task?.taskKey || "TASK-NONE",
+      title: task?.title || "No assigned task",
+      status: task?.status || "TODO",
+      priority: task?.priority || "MEDIUM",
+    },
+    sourceControl: {
+      prNumber: pr?.prNumber || 0,
+      prTitle: pr?.title || commit?.message || "No PR associated",
+      commitSha: pr?.headSha || commit?.commitSha || "N/A",
+      author: commit?.authorName || "system",
+    },
+    verification: {
+      testRunId: testRun?.id ? `TR-${testRun.id.substring(0, 6)}` : "TR-CI",
+      status: testStatus,
+      passedTests,
+      totalTests: Math.max(totalTests, passedTests),
+    },
+    aiBlastRadius: {
+      riskLevel,
+      score,
+      affectedSymbolsCount: ai?.mergeReadiness ? 4 : (chain.testCases.length > 0 ? 3 : 0),
+      flaggedRisks,
+    },
+  };
+}
+
+export const TraceabilitySpineFlow: React.FC<TraceabilitySpineFlowProps> = ({
+  chains = [],
+  isLoading = false,
+  onSync,
+}) => {
+  const nodes = chains.map(convertChainToNode);
+
+  const [selectedNode, setSelectedNode] = useState<TraceabilityNode | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState<boolean>(false);
   const [filterRisk, setFilterRisk] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  const filteredData = SAMPLE_TRACEABILITY_DATA.filter((node) => {
+  // Select initial node when data arrives
+  React.useEffect(() => {
+    if (nodes.length > 0 && !selectedNode) {
+      setSelectedNode(nodes[0]);
+    }
+  }, [nodes, selectedNode]);
+
+  const filteredData = nodes.filter((node) => {
     if (filterRisk !== "ALL" && node.aiBlastRadius.riskLevel !== filterRisk) {
       return false;
     }
@@ -182,6 +131,40 @@ export const TraceabilitySpineFlow: React.FC = () => {
     }
     return true;
   });
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
+        <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
+        <div className="text-sm font-semibold text-white">Aggregating Live Delivery Spine...</div>
+        <p className="text-xs text-slate-400 max-w-md mx-auto">
+          Querying requirements, tasks, linked Git repositories, CI test runs, and AST blast radius evaluations.
+        </p>
+      </div>
+    );
+  }
+
+  if (nodes.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/40 p-12 text-center space-y-4">
+        <div className="p-3 rounded-2xl bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 w-fit mx-auto">
+          <FolderTree className="h-8 w-8" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold text-white">No Traceability Chains Detected</h3>
+          <p className="text-xs text-slate-400 max-w-lg mx-auto">
+            This project has no active delivery chains yet. Link a GitHub repository, create requirements and tasks, or trigger automated link synchronization to establish continuous governance.
+          </p>
+        </div>
+        {onSync && (
+          <Button variant="glow" size="sm" onClick={onSync} className="gap-2 text-xs">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Synchronize Links Now
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -337,7 +320,7 @@ export const TraceabilitySpineFlow: React.FC = () => {
                     <div
                       className="bg-emerald-500 h-full rounded-full"
                       style={{
-                        width: `${(node.verification.passedTests / node.verification.totalTests) * 100}%`,
+                        width: `${node.verification.totalTests > 0 ? (node.verification.passedTests / node.verification.totalTests) * 100 : 0}%`,
                       }}
                     />
                   </div>
@@ -495,7 +478,7 @@ export const TraceabilitySpineFlow: React.FC = () => {
         </div>
       )}
 
-      {/* Interactive Slide-Over Side Sheet Drawer for AST & JUnit Inspection */}
+      {/* Interactive Slide-Over Side Sheet Drawer */}
       <TraceabilityInspectionSheet
         node={selectedNode}
         isOpen={isSheetOpen}

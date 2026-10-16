@@ -3,6 +3,8 @@ package com.forgeai.project.infrastructure.persistence.mapper;
 import com.forgeai.project.domain.model.*;
 import com.forgeai.project.infrastructure.persistence.entity.*;
 
+import java.time.Instant;
+
 public final class EntityDomainMapper {
 
     private EntityDomainMapper() {}
@@ -155,6 +157,103 @@ public final class EntityDomainMapper {
                 .externalRef(domain.getExternalRef())
                 .repositoryId(domain.getRepositoryId())
                 .createdBy(domain.getCreatedBy() != null ? domain.getCreatedBy() : "USER")
+                .createdAt(domain.getCreatedAt())
+                .build();
+    }
+
+    public static TraceabilityLink toDomain(TraceabilityLinkJpaEntity entity) {
+        if (entity == null) return null;
+        return TraceabilityLink.builder()
+                .id(entity.getId())
+                .organizationId(entity.getOrganizationId())
+                .projectId(entity.getProjectId())
+                .sourceType(TraceabilityType.valueOf(entity.getSourceType()))
+                .sourceId(entity.getSourceId())
+                .targetType(TraceabilityType.valueOf(entity.getTargetType()))
+                .targetId(entity.getTargetId())
+                .repositoryId(entity.getRepositoryId())
+                .externalReference(entity.getExternalReference())
+                .linkOrigin(LinkOrigin.valueOf(entity.getLinkOrigin()))
+                .confidence(ConfidenceLevel.valueOf(entity.getConfidence()))
+                .evidence(entity.getEvidence())
+                .active(entity.isActive())
+                .createdAt(entity.getCreatedAt())
+                .updatedAt(entity.getUpdatedAt())
+                .build();
+    }
+
+    public static TraceabilityLinkJpaEntity toEntity(TraceabilityLink domain) {
+        if (domain == null) return null;
+        Instant now = Instant.now();
+        return TraceabilityLinkJpaEntity.builder()
+                .id(domain.getId())
+                .organizationId(domain.getOrganizationId())
+                .projectId(domain.getProjectId())
+                .sourceType(domain.getSourceType() != null ? domain.getSourceType().name() : TraceabilityType.REQUIREMENT.name())
+                .sourceId(domain.getSourceId())
+                .targetType(domain.getTargetType() != null ? domain.getTargetType().name() : TraceabilityType.TASK.name())
+                .targetId(domain.getTargetId())
+                .repositoryId(domain.getRepositoryId())
+                .externalReference(domain.getExternalReference())
+                .linkOrigin(domain.getLinkOrigin() != null ? domain.getLinkOrigin().name() : LinkOrigin.DERIVED.name())
+                .confidence(domain.getConfidence() != null ? domain.getConfidence().name() : ConfidenceLevel.HIGH.name())
+                .evidence(domain.getEvidence())
+                .active(domain.isActive())
+                .createdAt(domain.getCreatedAt() != null ? domain.getCreatedAt() : now)
+                .updatedAt(domain.getUpdatedAt() != null ? domain.getUpdatedAt() : now)
+                .build();
+    }
+
+    public static ProjectRepositoryLink toDomain(ProjectRepositoryLinkJpaEntity entity) {
+        if (entity == null) return null;
+        return ProjectRepositoryLink.builder()
+                .id(entity.getId())
+                .organizationId(entity.getOrganizationId())
+                .projectId(entity.getProjectId())
+                .repositoryId(entity.getRepositoryId())
+                .repositoryName(entity.getRepositoryName())
+                .createdAt(entity.getCreatedAt())
+                .build();
+    }
+
+    public static ProjectRepositoryLinkJpaEntity toEntity(ProjectRepositoryLink domain) {
+        if (domain == null) return null;
+        return ProjectRepositoryLinkJpaEntity.builder()
+                .id(domain.getId())
+                .organizationId(domain.getOrganizationId())
+                .projectId(domain.getProjectId())
+                .repositoryId(domain.getRepositoryId())
+                .repositoryName(domain.getRepositoryName())
+                .createdAt(domain.getCreatedAt())
+                .build();
+    }
+
+    public static TraceabilitySnapshot toDomain(TraceabilitySnapshotJpaEntity entity) {
+        if (entity == null) return null;
+        return TraceabilitySnapshot.builder()
+                .id(entity.getId())
+                .organizationId(entity.getOrganizationId())
+                .projectId(entity.getProjectId())
+                .snapshotName(entity.getSnapshotName())
+                .prNumber(entity.getPrNumber())
+                .commitSha(entity.getCommitSha())
+                .repositoryId(entity.getRepositoryId())
+                .snapshotData(entity.getSnapshotData())
+                .createdAt(entity.getCreatedAt())
+                .build();
+    }
+
+    public static TraceabilitySnapshotJpaEntity toEntity(TraceabilitySnapshot domain) {
+        if (domain == null) return null;
+        return TraceabilitySnapshotJpaEntity.builder()
+                .id(domain.getId())
+                .organizationId(domain.getOrganizationId())
+                .projectId(domain.getProjectId())
+                .snapshotName(domain.getSnapshotName())
+                .prNumber(domain.getPrNumber())
+                .commitSha(domain.getCommitSha())
+                .repositoryId(domain.getRepositoryId())
+                .snapshotData(domain.getSnapshotData())
                 .createdAt(domain.getCreatedAt())
                 .build();
     }

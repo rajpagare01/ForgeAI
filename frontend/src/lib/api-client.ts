@@ -280,6 +280,60 @@ class ApiClient {
   public delete<T = unknown>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: "DELETE" });
   }
+
+  // Unified Traceability & Project Intelligence
+  public getProjectTraceability<T = unknown>(projectId: string): Promise<T> {
+    return this.get<T>(`/api/v1/projects/${projectId}/traceability`);
+  }
+
+  public getProjectHealth<T = unknown>(projectId: string): Promise<T> {
+    return this.get<T>(`/api/v1/projects/${projectId}/traceability/health`);
+  }
+
+  public getProjectGaps<T = unknown>(projectId: string): Promise<T> {
+    return this.get<T>(`/api/v1/projects/${projectId}/traceability/gaps`);
+  }
+
+  public syncTraceability<T = unknown>(projectId: string): Promise<T> {
+    return this.post<T>(`/api/v1/projects/${projectId}/traceability/sync`);
+  }
+
+  public createTraceabilityLink<T = unknown>(projectId: string, link: unknown): Promise<T> {
+    return this.post<T>(`/api/v1/projects/${projectId}/traceability/links`, link);
+  }
+
+  public deleteTraceabilityLink<T = unknown>(projectId: string, linkId: string): Promise<T> {
+    return this.delete<T>(`/api/v1/projects/${projectId}/traceability/links/${linkId}`);
+  }
+
+  public listProjectRepositories<T = unknown>(projectId: string): Promise<T> {
+    return this.get<T>(`/api/v1/projects/${projectId}/repositories`);
+  }
+
+  public linkProjectRepository<T = unknown>(projectId: string, repositoryId: string, repositoryName?: string): Promise<T> {
+    return this.post<T>(`/api/v1/projects/${projectId}/repositories`, { repositoryId, repositoryName });
+  }
+
+  public unlinkProjectRepository<T = unknown>(projectId: string, repositoryId: string): Promise<T> {
+    return this.delete<T>(`/api/v1/projects/${projectId}/repositories/${repositoryId}`);
+  }
+
+  public createTraceabilitySnapshot<T = unknown>(projectId: string, snapshot: unknown): Promise<T> {
+    return this.post<T>(`/api/v1/projects/${projectId}/traceability/snapshots`, snapshot);
+  }
+
+  public listTraceabilitySnapshots<T = unknown>(projectId: string): Promise<T> {
+    return this.get<T>(`/api/v1/projects/${projectId}/traceability/snapshots`);
+  }
+
+  public getTraceabilitySnapshot<T = unknown>(projectId: string, snapshotId: string): Promise<T> {
+    return this.get<T>(`/api/v1/projects/${projectId}/traceability/snapshots/${snapshotId}`);
+  }
+
+  public getRequirementTraceability<T = unknown>(requirementId: string): Promise<T> {
+    return this.get<T>(`/api/v1/requirements/${requirementId}/traceability`);
+  }
 }
 
 export const apiClient = new ApiClient(GATEWAY_URL);
+

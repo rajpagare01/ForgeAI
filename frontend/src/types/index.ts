@@ -230,3 +230,149 @@ export interface AvailableRepository {
   ownerLogin: string;
 }
 
+export type ProjectHealthStatus = "GREEN" | "AMBER" | "RED";
+
+export interface ProjectHealth {
+  status: ProjectHealthStatus;
+  healthScore: number;
+  totalRequirements: number;
+  requirementsCompleted: number;
+  requirementsAtRisk: number;
+  requirementsWithoutImplementation: number;
+  requirementsWithoutTests: number;
+  openTasks: number;
+  blockedTasks: number;
+  activePrs: number;
+  failingPrs: number;
+  mergeReadinessBlockers: number;
+  unresolvedSecurityFindings: number;
+  unresolvedReliabilityFindings: number;
+  activeRemediationActions: number;
+  reasons: string[];
+}
+
+export interface TraceabilityGap {
+  gapType: string;
+  artifactId: string;
+  artifactName: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  evidence: string;
+  recommendation: string;
+}
+
+export interface RequirementHealth {
+  requirementId: string;
+  identifier: string;
+  title: string;
+  status: "NOT_STARTED" | "IN_PROGRESS" | "IMPLEMENTED" | "VALIDATED" | "AT_RISK" | "COMPLETED";
+  implementationStatus: string;
+  testStatus: string;
+  riskStatus: string;
+  traceabilityStatus: string;
+  completenessScore: number;
+  linkedTasksCount: number;
+  linkedPrsCount: number;
+  testsCount: number;
+  activeRiskScore?: number;
+  remediationCount: number;
+}
+
+export interface TraceabilitySpineChain {
+  requirement: {
+    id: string;
+    identifier: string;
+    title: string;
+    description?: string;
+    status: string;
+    version: number;
+  };
+  tasks: Array<{
+    id: string;
+    taskKey: string;
+    title: string;
+    status: TaskStatus;
+    priority: TaskPriority;
+  }>;
+  commits: Array<{
+    id?: string;
+    commitSha: string;
+    message: string;
+    authorName?: string;
+  }>;
+  pullRequests: Array<{
+    id?: string;
+    prNumber: number;
+    title: string;
+    state: string;
+    headSha: string;
+    isMerged?: boolean;
+  }>;
+  testRuns: Array<{
+    id?: string;
+    status: string;
+    totalTests?: number;
+    passedTests?: number;
+    failedTests?: number;
+  }>;
+  testCases: Array<{
+    testCaseId?: string;
+    testName: string;
+    classname: string;
+    latestStatus: string;
+  }>;
+  aiAnalyses: Array<{
+    id?: string;
+    riskLevel?: string;
+    riskScore?: number;
+    summary?: string;
+    mergeReadiness?: Record<string, any>;
+  }>;
+  remediationActions: Array<{
+    id?: string;
+    actionId?: string;
+    title?: string;
+    status?: string;
+    severity?: string;
+  }>;
+  health?: RequirementHealth;
+  gaps?: TraceabilityGap[];
+}
+
+export interface ProjectTraceabilityResponse {
+  projectId: string;
+  organizationId: string;
+  health: ProjectHealth;
+  gaps: TraceabilityGap[];
+  chains: TraceabilitySpineChain[];
+  repositories: Array<{
+    id: string;
+    repositoryId: string;
+    repositoryName: string;
+    createdAt: string;
+  }>;
+  links: Array<{
+    id: string;
+    sourceType: string;
+    sourceId: string;
+    targetType: string;
+    targetId: string;
+    linkOrigin: string;
+    confidence: string;
+    evidence?: string;
+  }>;
+  generatedAt: string;
+}
+
+export interface TraceabilitySnapshot {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  snapshotName: string;
+  prNumber?: number;
+  commitSha?: string;
+  repositoryId?: string;
+  snapshotData: string;
+  createdAt: string;
+}
+
+

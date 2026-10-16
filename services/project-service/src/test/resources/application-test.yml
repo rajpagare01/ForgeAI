@@ -21,3 +21,12 @@ outbox:
   publisher:
     batch-size: 50
     max-attempts: 5
+
+services:
+  source-control:
+    url: http://localhost:8082
+  testing:
+    url: http://localhost:8083
+  ai:
+    url: http://localhost:8084
+
