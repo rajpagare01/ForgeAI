@@ -2,12 +2,15 @@ package com.forgeai.project.domain.model;
 
 public enum LinkOrigin {
     EXPLICIT_USER_LINK,
+    REQUIREMENT_TASK_RELATION,
     GITHUB_REFERENCE,
     COMMIT_MESSAGE,
     PR_REFERENCE,
+    BRANCH_REFERENCE,
     AST,
     TEST_EVIDENCE,
     AI_ANALYSIS,
     CROSS_REPO,
+    REMEDIATION_REFERENCE,
     DERIVED
 }

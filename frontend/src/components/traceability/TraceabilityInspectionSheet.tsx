@@ -6,22 +6,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   X,
-  Layers,
-  Network,
+  FileText,
+  CheckSquare,
+  GitPullRequest,
   CheckCircle2,
   XCircle,
-  FileCode,
+  AlertTriangle,
   Sparkles,
-  GitPullRequest,
   GitCommit,
   ShieldAlert,
   ArrowRight,
   Copy,
   Check,
-  Terminal,
   FolderTree,
-  ChevronRight,
-  ChevronDown,
+  Terminal,
 } from "lucide-react";
 
 interface TraceabilityInspectionSheetProps {
@@ -36,18 +34,13 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<"ast" | "junit" | "git">("ast");
-  const [copiedTrace, setCopiedTrace] = useState(false);
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
-    "root-ast": true,
-    "class-1": true,
-    "suite-1": true,
-  });
+  const [copiedTrace, setCopiedTrace] = useState<boolean>(false);
 
   if (!isOpen || !node) return null;
 
-  const toggleNode = (id: string) => {
-    setExpandedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  const hasPr = node.sourceControl.prNumber > 0;
+  const hasTests = node.verification.totalTests > 0;
+  const hasCommit = node.sourceControl.commitSha && node.sourceControl.commitSha !== "N/A";
 
   const handleCopyTrace = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -55,26 +48,14 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
     setTimeout(() => setCopiedTrace(false), 2000);
   };
 
-  // Sample stack trace for verification inspection
-  const sampleStackTrace =
-    node.verification.status === "FAILED"
-      ? `org.opentest4j.AssertionFailedError: Status expected:<200> but was:<401>
-  at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$assertStatus$4(StatusResultMatchers.java:101)
-  at org.springframework.test.web.servlet.MockMvc.perform(MockMvc.java:214)
-  at com.forgeai.identity.api.controller.UserControllerTest.getUserProfile_WhenAuthenticated(UserControllerTest.java:82)
-  at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
-  at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-  at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:728)`
-      : `[INFO] Running com.forgeai.gateway.filter.JwtRevocationGatewayTest
-[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.12 s -- in com.forgeai.gateway.filter.JwtRevocationGatewayTest
-[INFO] Running com.forgeai.gateway.filter.GatewayRateLimiterTest
-[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.33 s -- in com.forgeai.gateway.filter.GatewayRateLimiterTest
-[INFO] 
-[INFO] Results:
-[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD SUCCESS
-[INFO] ------------------------------------------------------------------------`;
+  const verificationConsoleLog = hasTests
+    ? `[INFO] Verification Test Suite: ${node.verification.testRunId}
+[INFO] Total Tests Executed: ${node.verification.totalTests}
+[INFO] Passed: ${node.verification.passedTests}
+[INFO] Failures: ${node.verification.totalTests - node.verification.passedTests}
+[INFO] Status: ${node.verification.status}
+[INFO] Trace Correlation: REQ-${node.requirement.key} -> TASK-${node.task.key}`
+    : "No test execution runs or JUnit results registered for this requirement spine.";
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
@@ -101,51 +82,69 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                   </Badge>
                   <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
                   <span className="font-mono text-xs font-semibold text-sky-400">
-                    PR #{node.sourceControl.prNumber}
+                    {hasPr ? `PR #${node.sourceControl.prNumber}` : "No PR Linked"}
                   </span>
                 </div>
                 <h2 className="text-lg font-bold text-white tracking-tight mt-1">
                   {node.requirement.title}
                 </h2>
                 <p className="text-xs text-slate-400">
-                  {node.task.title}
+                  Continuous lineage verification for requirement: {node.requirement.key}
                 </p>
               </div>
 
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={onClose}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white"
               >
-                <X className="h-5 w-5" />
-              </button>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
 
-            {/* Quick KPI Strip */}
-            <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400">Risk Assessment:</span>
-                <Badge
-                  variant={
-                    node.aiBlastRadius.riskLevel === "LOW"
-                      ? "riskLow"
-                      : node.aiBlastRadius.riskLevel === "MEDIUM"
-                      ? "riskMedium"
-                      : "riskHigh"
-                  }
+            {/* Quick Status Bar */}
+            <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-800/60">
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Requirement</span>
+                <span className="text-xs font-medium text-indigo-400">{node.requirement.status}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Task Status</span>
+                <span className="text-xs font-medium text-purple-400">{node.task.status}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Verification</span>
+                <span
+                  className={`text-xs font-medium ${
+                    node.verification.status === "PASSED"
+                      ? "text-emerald-400"
+                      : node.verification.status === "RUNNING"
+                      ? "text-amber-400"
+                      : "text-rose-400"
+                  }`}
                 >
-                  {node.aiBlastRadius.riskLevel} ({node.aiBlastRadius.score}/100)
-                </Badge>
+                  {node.verification.status}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400">CI Verification:</span>
-                <Badge variant={node.verification.status === "PASSED" ? "success" : "destructive"}>
-                  {node.verification.status} ({node.verification.passedTests}/{node.verification.totalTests})
-                </Badge>
+              <div>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Risk Score</span>
+                <span
+                  className={`text-xs font-medium ${
+                    node.aiBlastRadius.riskLevel === "LOW"
+                      ? "text-emerald-400"
+                      : node.aiBlastRadius.riskLevel === "MEDIUM"
+                      ? "text-amber-400"
+                      : "text-rose-400"
+                  }`}
+                >
+                  {node.aiBlastRadius.riskLevel} ({node.aiBlastRadius.score})
+                </span>
               </div>
             </div>
 
-            {/* Tab Selection */}
-            <div className="flex items-center gap-2 mt-4">
+            {/* Drawer Tabs */}
+            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-800/60">
               <button
                 onClick={() => setActiveTab("ast")}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -155,7 +154,7 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                 }`}
               >
                 <FolderTree className="h-3.5 w-3.5" />
-                AST Dependency Tree
+                AST & Risk Analysis
               </button>
               <button
                 onClick={() => setActiveTab("junit")}
@@ -166,7 +165,7 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                 }`}
               >
                 <Terminal className="h-3.5 w-3.5" />
-                Raw JUnit Stack Traces
+                Verification Output
               </button>
               <button
                 onClick={() => setActiveTab("git")}
@@ -184,88 +183,42 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
 
           {/* Drawer Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Tab 1: AST Dependency Tree */}
+            {/* Tab 1: AST & Risk Analysis */}
             {activeTab === "ast" && (
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xs font-semibold uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-2">
                     <FolderTree className="h-4 w-4 text-indigo-400" />
-                    Tree-Sitter Semantic AST Hierarchy
+                    Tree-Sitter Semantic AST Analysis
                   </h3>
                   <p className="text-xs text-slate-400 mb-4">
-                    Hierarchical AST decomposition of code modifications parsed from commit SHA {node.sourceControl.commitSha.substring(0, 7)}.
+                    Semantic blast radius evaluation for {node.requirement.key} implementation.
                   </p>
 
-                  {/* Interactive Tree View */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 font-mono text-xs space-y-2">
-                    {/* Root Package */}
-                    <div>
-                      <div
-                        onClick={() => toggleNode("root-ast")}
-                        className="flex items-center gap-2 text-indigo-300 font-semibold cursor-pointer hover:text-indigo-200 select-none"
+                  <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 font-mono text-xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="text-slate-400">Affected AST Symbols:</span>
+                      <span className="text-white font-bold">{node.aiBlastRadius.affectedSymbolsCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="text-slate-400">Risk Assessment:</span>
+                      <Badge
+                        variant={
+                          node.aiBlastRadius.riskLevel === "LOW"
+                            ? "riskLow"
+                            : node.aiBlastRadius.riskLevel === "MEDIUM"
+                            ? "riskMedium"
+                            : "riskHigh"
+                        }
                       >
-                        {expandedNodes["root-ast"] ? (
-                          <ChevronDown className="h-3.5 w-3.5" />
-                        ) : (
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        )}
-                        <span>package com.forgeai.gateway.filter</span>
-                      </div>
-
-                      {expandedNodes["root-ast"] && (
-                        <div className="ml-5 pl-2 border-l border-slate-800 mt-2 space-y-2">
-                          {/* Class Node */}
-                          <div>
-                            <div
-                              onClick={() => toggleNode("class-1")}
-                              className="flex items-center gap-2 text-sky-300 cursor-pointer hover:text-sky-200 select-none"
-                            >
-                              {expandedNodes["class-1"] ? (
-                                <ChevronDown className="h-3.5 w-3.5" />
-                              ) : (
-                                <ChevronRight className="h-3.5 w-3.5" />
-                              )}
-                              <span>class JwtRevocationGatewayFilter</span>
-                              <Badge variant="outline" className="text-[10px] py-0 text-slate-400">
-                                GlobalFilter
-                              </Badge>
-                            </div>
-
-                            {expandedNodes["class-1"] && (
-                              <div className="ml-5 pl-2 border-l border-slate-800 mt-2 space-y-2">
-                                {/* Methods */}
-                                <div className="flex items-center justify-between text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                                  <div>
-                                    <span className="text-purple-300">Mono&lt;Void&gt;</span>{" "}
-                                    <span className="text-white font-semibold">filter</span>
-                                    <span className="text-slate-400">(ServerWebExchange, GatewayFilterChain)</span>
-                                  </div>
-                                  <Badge variant="warning" className="text-[10px]">
-                                    MUTATED
-                                  </Badge>
-                                </div>
-
-                                <div className="flex items-center justify-between text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                                  <div>
-                                    <span className="text-purple-300">Mono&lt;Boolean&gt;</span>{" "}
-                                    <span className="text-white font-semibold">isTokenRevoked</span>
-                                    <span className="text-slate-400">(String jti)</span>
-                                  </div>
-                                  <Badge variant="success" className="text-[10px]">
-                                    NEW
-                                  </Badge>
-                                </div>
-
-                                {/* Call Edge to Redis */}
-                                <div className="ml-4 pl-2 border-l border-indigo-500/30 flex items-center gap-2 text-[11px] text-amber-300">
-                                  <ArrowRight className="h-3 w-3 text-slate-500" />
-                                  <span>calls ReactiveRedisTemplate.hasKey("blacklist:" + jti)</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                        {node.aiBlastRadius.riskLevel} ({node.aiBlastRadius.score}/100)
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Target Commit:</span>
+                      <span className="text-slate-300">
+                        {hasCommit ? node.sourceControl.commitSha.substring(0, 12) : "No commit associated"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -293,7 +246,7 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
               </div>
             )}
 
-            {/* Tab 2: Raw JUnit Stack Traces */}
+            {/* Tab 2: Verification Output */}
             {activeTab === "junit" && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -306,38 +259,40 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                     </p>
                   </div>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCopyTrace(sampleStackTrace)}
-                    className="gap-1.5 text-xs h-8"
-                  >
-                    {copiedTrace ? (
-                      <>
-                        <Check className="h-3.5 w-3.5 text-emerald-400" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-3.5 w-3.5" />
-                        Copy Raw Output
-                      </>
-                    )}
-                  </Button>
+                  {hasTests && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopyTrace(verificationConsoleLog)}
+                      className="gap-1.5 text-xs h-8"
+                    >
+                      {copiedTrace ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          Copy Raw Output
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
-                {/* Raw Terminal Stack Trace Box */}
+                {/* Raw Terminal Output Box */}
                 <div className="rounded-xl border border-slate-800 bg-black/90 p-4 font-mono text-xs overflow-x-auto shadow-inner">
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-[11px] text-slate-500">
                     <span>CONSOLE OUTPUT / STACK TRACE</span>
-                    <span>JVM Test Engine (JUnit 5)</span>
+                    <span>{hasTests ? "Automated Test Suite Engine" : "No Tests"}</span>
                   </div>
                   <pre
                     className={`leading-5 whitespace-pre ${
                       node.verification.status === "FAILED" ? "text-rose-300" : "text-emerald-300"
                     }`}
                   >
-                    {sampleStackTrace}
+                    {verificationConsoleLog}
                   </pre>
                 </div>
 
@@ -383,10 +338,10 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                   <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-sm font-bold text-sky-400">
-                        PR #{node.sourceControl.prNumber}
+                        {hasPr ? `PR #${node.sourceControl.prNumber}` : "No Pull Request"}
                       </span>
                       <Badge variant="outline" className="font-mono text-[10px]">
-                        MERGED
+                        {hasPr ? "LINKED" : "UNLINKED"}
                       </Badge>
                     </div>
                     <p className="text-sm font-medium text-white">
@@ -396,7 +351,7 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                       <span>Author: @{node.sourceControl.author}</span>
                       <span className="font-mono flex items-center gap-1 text-slate-300">
                         <GitCommit className="h-3.5 w-3.5 text-slate-500" />
-                        {node.sourceControl.commitSha.substring(0, 10)}
+                        {hasCommit ? node.sourceControl.commitSha.substring(0, 10) : "N/A"}
                       </span>
                     </div>
                   </div>
@@ -405,10 +360,12 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2">
                   <div className="text-xs font-semibold text-slate-300">Trace Correlation Signature</div>
                   <div className="font-mono text-[11px] text-indigo-300 break-all bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                    00-{node.sourceControl.commitSha.substring(0, 32)}-{Date.now().toString(16).padStart(16, "0")}-01
+                    {hasCommit
+                      ? `00-${node.sourceControl.commitSha.padEnd(32, "0").substring(0, 32)}-${Date.now().toString(16).padStart(16, "0")}-01`
+                      : "00-00000000000000000000000000000000-0000000000000000-00"}
                   </div>
                   <p className="text-[11px] text-slate-500">
-                    W3C traceparent header injected across all distributed Spring Boot microservices.
+                    W3C traceparent header injected across distributed microservices.
                   </p>
                 </div>
               </div>

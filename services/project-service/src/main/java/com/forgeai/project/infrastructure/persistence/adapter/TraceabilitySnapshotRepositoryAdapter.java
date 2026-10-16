@@ -21,6 +21,9 @@ public class TraceabilitySnapshotRepositoryAdapter implements TraceabilitySnapsh
 
     @Override
     public TraceabilitySnapshot save(TraceabilitySnapshot snapshot) {
+        if (snapshot.getId() != null && springDataRepository.existsById(snapshot.getId())) {
+            throw new UnsupportedOperationException("TraceabilitySnapshot is an immutable governance record and cannot be modified: id=" + snapshot.getId());
+        }
         TraceabilitySnapshotJpaEntity entity = EntityDomainMapper.toEntity(snapshot);
         TraceabilitySnapshotJpaEntity saved = springDataRepository.save(entity);
         return EntityDomainMapper.toDomain(saved);

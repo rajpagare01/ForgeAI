@@ -52,7 +52,7 @@ function convertChainToNode(chain: TraceabilitySpineChain): TraceabilityNode {
 
   // Determine AI blast radius
   const riskLevel: RiskLevel = (ai?.riskLevel as RiskLevel) || "LOW";
-  const score = ai?.riskScore !== undefined ? Math.round(ai.riskScore * 100) : 10;
+  const score = ai?.riskScore !== undefined ? Math.round(ai.riskScore * 100) : 0;
   const flaggedRisks: string[] = [];
 
   if (chain.gaps && chain.gaps.length > 0) {
@@ -70,19 +70,19 @@ function convertChainToNode(chain: TraceabilitySpineChain): TraceabilityNode {
       status: (req.status === "VERIFIED" || req.status === "COMPLETED" ? "VERIFIED" : req.status === "ACTIVE" ? "ACTIVE" : "DRAFT") as any,
     },
     task: {
-      key: task?.taskKey || "TASK-NONE",
+      key: task?.taskKey || "NO TASK",
       title: task?.title || "No assigned task",
       status: task?.status || "TODO",
       priority: task?.priority || "MEDIUM",
     },
     sourceControl: {
       prNumber: pr?.prNumber || 0,
-      prTitle: pr?.title || commit?.message || "No PR associated",
+      prTitle: pr?.title || commit?.message || "No Pull Request",
       commitSha: pr?.headSha || commit?.commitSha || "N/A",
-      author: commit?.authorName || "system",
+      author: commit?.authorName || (pr ? "author" : "system"),
     },
     verification: {
-      testRunId: testRun?.id ? `TR-${testRun.id.substring(0, 6)}` : "TR-CI",
+      testRunId: testRun?.id ? `TR-${testRun.id.substring(0, 6)}` : (totalTests > 0 ? "Test Suite" : "No Test Evidence"),
       status: testStatus,
       passedTests,
       totalTests: Math.max(totalTests, passedTests),
@@ -282,11 +282,13 @@ export const TraceabilitySpineFlow: React.FC<TraceabilitySpineFlowProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-xs font-semibold text-sky-400 flex items-center gap-1">
                       <GitPullRequest className="h-3 w-3" />
-                      #{node.sourceControl.prNumber}
+                      {node.sourceControl.prNumber > 0 ? `#${node.sourceControl.prNumber}` : "No PR"}
                     </span>
                     <span className="font-mono text-[10px] text-slate-500 flex items-center gap-0.5">
                       <GitCommit className="h-3 w-3" />
-                      {node.sourceControl.commitSha.substring(0, 7)}
+                      {node.sourceControl.commitSha && node.sourceControl.commitSha !== "N/A"
+                        ? node.sourceControl.commitSha.substring(0, 7)
+                        : "No commit"}
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 line-clamp-2">

@@ -47,7 +47,7 @@ public class AiServiceClient {
         try {
             String entityId = repositoryId + "#" + prNumber;
             String encodedEntityId = URLEncoder.encode(entityId, StandardCharsets.UTF_8);
-            HttpRequest request = buildRequest("/api/v1/ai/analyses/PULL_REQUEST/" + encodedEntityId, organizationId);
+            HttpRequest request = buildRequest("/api/v1/ai/analyses/PR/" + encodedEntityId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteAiAnalysisDto>>() {});

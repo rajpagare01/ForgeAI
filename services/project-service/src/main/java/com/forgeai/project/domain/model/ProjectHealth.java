@@ -27,5 +27,7 @@ public class ProjectHealth {
     private int unresolvedSecurityFindings;
     private int unresolvedReliabilityFindings;
     private int activeRemediationActions;
+    @Builder.Default
+    private String evidenceStatus = "AVAILABLE"; // "AVAILABLE", "PARTIAL", "UNAVAILABLE"
     private List<String> reasons;
 }

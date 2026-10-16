@@ -248,6 +248,7 @@ export interface ProjectHealth {
   unresolvedSecurityFindings: number;
   unresolvedReliabilityFindings: number;
   activeRemediationActions: number;
+  evidenceStatus?: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
   reasons: string[];
 }
 

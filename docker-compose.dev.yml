@@ -93,6 +93,12 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
       SERVER_PORT: 8085
+      SERVICES_SOURCE_CONTROL_URL: http://source-control-service:8082
+      SERVICES_TESTING_URL: http://testing-service:8083
+      SERVICES_AI_URL: http://ai-service:8084
+      SOURCE_CONTROL_SERVICE_URL: http://source-control-service:8082
+      TESTING_SERVICE_URL: http://testing-service:8083
+      AI_SERVICE_URL: http://ai-service:8084
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,6 +1,5 @@
 package com.forgeai.project.application.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forgeai.project.domain.exception.DuplicateResourceException;
 import com.forgeai.project.domain.exception.ResourceNotFoundException;
@@ -18,8 +17,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * TraceabilityAggregationService
+ * <p>
+ * Aggregates the authoritative cross-service continuous delivery spine:
+ * Requirement -> Task -> Code Artifact -> Commit -> Pull Request -> Test Run -> AI Analysis -> Risk -> Merge Readiness -> Remediation.
+ * <p>
+ * Formulates deterministic gap detection and reproducible project health scores without LLM hallucinations.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -38,11 +46,26 @@ public class TraceabilityAggregationService {
     private final AiServiceClient aiServiceClient;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Request-scoped cache container to eliminate N+1 duplicate downstream HTTP queries.
+     */
+    private static class RequestAggregationCache {
+        final Map<UUID, Optional<RemoteRepositoryDto>> repoCache = new ConcurrentHashMap<>();
+        final Map<UUID, List<RemotePullRequestDto>> prsByRepoCache = new ConcurrentHashMap<>();
+        final Map<UUID, List<RemoteCommitDto>> commitsByRepoCache = new ConcurrentHashMap<>();
+        final Map<String, List<RemoteTestRunDto>> testRunsByShaCache = new ConcurrentHashMap<>();
+        final Map<String, Optional<RemoteRequirementTestTraceDto>> testTraceByReqKeyCache = new ConcurrentHashMap<>();
+        final Map<String, List<RemoteAiAnalysisDto>> analysesByPrKeyCache = new ConcurrentHashMap<>();
+        final Map<UUID, List<RemoteEngineeringActionDto>> actionsByAnalysisIdCache = new ConcurrentHashMap<>();
+    }
+
     @Transactional(readOnly = true)
     public ProjectTraceabilityResponse getProjectTraceability(UUID organizationId, UUID projectId) {
         validateTenant(organizationId);
         Project project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+
+        RequestAggregationCache cache = new RequestAggregationCache();
 
         // 1. Fetch domain items
         List<Requirement> requirements = requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
@@ -61,30 +84,63 @@ public class TraceabilityAggregationService {
             codeLinksByTaskId.put(t.getId(), codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, t.getId()));
         }
 
-        // 2. Fetch external artifacts across connected repositories
+        // 2. Fetch external artifacts across connected repositories (using cache)
         List<RemotePullRequestDto> allPrs = new ArrayList<>();
         List<RemoteCommitDto> allCommits = new ArrayList<>();
         Map<UUID, RemoteRepositoryDto> repoDetails = new HashMap<>();
+        boolean downstreamAvailable = true;
 
         for (ProjectRepositoryLink rl : repoLinks) {
-            sourceControlClient.getRepository(organizationId, rl.getRepositoryId())
-                    .ifPresent(r -> repoDetails.put(rl.getRepositoryId(), r));
-            allPrs.addAll(sourceControlClient.listPullRequests(organizationId, rl.getRepositoryId()));
-            allCommits.addAll(sourceControlClient.listCommits(organizationId, rl.getRepositoryId()));
+            Optional<RemoteRepositoryDto> repoOpt = cache.repoCache.computeIfAbsent(
+                    rl.getRepositoryId(),
+                    rId -> sourceControlClient.getRepository(organizationId, rId)
+            );
+            repoOpt.ifPresent(r -> repoDetails.put(rl.getRepositoryId(), r));
+
+            List<RemotePullRequestDto> prs = cache.prsByRepoCache.computeIfAbsent(
+                    rl.getRepositoryId(),
+                    rId -> {
+                        try {
+                            return sourceControlClient.listPullRequests(organizationId, rId);
+                        } catch (Exception e) {
+                            log.warn("Failed to fetch PRs for repo {}: {}", rId, e.getMessage());
+                            return Collections.emptyList();
+                        }
+                    }
+            );
+            allPrs.addAll(prs);
+
+            List<RemoteCommitDto> commits = cache.commitsByRepoCache.computeIfAbsent(
+                    rl.getRepositoryId(),
+                    rId -> {
+                        try {
+                            return sourceControlClient.listCommits(organizationId, rId);
+                        } catch (Exception e) {
+                            log.warn("Failed to fetch commits for repo {}: {}", rId, e.getMessage());
+                            return Collections.emptyList();
+                        }
+                    }
+            );
+            allCommits.addAll(commits);
         }
 
-        // 3. Fetch Test data for commits/PRs and requirements
-        Map<String, List<RemoteTestRunDto>> testRunsBySha = new HashMap<>();
+        // 3. Fetch test traces for requirements and PR test runs
         Map<String, RemoteRequirementTestTraceDto> reqTestsByKey = new HashMap<>();
-
         for (Requirement r : requirements) {
-            testingServiceClient.getTraceabilityForRequirement(organizationId, r.getIdentifier())
-                    .ifPresent(t -> reqTestsByKey.put(r.getIdentifier(), t));
+            Optional<RemoteRequirementTestTraceDto> traceOpt = cache.testTraceByReqKeyCache.computeIfAbsent(
+                    r.getIdentifier(),
+                    rKey -> testingServiceClient.getTraceabilityForRequirement(organizationId, rKey)
+            );
+            traceOpt.ifPresent(t -> reqTestsByKey.put(r.getIdentifier(), t));
         }
 
+        Map<String, List<RemoteTestRunDto>> testRunsBySha = new HashMap<>();
         for (RemotePullRequestDto pr : allPrs) {
-            if (pr.getHeadSha() != null && !testRunsBySha.containsKey(pr.getHeadSha())) {
-                List<RemoteTestRunDto> runs = testingServiceClient.listTestRuns(organizationId, pr.getRepositoryId(), pr.getHeadSha());
+            if (pr.getHeadSha() != null) {
+                List<RemoteTestRunDto> runs = cache.testRunsByShaCache.computeIfAbsent(
+                        pr.getHeadSha(),
+                        sha -> testingServiceClient.listTestRuns(organizationId, pr.getRepositoryId(), sha)
+                );
                 testRunsBySha.put(pr.getHeadSha(), runs);
             }
         }
@@ -92,14 +148,27 @@ public class TraceabilityAggregationService {
         // 4. Fetch AI analyses, risk evaluations, and remediation actions for PRs
         Map<String, List<RemoteAiAnalysisDto>> aiAnalysesByPrKey = new HashMap<>();
         Map<UUID, List<RemoteEngineeringActionDto>> actionsByAnalysisId = new HashMap<>();
+        List<RemoteAiAnalysisDto> allAnalyses = new ArrayList<>();
 
         for (RemotePullRequestDto pr : allPrs) {
-            String prKey = pr.getRepositoryId() + "#" + pr.getPrNumber();
-            List<RemoteAiAnalysisDto> analyses = aiServiceClient.getAnalysesForPullRequest(organizationId, pr.getRepositoryId(), pr.getPrNumber());
+            if (pr == null || pr.getPrNumber() == null) {
+                continue;
+            }
+            Integer prNum = pr.getPrNumber();
+            String prKey = pr.getRepositoryId() + "#" + prNum;
+            List<RemoteAiAnalysisDto> analyses = cache.analysesByPrKeyCache.computeIfAbsent(
+                    prKey,
+                    k -> aiServiceClient.getAnalysesForPullRequest(organizationId, pr.getRepositoryId(), prNum)
+            );
             aiAnalysesByPrKey.put(prKey, analyses);
+            allAnalyses.addAll(analyses);
+
             for (RemoteAiAnalysisDto analysis : analyses) {
                 if (analysis.getId() != null) {
-                    List<RemoteEngineeringActionDto> actions = aiServiceClient.getEngineeringActions(organizationId, analysis.getId());
+                    List<RemoteEngineeringActionDto> actions = cache.actionsByAnalysisIdCache.computeIfAbsent(
+                            analysis.getId(),
+                            aId -> aiServiceClient.getEngineeringActions(organizationId, aId)
+                    );
                     actionsByAnalysisId.put(analysis.getId(), actions);
                 }
             }
@@ -179,23 +248,38 @@ public class TraceabilityAggregationService {
                         }
                     }
                 }
+                if (!commitMatches) {
+                    for (Task t : reqTasks) {
+                        List<CodeLink> clList = codeLinksByTaskId.getOrDefault(t.getId(), Collections.emptyList());
+                        for (CodeLink cl : clList) {
+                            if (cl.getLinkType() == CodeLinkType.COMMIT && cl.getExternalRef().equalsIgnoreCase(commit.getCommitSha())) {
+                                commitMatches = true;
+                                break;
+                            }
+                        }
+                        if (commitMatches) break;
+                    }
+                }
                 if (commitMatches) {
                     chainCommits.add(commit);
-                    if (commit.getCommitSha() != null && testRunsBySha.containsKey(commit.getCommitSha())) {
+                    if (testRunsBySha.containsKey(commit.getCommitSha())) {
                         chainTestRuns.addAll(testRunsBySha.get(commit.getCommitSha()));
                     }
                 }
             }
 
-            List<TraceabilityGap> reqGaps = detectRequirementGaps(req, reqTasks, chainPrs, chainTestRuns, chainTestCases, chainAnalyses, chainActions);
+            // Compute requirement health and gaps
+            RequirementHealth reqHealth = computeRequirementHealth(
+                    req, reqTasks, chainCommits, chainPrs, chainTestRuns, chainTestCases, chainAnalyses, chainActions
+            );
+            List<TraceabilityGap> reqGaps = detectRequirementGaps(
+                    req, reqTasks, chainCommits, chainPrs, chainTestRuns, chainTestCases, chainAnalyses, chainActions
+            );
             allGaps.addAll(reqGaps);
 
-            RequirementHealth reqHealth = computeRequirementHealth(req, reqTasks, chainPrs, chainTestRuns, chainTestCases, chainAnalyses, chainActions);
-
-            List<TaskResponse> taskResponses = reqTasks.stream().map(TaskResponse::from).collect(Collectors.toList());
             chains.add(new TraceabilitySpineChainDto(
                     RequirementResponse.from(req),
-                    taskResponses,
+                    reqTasks.stream().map(TaskResponse::from).collect(Collectors.toList()),
                     new ArrayList<>(chainCommits),
                     new ArrayList<>(chainPrs),
                     new ArrayList<>(chainTestRuns),
@@ -207,12 +291,12 @@ public class TraceabilityAggregationService {
             ));
         }
 
-        // 6. Detect project-level gaps
-        List<TraceabilityGap> projectGaps = detectProjectGaps(tasks, allPrs, chains);
+        // 6. Detect project-level gaps (including CODE_WITHOUT_PR and PR_WITHOUT_TASK)
+        List<TraceabilityGap> projectGaps = detectProjectGaps(tasks, allPrs, allCommits, codeLinksByTaskId, chains);
         allGaps.addAll(projectGaps);
 
-        // 7. Compute deterministic ProjectHealth
-        ProjectHealth projectHealth = computeProjectHealth(requirements, tasks, chains, allGaps, allPrs);
+        // 7. Compute deterministic ProjectHealth from authoritative downstream intelligence
+        ProjectHealth projectHealth = computeProjectHealth(requirements, tasks, chains, allGaps, allPrs, allAnalyses, testRunsBySha);
 
         // 8. Map repositories and links
         List<ProjectRepositoryLinkDto> repoDtos = repoLinks.stream()
@@ -270,13 +354,14 @@ public class TraceabilityAggregationService {
 
         int createdCount = 0;
 
+        // 1. Requirement -> Task linkage via task.requirement_id
         for (Task task : tasks) {
             if (task.getRequirementId() != null) {
                 boolean exists = traceabilityLinkRepository.exists(
                         organizationId, projectId,
                         TraceabilityType.REQUIREMENT, task.getRequirementId().toString(),
                         TraceabilityType.TASK, task.getId().toString(),
-                        LinkOrigin.EXPLICIT_USER_LINK.name()
+                        LinkOrigin.REQUIREMENT_TASK_RELATION.name()
                 );
                 if (!exists) {
                     TraceabilityLink link = TraceabilityLink.builder()
@@ -287,9 +372,9 @@ public class TraceabilityAggregationService {
                             .sourceId(task.getRequirementId().toString())
                             .targetType(TraceabilityType.TASK)
                             .targetId(task.getId().toString())
-                            .linkOrigin(LinkOrigin.EXPLICIT_USER_LINK)
+                            .linkOrigin(LinkOrigin.REQUIREMENT_TASK_RELATION)
                             .confidence(ConfidenceLevel.HIGH)
-                            .evidence("task_requirement_id_fk")
+                            .evidence("task_requirement_fk")
                             .active(true)
                             .createdAt(Instant.now())
                             .build();
@@ -298,6 +383,7 @@ public class TraceabilityAggregationService {
                 }
             }
 
+            // 2. Explicit Task Code Links
             List<CodeLink> codeLinks = codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, task.getId());
             for (CodeLink cl : codeLinks) {
                 TraceabilityType targetType = switch (cl.getLinkType()) {
@@ -309,7 +395,7 @@ public class TraceabilityAggregationService {
                         organizationId, projectId,
                         TraceabilityType.TASK, task.getId().toString(),
                         targetType, cl.getExternalRef(),
-                        LinkOrigin.COMMIT_MESSAGE.name()
+                        LinkOrigin.EXPLICIT_USER_LINK.name()
                 );
                 if (!exists) {
                     TraceabilityLink link = TraceabilityLink.builder()
@@ -321,9 +407,9 @@ public class TraceabilityAggregationService {
                             .targetType(targetType)
                             .targetId(cl.getExternalRef())
                             .externalReference(cl.getExternalRef())
-                            .linkOrigin(LinkOrigin.COMMIT_MESSAGE)
+                            .linkOrigin(LinkOrigin.EXPLICIT_USER_LINK)
                             .confidence(ConfidenceLevel.HIGH)
-                            .evidence("code_link_id=" + cl.getId())
+                            .evidence("explicit_task_code_link=" + cl.getId())
                             .active(true)
                             .createdAt(Instant.now())
                             .build();
@@ -333,18 +419,29 @@ public class TraceabilityAggregationService {
             }
         }
 
+        // 3. Derived Task -> PR and Task -> Commit linkages from GitHub activity
         for (ProjectRepositoryLink repoLink : repoLinks) {
             List<RemotePullRequestDto> prs = sourceControlClient.listPullRequests(organizationId, repoLink.getRepositoryId());
             for (RemotePullRequestDto pr : prs) {
                 for (Task task : tasks) {
-                    if (matchesText(pr.getTitle(), task.getTaskKey().toLowerCase()) ||
-                            matchesText(pr.getBody(), task.getTaskKey().toLowerCase()) ||
-                            matchesText(pr.getHeadBranch(), task.getTaskKey().toLowerCase())) {
+                    String taskKey = task.getTaskKey().toLowerCase();
+                    boolean titleMatches = matchesText(pr.getTitle(), taskKey);
+                    boolean bodyMatches = matchesText(pr.getBody(), taskKey);
+                    boolean branchMatches = matchesText(pr.getHeadBranch(), taskKey);
+
+                    if (titleMatches || bodyMatches || branchMatches) {
+                        LinkOrigin origin = branchMatches && !titleMatches && !bodyMatches
+                                ? LinkOrigin.BRANCH_REFERENCE
+                                : LinkOrigin.PR_REFERENCE;
+                        String evidence = branchMatches && !titleMatches && !bodyMatches
+                                ? "head_branch=" + pr.getHeadBranch()
+                                : "pr_text_match=" + pr.getPrNumber();
+
                         boolean exists = traceabilityLinkRepository.exists(
                                 organizationId, projectId,
                                 TraceabilityType.TASK, task.getId().toString(),
                                 TraceabilityType.PULL_REQUEST, String.valueOf(pr.getPrNumber()),
-                                LinkOrigin.PR_REFERENCE.name()
+                                origin.name()
                         );
                         if (!exists) {
                             TraceabilityLink link = TraceabilityLink.builder()
@@ -357,9 +454,43 @@ public class TraceabilityAggregationService {
                                     .targetId(String.valueOf(pr.getPrNumber()))
                                     .repositoryId(pr.getRepositoryId())
                                     .externalReference("PR #" + pr.getPrNumber())
-                                    .linkOrigin(LinkOrigin.PR_REFERENCE)
+                                    .linkOrigin(origin)
                                     .confidence(ConfidenceLevel.HIGH)
-                                    .evidence("repo_id=" + pr.getRepositoryId() + ";pr_number=" + pr.getPrNumber())
+                                    .evidence(evidence)
+                                    .active(true)
+                                    .createdAt(Instant.now())
+                                    .build();
+                            traceabilityLinkRepository.save(link);
+                            createdCount++;
+                        }
+                    }
+                }
+            }
+
+            List<RemoteCommitDto> commits = sourceControlClient.listCommits(organizationId, repoLink.getRepositoryId());
+            for (RemoteCommitDto commit : commits) {
+                for (Task task : tasks) {
+                    if (matchesText(commit.getMessage(), task.getTaskKey().toLowerCase())) {
+                        boolean exists = traceabilityLinkRepository.exists(
+                                organizationId, projectId,
+                                TraceabilityType.TASK, task.getId().toString(),
+                                TraceabilityType.COMMIT, commit.getCommitSha(),
+                                LinkOrigin.COMMIT_MESSAGE.name()
+                        );
+                        if (!exists) {
+                            TraceabilityLink link = TraceabilityLink.builder()
+                                    .id(UUID.randomUUID())
+                                    .organizationId(organizationId)
+                                    .projectId(projectId)
+                                    .sourceType(TraceabilityType.TASK)
+                                    .sourceId(task.getId().toString())
+                                    .targetType(TraceabilityType.COMMIT)
+                                    .targetId(commit.getCommitSha())
+                                    .repositoryId(repoLink.getRepositoryId())
+                                    .externalReference(commit.getCommitSha())
+                                    .linkOrigin(LinkOrigin.COMMIT_MESSAGE)
+                                    .confidence(ConfidenceLevel.HIGH)
+                                    .evidence("commit_message_match=" + commit.getCommitSha().substring(0, Math.min(7, commit.getCommitSha().length())))
                                     .active(true)
                                     .createdAt(Instant.now())
                                     .build();
@@ -410,25 +541,30 @@ public class TraceabilityAggregationService {
     @Transactional
     public ProjectRepositoryLink linkRepository(UUID organizationId, UUID projectId, UUID repositoryId, String repositoryName) {
         validateTenant(organizationId);
+        // 1. Verify project exists under the tenant organization
         projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
 
+        // 2. Prevent duplicate repository bindings
         if (projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(organizationId, projectId, repositoryId)) {
             throw new DuplicateResourceException("Repository " + repositoryId + " is already linked to project " + projectId);
         }
 
-        String repoName = repositoryName;
-        if (repoName == null || repoName.isBlank()) {
-            RemoteRepositoryDto repoDto = sourceControlClient.getRepository(organizationId, repositoryId).orElse(null);
-            repoName = (repoDto != null && repoDto.getFullName() != null) ? repoDto.getFullName() : "Repository-" + repositoryId.toString().substring(0, 8);
-        }
+        // 3. Strict fail-closed authorization: repository must exist in Source Control under the same organization
+        RemoteRepositoryDto repoDto = sourceControlClient.getRepository(organizationId, repositoryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Repository not found or not authorized for organization: id=" + repositoryId));
+
+        // 4. Never trust caller-provided repositoryName as authorization proof; use authoritative metadata
+        String authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
+                ? repoDto.getFullName()
+                : (repoDto.getName() != null ? repoDto.getName() : "repository-" + repositoryId.toString().substring(0, 8));
 
         ProjectRepositoryLink link = ProjectRepositoryLink.builder()
                 .id(UUID.randomUUID())
                 .organizationId(organizationId)
                 .projectId(projectId)
                 .repositoryId(repositoryId)
-                .repositoryName(repoName)
+                .repositoryName(authoritativeName)
                 .createdAt(Instant.now())
                 .build();
 
@@ -483,6 +619,8 @@ public class TraceabilityAggregationService {
     @Transactional(readOnly = true)
     public List<TraceabilitySnapshotResponse> listSnapshots(UUID organizationId, UUID projectId) {
         validateTenant(organizationId);
+        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
         return traceabilitySnapshotRepository.findByProjectId(organizationId, projectId).stream()
                 .map(TraceabilitySnapshotResponse::from)
                 .collect(Collectors.toList());
@@ -503,6 +641,7 @@ public class TraceabilityAggregationService {
     private List<TraceabilityGap> detectRequirementGaps(
             Requirement req,
             List<Task> tasks,
+            Set<RemoteCommitDto> commits,
             Set<RemotePullRequestDto> prs,
             Set<RemoteTestRunDto> testRuns,
             List<RemoteRequirementTestTraceDto.RemoteTestCaseTraceSummary> testCases,
@@ -524,7 +663,7 @@ public class TraceabilityAggregationService {
 
         for (Task t : tasks) {
             if (t.getStatus() == TaskStatus.IN_PROGRESS || t.getStatus() == TaskStatus.IN_REVIEW || t.getStatus() == TaskStatus.DONE) {
-                if (prs.isEmpty()) {
+                if (prs.isEmpty() && commits.isEmpty()) {
                     gaps.add(TraceabilityGap.builder()
                             .gapType(GapType.TASK_WITHOUT_CODE)
                             .artifactId(t.getId().toString())
@@ -582,7 +721,8 @@ public class TraceabilityAggregationService {
             String prKey = pr.getRepositoryId() + "#" + pr.getPrNumber();
             List<RemoteAiAnalysisDto> al = analyses.stream().filter(a -> prKey.equals(a.getEntityId())).toList();
             return al.stream().anyMatch(a -> a.getMergeReadiness() != null &&
-                    "BLOCKED".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status"))));
+                    ("BLOCKED".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status"))) ||
+                     "NOT_READY".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status")))));
         });
 
         if (hasBlockedTask || hasBlockedPr) {
@@ -618,10 +758,13 @@ public class TraceabilityAggregationService {
     private List<TraceabilityGap> detectProjectGaps(
             List<Task> tasks,
             List<RemotePullRequestDto> allPrs,
+            List<RemoteCommitDto> allCommits,
+            Map<UUID, List<CodeLink>> codeLinksByTaskId,
             List<TraceabilitySpineChainDto> chains
     ) {
         List<TraceabilityGap> gaps = new ArrayList<>();
 
+        // 1. ORPHAN_TASK: Task without parent requirement
         for (Task t : tasks) {
             if (t.getRequirementId() == null) {
                 gaps.add(TraceabilityGap.builder()
@@ -635,6 +778,75 @@ public class TraceabilityAggregationService {
             }
         }
 
+        // 2. CODE_WITHOUT_PR: Commits linked to a task that have no matching PR in project repositories
+        for (Task t : tasks) {
+            List<CodeLink> clList = codeLinksByTaskId.getOrDefault(t.getId(), Collections.emptyList());
+            for (CodeLink cl : clList) {
+                if (cl.getLinkType() == CodeLinkType.COMMIT) {
+                    String commitSha = cl.getExternalRef();
+                    boolean hasAssociatedPr = allPrs.stream().anyMatch(pr ->
+                            (pr.getHeadSha() != null && pr.getHeadSha().equalsIgnoreCase(commitSha)) ||
+                            matchesText(pr.getTitle(), commitSha) ||
+                            matchesText(pr.getBody(), commitSha) ||
+                            matchesText(pr.getTitle(), t.getTaskKey()) ||
+                            matchesText(pr.getBody(), t.getTaskKey()) ||
+                            matchesText(pr.getHeadBranch(), t.getTaskKey())
+                    );
+                    if (!hasAssociatedPr) {
+                        String shortSha = commitSha.length() >= 7 ? commitSha.substring(0, 7) : commitSha;
+                        gaps.add(TraceabilityGap.builder()
+                                .gapType(GapType.CODE_WITHOUT_PR)
+                                .artifactId(t.getId().toString() + "#" + shortSha)
+                                .artifactName(t.getTaskKey() + " (" + shortSha + ")")
+                                .evidence("Task " + t.getTaskKey() + " has commit " + shortSha + " linked, but no Pull Request exists in project repositories")
+                                .severity("MEDIUM")
+                                .recommendation("Create a Pull Request for commit " + shortSha + " to enable review and CI verification.")
+                                .build());
+                    }
+                }
+            }
+        }
+
+        // 3. PR_WITHOUT_TASK: PRs not associated with any task in the project
+        for (RemotePullRequestDto pr : allPrs) {
+            boolean associatedWithTask = false;
+
+            for (List<CodeLink> clList : codeLinksByTaskId.values()) {
+                for (CodeLink cl : clList) {
+                    if (cl.getLinkType() == CodeLinkType.PULL_REQUEST &&
+                            cl.getExternalRef().equals(String.valueOf(pr.getPrNumber()))) {
+                        associatedWithTask = true;
+                        break;
+                    }
+                }
+                if (associatedWithTask) break;
+            }
+
+            if (!associatedWithTask) {
+                for (Task t : tasks) {
+                    String tKey = t.getTaskKey().toLowerCase();
+                    if (matchesText(pr.getTitle(), tKey) ||
+                        matchesText(pr.getBody(), tKey) ||
+                        matchesText(pr.getHeadBranch(), tKey)) {
+                        associatedWithTask = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!associatedWithTask) {
+                gaps.add(TraceabilityGap.builder()
+                        .gapType(GapType.PR_WITHOUT_TASK)
+                        .artifactId(String.valueOf(pr.getPrNumber()))
+                        .artifactName("PR #" + pr.getPrNumber())
+                        .evidence("PR #" + pr.getPrNumber() + " ('" + (pr.getTitle() != null ? pr.getTitle() : "Untitled") + "') is not associated with any task in this project")
+                        .severity("LOW")
+                        .recommendation("Reference a task key (e.g., " + (tasks.isEmpty() ? "TASK-###" : tasks.get(0).getTaskKey()) + ") in the PR title, body, or head branch.")
+                        .build());
+            }
+        }
+
+        // 4. PR_WITHOUT_REQUIREMENT: PRs that are associated with a task, but the task has no requirement
         Set<Integer> chainPrNumbers = chains.stream()
                 .flatMap(c -> c.pullRequests().stream())
                 .map(RemotePullRequestDto::getPrNumber)
@@ -642,14 +854,26 @@ public class TraceabilityAggregationService {
 
         for (RemotePullRequestDto pr : allPrs) {
             if (!chainPrNumbers.contains(pr.getPrNumber())) {
-                gaps.add(TraceabilityGap.builder()
-                        .gapType(GapType.PR_WITHOUT_REQUIREMENT)
-                        .artifactId(String.valueOf(pr.getPrNumber()))
-                        .artifactName("PR #" + pr.getPrNumber())
-                        .evidence("PR #" + pr.getPrNumber() + " not linked to any requirement in delivery spine")
-                        .severity("MEDIUM")
-                        .recommendation("Mention requirement or task key in the PR title or description.")
-                        .build());
+                boolean hasTask = false;
+                for (Task t : tasks) {
+                    if (t.getRequirementId() == null) {
+                        String tKey = t.getTaskKey().toLowerCase();
+                        if (matchesText(pr.getTitle(), tKey) || matchesText(pr.getBody(), tKey) || matchesText(pr.getHeadBranch(), tKey)) {
+                            hasTask = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasTask) {
+                    gaps.add(TraceabilityGap.builder()
+                            .gapType(GapType.PR_WITHOUT_REQUIREMENT)
+                            .artifactId(String.valueOf(pr.getPrNumber()))
+                            .artifactName("PR #" + pr.getPrNumber())
+                            .evidence("PR #" + pr.getPrNumber() + " is linked to an orphan task without a parent requirement")
+                            .severity("MEDIUM")
+                            .recommendation("Assign parent requirement to the task to integrate this PR into the delivery spine.")
+                            .build());
+                }
             }
         }
 
@@ -660,17 +884,100 @@ public class TraceabilityAggregationService {
     // Deterministic Project Health & Requirement Health Calculations
     // ======================================================================
 
+    /**
+     * Deterministic Project Health Scoring Formula:
+     * -------------------------------------------------------------
+     * Base Score = 100.0
+     * Deductions:
+     *   - HIGH / CRITICAL severity gap: -15.0 per occurrence
+     *   - MEDIUM severity gap:          -8.0 per occurrence
+     *   - LOW severity gap:             -3.0 per occurrence
+     * Clamp: [0.0, 100.0]
+     * <p>
+     * Status Classification:
+     *   - RED:   Any blocked requirement/task OR score < 50.0
+     *   - AMBER: Score < 80.0 OR high risk requirement OR missing tests OR failing PRs OR unresolved findings
+     *   - GREEN: Score >= 80.0 AND zero blockers AND zero failing PRs AND zero high risk gaps
+     */
     private ProjectHealth computeProjectHealth(
             List<Requirement> requirements,
             List<Task> tasks,
             List<TraceabilitySpineChainDto> chains,
             List<TraceabilityGap> allGaps,
-            List<RemotePullRequestDto> allPrs
+            List<RemotePullRequestDto> allPrs,
+            List<RemoteAiAnalysisDto> allAnalyses,
+            Map<String, List<RemoteTestRunDto>> testRunsBySha
     ) {
         int totalRequirements = requirements.size();
         int openTasks = (int) tasks.stream().filter(t -> t.getStatus() != TaskStatus.DONE).count();
         int blockedTasks = (int) tasks.stream().filter(t -> t.getStatus() == TaskStatus.BLOCKED).count();
         int activePrs = (int) allPrs.stream().filter(pr -> !Boolean.TRUE.equals(pr.getIsMerged())).count();
+
+        // Calculate failing PRs based on actual CI test run failures and merge readiness
+        int failingPrs = 0;
+        for (RemotePullRequestDto pr : allPrs) {
+            boolean failing = false;
+            if (pr.getHeadSha() != null && testRunsBySha.containsKey(pr.getHeadSha())) {
+                List<RemoteTestRunDto> runs = testRunsBySha.get(pr.getHeadSha());
+                if (runs.stream().anyMatch(tr -> "FAILED".equalsIgnoreCase(tr.getStatus()) || (tr.getFailedTests() != null && tr.getFailedTests() > 0))) {
+                    failing = true;
+                }
+            }
+            if (!failing) {
+                String prKey = pr.getRepositoryId() + "#" + pr.getPrNumber();
+                failing = allAnalyses.stream()
+                        .filter(a -> prKey.equals(a.getEntityId()))
+                        .anyMatch(a -> a.getMergeReadiness() != null &&
+                                ("BLOCKED".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status"))) ||
+                                 "NOT_READY".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status")))));
+            }
+            if (failing) {
+                failingPrs++;
+            }
+        }
+
+        // Calculate unresolved security & reliability findings from real AI analyses
+        int unresolvedSecurityFindings = 0;
+        int unresolvedReliabilityFindings = 0;
+        boolean aiDataAvailable = !allAnalyses.isEmpty();
+
+        for (RemoteAiAnalysisDto analysis : allAnalyses) {
+            if (analysis.getSecurityAssessment() != null) {
+                Map<String, Object> sec = analysis.getSecurityAssessment();
+                Number crit = (Number) sec.get("critical_count");
+                Number high = (Number) sec.get("high_count");
+                Number med = (Number) sec.get("medium_count");
+                Number low = (Number) sec.get("low_count");
+                if (crit != null || high != null || med != null || low != null) {
+                    unresolvedSecurityFindings += (crit != null ? crit.intValue() : 0)
+                                                + (high != null ? high.intValue() : 0)
+                                                + (med != null ? med.intValue() : 0)
+                                                + (low != null ? low.intValue() : 0);
+                } else if (sec.get("findings") instanceof List<?> flist) {
+                    unresolvedSecurityFindings += flist.size();
+                }
+            }
+            if (analysis.getReliabilityAssessment() != null) {
+                Map<String, Object> rel = analysis.getReliabilityAssessment();
+                Number crit = (Number) rel.get("critical_count");
+                Number high = (Number) rel.get("high_count");
+                Number med = (Number) rel.get("medium_count");
+                Number low = (Number) rel.get("low_count");
+                if (crit != null || high != null || med != null || low != null) {
+                    unresolvedReliabilityFindings += (crit != null ? crit.intValue() : 0)
+                                                   + (high != null ? high.intValue() : 0)
+                                                   + (med != null ? med.intValue() : 0)
+                                                   + (low != null ? low.intValue() : 0);
+                } else if (rel.get("findings") instanceof List<?> flist) {
+                    unresolvedReliabilityFindings += flist.size();
+                }
+            }
+        }
+
+        String evidenceStatus = "AVAILABLE";
+        if (!allPrs.isEmpty() && !aiDataAvailable) {
+            evidenceStatus = "PARTIAL";
+        }
 
         int requirementsCompleted = (int) chains.stream()
                 .filter(c -> c.health() != null && c.health().getStatus() == RequirementHealthStatus.COMPLETED)
@@ -692,7 +999,7 @@ public class TraceabilityAggregationService {
         double score = 100.0;
         for (TraceabilityGap gap : allGaps) {
             switch (gap.getSeverity().toUpperCase()) {
-                case "HIGH" -> score -= 15.0;
+                case "HIGH", "CRITICAL" -> score -= 15.0;
                 case "MEDIUM" -> score -= 8.0;
                 case "LOW" -> score -= 3.0;
             }
@@ -702,21 +1009,32 @@ public class TraceabilityAggregationService {
         ProjectHealthStatus status;
         List<String> reasons = new ArrayList<>();
 
-        if (blockedCount > 0 || blockedTasks > 0) {
+        if (totalRequirements == 0 && tasks.isEmpty() && allPrs.isEmpty()) {
+            status = ProjectHealthStatus.GREEN;
+            score = 100.0;
+            reasons.add("Project initialized with zero requirements and clean delivery slate.");
+        } else if (blockedCount > 0 || blockedTasks > 0) {
             status = ProjectHealthStatus.RED;
             reasons.add(blockedCount + " requirement(s) or " + blockedTasks + " task(s) are currently blocked.");
         } else if (score < 50.0) {
             status = ProjectHealthStatus.RED;
             reasons.add("Traceability health score is critically low (" + score + "/100).");
-        } else if (score < 80.0 || highRiskCount > 0 || reqsWithoutTests > 0) {
+        } else if (score < 80.0 || highRiskCount > 0 || reqsWithoutTests > 0 || failingPrs > 0 || unresolvedSecurityFindings > 0) {
             status = ProjectHealthStatus.AMBER;
             if (highRiskCount > 0) reasons.add(highRiskCount + " requirement(s) have high AI risk.");
             if (reqsWithoutTests > 0) reasons.add(reqsWithoutTests + " requirement(s) lack automated tests.");
+            if (failingPrs > 0) reasons.add(failingPrs + " pull request(s) failing verification or blocked.");
+            if (unresolvedSecurityFindings > 0) reasons.add(unresolvedSecurityFindings + " unresolved security finding(s).");
+            if (unresolvedReliabilityFindings > 0) reasons.add(unresolvedReliabilityFindings + " unresolved reliability finding(s).");
             if (unresolvedRemediations > 0) reasons.add(unresolvedRemediations + " open AI remediation action(s).");
             if (reasons.isEmpty()) reasons.add("Traceability gaps require attention (score " + score + "/100).");
         } else {
             status = ProjectHealthStatus.GREEN;
             reasons.add("All requirements have continuous delivery traceability and verified test evidence.");
+        }
+
+        if ("PARTIAL".equals(evidenceStatus)) {
+            reasons.add("Downstream AI intelligence partially available; metrics reflected from available records.");
         }
 
         return ProjectHealth.builder()
@@ -730,11 +1048,12 @@ public class TraceabilityAggregationService {
                 .openTasks(openTasks)
                 .blockedTasks(blockedTasks)
                 .activePrs(activePrs)
-                .failingPrs(0)
+                .failingPrs(failingPrs)
                 .mergeReadinessBlockers((int) blockedCount)
-                .unresolvedSecurityFindings(0)
-                .unresolvedReliabilityFindings(0)
+                .unresolvedSecurityFindings(unresolvedSecurityFindings)
+                .unresolvedReliabilityFindings(unresolvedReliabilityFindings)
                 .activeRemediationActions((int) unresolvedRemediations)
+                .evidenceStatus(evidenceStatus)
                 .reasons(reasons)
                 .build();
     }
@@ -742,6 +1061,7 @@ public class TraceabilityAggregationService {
     private RequirementHealth computeRequirementHealth(
             Requirement req,
             List<Task> tasks,
+            Set<RemoteCommitDto> commits,
             Set<RemotePullRequestDto> prs,
             Set<RemoteTestRunDto> testRuns,
             List<RemoteRequirementTestTraceDto.RemoteTestCaseTraceSummary> testCases,
@@ -751,9 +1071,13 @@ public class TraceabilityAggregationService {
         int tasksCount = tasks.size();
         long completedTasks = tasks.stream().filter(t -> t.getStatus() == TaskStatus.DONE).count();
         int prsCount = prs.size();
+        int commitsCount = commits.size();
         long mergedPrs = prs.stream().filter(pr -> Boolean.TRUE.equals(pr.getIsMerged())).count();
         int testsCount = testCases.size();
         long passingTests = testCases.stream().filter(tc -> "PASSED".equalsIgnoreCase(tc.getLatestStatus())).count();
+        boolean hasPassingTestRun = testRuns.stream().anyMatch(tr -> "COMPLETED".equalsIgnoreCase(tr.getStatus()) && (tr.getFailedTests() == null || tr.getFailedTests() == 0));
+        boolean hasFailingTestRun = testRuns.stream().anyMatch(tr -> "FAILED".equalsIgnoreCase(tr.getStatus()) || (tr.getFailedTests() != null && tr.getFailedTests() > 0));
+        boolean hasFailingTestCase = testCases.stream().anyMatch(tc -> "FAILED".equalsIgnoreCase(tc.getLatestStatus()));
 
         double riskScore = analyses.stream()
                 .mapToDouble(a -> a.getRiskScore() != null ? a.getRiskScore() : 0.0)
@@ -766,35 +1090,39 @@ public class TraceabilityAggregationService {
                 .findFirst()
                 .orElse("NONE");
 
+        // Calculate completeness
         double completeness = 0.0;
         if (tasksCount > 0) completeness += 25.0;
         if (tasksCount > 0 && completedTasks == tasksCount) completeness += 25.0;
         if (testsCount > 0 || !testRuns.isEmpty()) completeness += 25.0;
-        if ((passingTests > 0 || testRuns.stream().anyMatch(tr -> "COMPLETED".equalsIgnoreCase(tr.getStatus()))) &&
-                (mergedPrs > 0 || "READY".equalsIgnoreCase(mergeReadiness))) {
+        if ((passingTests > 0 || hasPassingTestRun) && (mergedPrs > 0 || "READY".equalsIgnoreCase(mergeReadiness))) {
             completeness += 25.0;
         }
-
         completeness = Math.min(100.0, completeness);
 
-        String implStatus = tasksCount == 0 ? "NOT_STARTED" : (completedTasks == tasksCount ? "IMPLEMENTED" : "IN_PROGRESS");
-        String testStatus = testsCount == 0 && testRuns.isEmpty() ? "NO_TESTS" : (passingTests > 0 ? "TESTS_PASSED" : "TESTS_FAILING");
-        String riskStatus = riskScore >= 0.70 ? "HIGH" : (riskScore >= 0.40 ? "MEDIUM" : (riskScore > 0 ? "LOW" : "NO_RISK"));
+        boolean hasImplementation = prsCount > 0 || commitsCount > 0 || completedTasks > 0;
+        boolean hasVerifiedTests = (passingTests > 0 || hasPassingTestRun) && !hasFailingTestCase && !hasFailingTestRun;
+        boolean hasBlockedTask = tasks.stream().anyMatch(t -> t.getStatus() == TaskStatus.BLOCKED);
+        boolean isHighRisk = riskScore >= 0.70;
+
+        String implStatus = tasksCount == 0 ? "NOT_STARTED" : (completedTasks == tasksCount ? "IMPLEMENTED" : (hasImplementation ? "IMPLEMENTED" : "IN_PROGRESS"));
+        String testStatus = testsCount == 0 && testRuns.isEmpty() ? "NO_TESTS" : (hasVerifiedTests ? "TESTS_PASSED" : (hasFailingTestCase || hasFailingTestRun ? "TESTS_FAILING" : "TESTS_PENDING"));
+        String riskStatus = isHighRisk ? "HIGH" : (riskScore >= 0.40 ? "MEDIUM" : (riskScore > 0 ? "LOW" : "NO_RISK"));
         String traceabilityStatus = (tasksCount > 0 && (prsCount > 0 || testsCount > 0)) ? "COMPLETE" : (tasksCount > 0 ? "PARTIAL" : "ORPHAN");
 
         RequirementHealthStatus status;
-        if (completeness >= 100.0) {
-            status = RequirementHealthStatus.COMPLETED;
-        } else if (riskScore >= 0.70 || tasks.stream().anyMatch(t -> t.getStatus() == TaskStatus.BLOCKED)) {
-            status = RequirementHealthStatus.AT_RISK;
-        } else if (passingTests > 0 && testsCount == passingTests && completeness >= 75.0) {
-            status = RequirementHealthStatus.VALIDATED;
-        } else if (completedTasks > 0 || prsCount > 0) {
-            status = RequirementHealthStatus.IMPLEMENTED;
-        } else if (tasks.stream().anyMatch(t -> t.getStatus() == TaskStatus.IN_PROGRESS)) {
-            status = RequirementHealthStatus.IN_PROGRESS;
-        } else {
+        if (tasksCount == 0) {
             status = RequirementHealthStatus.NOT_STARTED;
+        } else if (hasBlockedTask || isHighRisk || hasFailingTestCase || hasFailingTestRun || "BLOCKED".equalsIgnoreCase(mergeReadiness)) {
+            status = RequirementHealthStatus.AT_RISK;
+        } else if (completedTasks == tasksCount && hasImplementation && hasVerifiedTests && (mergedPrs > 0 || "READY".equalsIgnoreCase(mergeReadiness))) {
+            status = RequirementHealthStatus.COMPLETED;
+        } else if (hasImplementation && hasVerifiedTests) {
+            status = RequirementHealthStatus.VALIDATED;
+        } else if (hasImplementation) {
+            status = RequirementHealthStatus.IMPLEMENTED;
+        } else {
+            status = RequirementHealthStatus.IN_PROGRESS;
         }
 
         return RequirementHealth.builder()
