@@ -11,6 +11,18 @@ from app.domain.models import (
     TestRecommendation,
     TestValidationFeedback,
     MergeEvaluation,
+    RepositoryDependency,
+    DependencyEvidence,
+    SecurityFinding,
+    ReliabilityFinding,
+    SecurityAssessment,
+    ReliabilityAssessment,
+    EngineeringAction,
+    RemediationStep,
+    RemediationPlan,
+    PatchProposal,
+    RemediationEffectiveness,
+    ActionEvent,
 )
 from app.domain.repositories import (
     CodeChunkRepository,
@@ -20,6 +32,14 @@ from app.domain.repositories import (
     TestRecommendationRepository,
     TestValidationFeedbackRepository,
     MergeEvaluationRepository,
+    RepositoryDependencyRepository,
+    SecurityAssessmentRepository,
+    ReliabilityAssessmentRepository,
+    EngineeringActionRepository,
+    RemediationPlanRepository,
+    PatchProposalRepository,
+    RemediationEffectivenessRepository,
+    ActionEventRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -322,8 +342,10 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 prompt_version, summary, risk_level, retrieved_chunks,
                 execution_duration_ms, trace_id, provider, fallback_used,
                 risk_score, confidence, risk_factors, impact_metadata,
-                test_strategy, test_effectiveness, merge_readiness, review_findings, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22);
+                test_strategy, test_effectiveness, merge_readiness, review_findings,
+                security_assessment, reliability_assessment, unified_risk,
+                engineering_actions, remediation_summary, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27);
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -349,6 +371,11 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 json.dumps(analysis.test_effectiveness) if analysis.test_effectiveness else None,
                 json.dumps(analysis.merge_readiness) if analysis.merge_readiness else None,
                 json.dumps(analysis.review_findings) if analysis.review_findings else "[]",
+                json.dumps(analysis.security_assessment) if analysis.security_assessment else None,
+                json.dumps(analysis.reliability_assessment) if analysis.reliability_assessment else None,
+                json.dumps(analysis.unified_risk) if analysis.unified_risk else None,
+                json.dumps(analysis.engineering_actions) if analysis.engineering_actions else "[]",
+                json.dumps(analysis.remediation_summary) if analysis.remediation_summary else None,
                 analysis.created_at,
             )
         return analysis
@@ -366,6 +393,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                COALESCE(confidence, 'MEDIUM') as confidence,
                risk_factors, impact_metadata, test_strategy, test_effectiveness,
                merge_readiness, review_findings,
+               security_assessment, reliability_assessment, unified_risk,
+               engineering_actions, remediation_summary,
                created_at
             FROM analyses
             WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
@@ -383,6 +412,11 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             r_eff = json.loads(r["test_effectiveness"]) if r.get("test_effectiveness") else None
             m_readiness = json.loads(r["merge_readiness"]) if r.get("merge_readiness") else None
             r_findings = json.loads(r["review_findings"]) if r.get("review_findings") else []
+            sec_assessment = json.loads(r["security_assessment"]) if r.get("security_assessment") else None
+            rel_assessment = json.loads(r["reliability_assessment"]) if r.get("reliability_assessment") else None
+            u_risk = json.loads(r["unified_risk"]) if r.get("unified_risk") else None
+            eng_actions = json.loads(r["engineering_actions"]) if r.get("engineering_actions") else []
+            rem_summary = json.loads(r["remediation_summary"]) if r.get("remediation_summary") else None
             results.append(
                 Analysis(
                     id=r["id"],
@@ -402,6 +436,11 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                     test_effectiveness=r_eff,
                     merge_readiness=m_readiness,
                     review_findings=r_findings,
+                    security_assessment=sec_assessment,
+                    reliability_assessment=rel_assessment,
+                    unified_risk=u_risk,
+                    engineering_actions=eng_actions,
+                    remediation_summary=rem_summary,
                     retrieved_chunks=chunks,
                     execution_duration_ms=r["execution_duration_ms"],
                     trace_id=r["trace_id"],
@@ -422,6 +461,8 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                COALESCE(confidence, 'MEDIUM') as confidence,
                risk_factors, impact_metadata, test_strategy, test_effectiveness,
                merge_readiness, review_findings,
+               security_assessment, reliability_assessment, unified_risk,
+               engineering_actions, remediation_summary,
                created_at
             FROM analyses
             WHERE organization_id = $1 AND id = $2;
@@ -437,6 +478,11 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
         r_eff = json.loads(r["test_effectiveness"]) if r.get("test_effectiveness") else None
         m_readiness = json.loads(r["merge_readiness"]) if r.get("merge_readiness") else None
         r_findings = json.loads(r["review_findings"]) if r.get("review_findings") else []
+        sec_assessment = json.loads(r["security_assessment"]) if r.get("security_assessment") else None
+        rel_assessment = json.loads(r["reliability_assessment"]) if r.get("reliability_assessment") else None
+        u_risk = json.loads(r["unified_risk"]) if r.get("unified_risk") else None
+        eng_actions = json.loads(r["engineering_actions"]) if r.get("engineering_actions") else []
+        rem_summary = json.loads(r["remediation_summary"]) if r.get("remediation_summary") else None
         return Analysis(
             id=r["id"],
             organization_id=r["organization_id"],
@@ -455,12 +501,18 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             test_effectiveness=r_eff,
             merge_readiness=m_readiness,
             review_findings=r_findings,
+            security_assessment=sec_assessment,
+            reliability_assessment=rel_assessment,
+            unified_risk=u_risk,
+            engineering_actions=eng_actions,
+            remediation_summary=rem_summary,
             retrieved_chunks=chunks,
             execution_duration_ms=r["execution_duration_ms"],
             trace_id=r["trace_id"],
             fallback_used=r["fallback_used"],
             created_at=r["created_at"],
         )
+
 
 
 class AsyncpgTestRecommendationRepository(TestRecommendationRepository):
@@ -833,8 +885,9 @@ class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
                 id, analysis_id, organization_id, repository_id, pr_number,
                 commit_sha, decision, readiness_score, confidence, policy_version,
                 blocking_reasons, warnings, required_actions, required_checks,
-                required_tests, security_status, github_mode, decision_timestamp, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19);
+                required_tests, security_status, reliability_status, unified_risk_score,
+                github_mode, decision_timestamp, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21);
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -855,6 +908,8 @@ class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
                 json.dumps(evaluation.required_checks),
                 json.dumps(evaluation.required_tests),
                 evaluation.security_status,
+                getattr(evaluation, "reliability_status", "PASSED"),
+                float(getattr(evaluation, "unified_risk_score", 0.0)),
                 evaluation.github_mode,
                 evaluation.decision_timestamp,
                 evaluation.created_at,
@@ -868,7 +923,10 @@ class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
             SELECT id, analysis_id, organization_id, repository_id, pr_number,
                    commit_sha, decision, readiness_score, confidence, policy_version,
                    blocking_reasons, warnings, required_actions, required_checks,
-                   required_tests, security_status, github_mode, decision_timestamp, created_at
+                   required_tests, security_status,
+                   COALESCE(reliability_status, 'PASSED') AS reliability_status,
+                   COALESCE(unified_risk_score, 0.0) AS unified_risk_score,
+                   github_mode, decision_timestamp, created_at
             FROM merge_evaluations
             WHERE organization_id = $1 AND repository_id = $2 AND commit_sha = $3
             ORDER BY decision_timestamp DESC LIMIT 1;
@@ -886,7 +944,10 @@ class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
             SELECT id, analysis_id, organization_id, repository_id, pr_number,
                    commit_sha, decision, readiness_score, confidence, policy_version,
                    blocking_reasons, warnings, required_actions, required_checks,
-                   required_tests, security_status, github_mode, decision_timestamp, created_at
+                   required_tests, security_status,
+                   COALESCE(reliability_status, 'PASSED') AS reliability_status,
+                   COALESCE(unified_risk_score, 0.0) AS unified_risk_score,
+                   github_mode, decision_timestamp, created_at
             FROM merge_evaluations
             WHERE organization_id = $1 AND repository_id = $2 AND pr_number = $3
             ORDER BY decision_timestamp DESC;
@@ -918,9 +979,943 @@ class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
             required_checks=req_checks,
             required_tests=req_tests,
             security_status=r.get("security_status", "SECURITY_EVIDENCE_UNAVAILABLE"),
+            reliability_status=r.get("reliability_status", "PASSED"),
+            unified_risk_score=float(r.get("unified_risk_score", 0.0)),
             github_mode=r.get("github_mode", "MODE_A_ADVISORY"),
             decision_timestamp=r["decision_timestamp"],
             created_at=r["created_at"],
         )
+
+
+class AsyncpgRepositoryDependencyRepository(RepositoryDependencyRepository):
+    """
+    PostgreSQL persistence for cross-repository dependency topology.
+    Enforces tenant isolation by scoping all queries to organization_id.
+    """
+
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def upsert_dependency(self, dep: RepositoryDependency) -> RepositoryDependency:
+        query = """
+            INSERT INTO repository_dependencies (
+                id, organization_id, source_repository_id, target_repository_id,
+                dependency_type, evidence_type, confidence, source_reference,
+                target_reference, current_state, metadata, discovered_at,
+                last_verified_at, created_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14
+            )
+            ON CONFLICT (organization_id, source_repository_id, target_repository_id, dependency_type, source_reference)
+            DO UPDATE SET
+                confidence = EXCLUDED.confidence,
+                evidence_type = EXCLUDED.evidence_type,
+                target_reference = EXCLUDED.target_reference,
+                current_state = EXCLUDED.current_state,
+                metadata = EXCLUDED.metadata,
+                last_verified_at = EXCLUDED.last_verified_at
+            RETURNING id;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                query,
+                dep.id,
+                dep.organization_id,
+                dep.source_repository_id,
+                dep.target_repository_id,
+                dep.dependency_type,
+                dep.evidence_type,
+                dep.confidence,
+                dep.source_reference,
+                dep.target_reference,
+                dep.current_state,
+                json.dumps(dep.metadata),
+                dep.discovered_at,
+                dep.last_verified_at,
+                dep.created_at,
+            )
+            if row:
+                dep.id = row["id"]
+        return dep
+
+    async def get_dependencies_for_source(
+        self, org_id: UUID, source_repo_id: UUID, state: str = "ACTIVE"
+    ) -> List[RepositoryDependency]:
+        query = """
+            SELECT id, organization_id, source_repository_id, target_repository_id,
+                   dependency_type, evidence_type, confidence, source_reference,
+                   target_reference, current_state, metadata, discovered_at,
+                   last_verified_at, created_at
+            FROM repository_dependencies
+            WHERE organization_id = $1 AND source_repository_id = $2
+              AND ($3 = '' OR current_state = $3)
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, source_repo_id, state or "")
+        return [self._row_to_dep(r) for r in rows]
+
+    async def get_dependencies_for_target(
+        self, org_id: UUID, target_repo_id: UUID, state: str = "ACTIVE"
+    ) -> List[RepositoryDependency]:
+        query = """
+            SELECT id, organization_id, source_repository_id, target_repository_id,
+                   dependency_type, evidence_type, confidence, source_reference,
+                   target_reference, current_state, metadata, discovered_at,
+                   last_verified_at, created_at
+            FROM repository_dependencies
+            WHERE organization_id = $1 AND target_repository_id = $2
+              AND ($3 = '' OR current_state = $3)
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, target_repo_id, state or "")
+        return [self._row_to_dep(r) for r in rows]
+
+    async def get_all_org_dependencies(
+        self, org_id: UUID, state: str = "ACTIVE"
+    ) -> List[RepositoryDependency]:
+        query = """
+            SELECT id, organization_id, source_repository_id, target_repository_id,
+                   dependency_type, evidence_type, confidence, source_reference,
+                   target_reference, current_state, metadata, discovered_at,
+                   last_verified_at, created_at
+            FROM repository_dependencies
+            WHERE organization_id = $1
+              AND ($2 = '' OR current_state = $2)
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, state or "")
+        return [self._row_to_dep(r) for r in rows]
+
+    async def mark_stale(self, org_id: UUID, dependency_id: UUID) -> None:
+        query = """
+            UPDATE repository_dependencies
+            SET current_state = 'STALE', last_verified_at = NOW()
+            WHERE organization_id = $1 AND id = $2;
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(query, org_id, dependency_id)
+
+    async def save_evidence(self, evidence: DependencyEvidence) -> DependencyEvidence:
+        query = """
+            INSERT INTO dependency_evidence (
+                id, organization_id, dependency_id, evidence_kind, file_path,
+                excerpt, commit_sha, created_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8
+            ) RETURNING id;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                query,
+                evidence.id,
+                evidence.organization_id,
+                evidence.dependency_id,
+                evidence.evidence_kind,
+                evidence.file_path,
+                evidence.excerpt,
+                evidence.commit_sha,
+                evidence.created_at,
+            )
+            if row:
+                evidence.id = row["id"]
+        return evidence
+
+    async def get_evidence_for_dependency(
+        self, org_id: UUID, dependency_id: UUID
+    ) -> List[DependencyEvidence]:
+        query = """
+            SELECT id, organization_id, dependency_id, evidence_kind, file_path,
+                   excerpt, commit_sha, created_at
+            FROM dependency_evidence
+            WHERE organization_id = $1 AND dependency_id = $2
+            ORDER BY created_at ASC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, dependency_id)
+        return [
+            DependencyEvidence(
+                id=r["id"],
+                organization_id=r["organization_id"],
+                dependency_id=r["dependency_id"],
+                evidence_kind=r["evidence_kind"],
+                file_path=r["file_path"],
+                excerpt=r["excerpt"],
+                commit_sha=r["commit_sha"],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+
+    def _row_to_dep(self, r: Any) -> RepositoryDependency:
+        meta = json.loads(r["metadata"]) if isinstance(r["metadata"], str) else (r["metadata"] or {})
+        return RepositoryDependency(
+            id=r["id"],
+            organization_id=r["organization_id"],
+            source_repository_id=r["source_repository_id"],
+            target_repository_id=r["target_repository_id"],
+            dependency_type=r["dependency_type"],
+            evidence_type=r["evidence_type"],
+            confidence=r["confidence"],
+            source_reference=r["source_reference"],
+            target_reference=r["target_reference"],
+            current_state=r["current_state"],
+            metadata=meta,
+            discovered_at=r["discovered_at"],
+            last_verified_at=r["last_verified_at"],
+            created_at=r["created_at"],
+        )
+
+
+class AsyncpgSecurityAssessmentRepository(SecurityAssessmentRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_assessment(
+        self,
+        assessment: SecurityAssessment,
+        organization_id: UUID,
+        repository_id: UUID,
+        pr_number: int,
+        commit_sha: str,
+        analysis_id: Optional[UUID] = None,
+    ) -> SecurityAssessment:
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                assessment_query = """
+                    INSERT INTO security_assessments (
+                        organization_id, repository_id, analysis_id, pr_number,
+                        commit_sha, security_status, evidence_status, security_risk_score,
+                        critical_count, high_count, medium_count, low_count, summary, metadata
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb
+                    ) RETURNING id;
+                """
+                await conn.fetchval(
+                    assessment_query,
+                    organization_id,
+                    repository_id,
+                    analysis_id,
+                    pr_number,
+                    commit_sha,
+                    assessment.security_status,
+                    assessment.evidence_status,
+                    assessment.security_risk_score,
+                    assessment.critical_count,
+                    assessment.high_count,
+                    assessment.medium_count,
+                    assessment.low_count,
+                    assessment.summary,
+                    json.dumps(assessment.metadata),
+                )
+
+                finding_query = """
+                    INSERT INTO security_findings (
+                        id, organization_id, repository_id, analysis_id, pr_number,
+                        commit_sha, category, rule_id, severity, confidence,
+                        title, description, file_path, line_number, redacted_evidence,
+                        remediation, is_blocker, metadata
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb
+                    );
+                """
+                for f in assessment.findings:
+                    await conn.execute(
+                        finding_query,
+                        f.id,
+                        organization_id,
+                        repository_id,
+                        analysis_id,
+                        pr_number,
+                        commit_sha,
+                        f.category,
+                        f.rule_id,
+                        f.severity,
+                        f.confidence,
+                        f.title,
+                        f.description,
+                        f.file_path,
+                        f.line_number,
+                        f.redacted_evidence,
+                        f.remediation,
+                        f.is_blocker,
+                        json.dumps(f.metadata),
+                    )
+        return assessment
+
+    async def get_latest_assessment(
+        self, org_id: UUID, repo_id: UUID, pr_number: int
+    ) -> Optional[SecurityAssessment]:
+        assessment_query = """
+            SELECT security_status, evidence_status, security_risk_score,
+                   critical_count, high_count, medium_count, low_count, summary, metadata
+            FROM security_assessments
+            WHERE organization_id = $1 AND repository_id = $2 AND pr_number = $3
+            ORDER BY created_at DESC LIMIT 1;
+        """
+        findings_query = """
+            SELECT id, organization_id, repository_id, analysis_id, pr_number,
+                   commit_sha, category, rule_id, severity, confidence,
+                   title, description, file_path, line_number, redacted_evidence,
+                   remediation, is_blocker, metadata, created_at
+            FROM security_findings
+            WHERE organization_id = $1 AND repository_id = $2 AND pr_number = $3
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            a_row = await conn.fetchrow(assessment_query, org_id, repo_id, pr_number)
+            if not a_row:
+                return None
+            f_rows = await conn.fetch(findings_query, org_id, repo_id, pr_number)
+
+        findings = [
+            SecurityFinding(
+                id=r["id"],
+                organization_id=r["organization_id"],
+                repository_id=r["repository_id"],
+                analysis_id=r["analysis_id"],
+                pr_number=r["pr_number"],
+                commit_sha=r["commit_sha"],
+                category=r["category"],
+                rule_id=r["rule_id"],
+                severity=r["severity"],
+                confidence=r["confidence"],
+                title=r["title"],
+                description=r["description"],
+                file_path=r["file_path"],
+                line_number=r["line_number"],
+                redacted_evidence=r["redacted_evidence"],
+                remediation=r["remediation"],
+                is_blocker=r["is_blocker"],
+                metadata=json.loads(r["metadata"]) if isinstance(r["metadata"], str) else (r["metadata"] or {}),
+                created_at=r["created_at"],
+            )
+            for r in f_rows
+        ]
+
+        meta = json.loads(a_row["metadata"]) if isinstance(a_row["metadata"], str) else (a_row["metadata"] or {})
+        return SecurityAssessment(
+            security_status=a_row["security_status"],
+            evidence_status=a_row["evidence_status"],
+            security_risk_score=a_row["security_risk_score"],
+            critical_count=a_row["critical_count"],
+            high_count=a_row["high_count"],
+            medium_count=a_row["medium_count"],
+            low_count=a_row["low_count"],
+            findings=findings,
+            summary=a_row["summary"] or "",
+            metadata=meta,
+        )
+
+
+class AsyncpgReliabilityAssessmentRepository(ReliabilityAssessmentRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_assessment(
+        self,
+        assessment: ReliabilityAssessment,
+        organization_id: UUID,
+        repository_id: UUID,
+        pr_number: int,
+        commit_sha: str,
+        analysis_id: Optional[UUID] = None,
+    ) -> ReliabilityAssessment:
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                assessment_query = """
+                    INSERT INTO reliability_assessments (
+                        organization_id, repository_id, analysis_id, pr_number,
+                        commit_sha, reliability_status, evidence_status, reliability_risk_score,
+                        critical_count, high_count, medium_count, low_count, summary, metadata
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb
+                    ) RETURNING id;
+                """
+                await conn.fetchval(
+                    assessment_query,
+                    organization_id,
+                    repository_id,
+                    analysis_id,
+                    pr_number,
+                    commit_sha,
+                    assessment.reliability_status,
+                    assessment.evidence_status,
+                    assessment.reliability_risk_score,
+                    assessment.critical_count,
+                    assessment.high_count,
+                    assessment.medium_count,
+                    assessment.low_count,
+                    assessment.summary,
+                    json.dumps(assessment.metadata),
+                )
+
+                finding_query = """
+                    INSERT INTO reliability_findings (
+                        id, organization_id, repository_id, analysis_id, pr_number,
+                        commit_sha, category, rule_id, severity, confidence,
+                        title, description, file_path, line_number, evidence,
+                        remediation, is_blocker, metadata
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb
+                    );
+                """
+                for f in assessment.findings:
+                    await conn.execute(
+                        finding_query,
+                        f.id,
+                        organization_id,
+                        repository_id,
+                        analysis_id,
+                        pr_number,
+                        commit_sha,
+                        f.category,
+                        f.rule_id,
+                        f.severity,
+                        f.confidence,
+                        f.title,
+                        f.description,
+                        f.file_path,
+                        f.line_number,
+                        f.evidence,
+                        f.remediation,
+                        f.is_blocker,
+                        json.dumps(f.metadata),
+                    )
+        return assessment
+
+    async def get_latest_assessment(
+        self, org_id: UUID, repo_id: UUID, pr_number: int
+    ) -> Optional[ReliabilityAssessment]:
+        assessment_query = """
+            SELECT reliability_status, evidence_status, reliability_risk_score,
+                   critical_count, high_count, medium_count, low_count, summary, metadata
+            FROM reliability_assessments
+            WHERE organization_id = $1 AND repository_id = $2 AND pr_number = $3
+            ORDER BY created_at DESC LIMIT 1;
+        """
+        findings_query = """
+            SELECT id, organization_id, repository_id, analysis_id, pr_number,
+                   commit_sha, category, rule_id, severity, confidence,
+                   title, description, file_path, line_number, evidence,
+                   remediation, is_blocker, metadata, created_at
+            FROM reliability_findings
+            WHERE organization_id = $1 AND repository_id = $2 AND pr_number = $3
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            a_row = await conn.fetchrow(assessment_query, org_id, repo_id, pr_number)
+            if not a_row:
+                return None
+            f_rows = await conn.fetch(findings_query, org_id, repo_id, pr_number)
+
+        findings = [
+            ReliabilityFinding(
+                id=r["id"],
+                organization_id=r["organization_id"],
+                repository_id=r["repository_id"],
+                analysis_id=r["analysis_id"],
+                pr_number=r["pr_number"],
+                commit_sha=r["commit_sha"],
+                category=r["category"],
+                rule_id=r["rule_id"],
+                severity=r["severity"],
+                confidence=r["confidence"],
+                title=r["title"],
+                description=r["description"],
+                file_path=r["file_path"],
+                line_number=r["line_number"],
+                evidence=r["evidence"],
+                remediation=r["remediation"],
+                is_blocker=r["is_blocker"],
+                metadata=json.loads(r["metadata"]) if isinstance(r["metadata"], str) else (r["metadata"] or {}),
+                created_at=r["created_at"],
+            )
+            for r in f_rows
+        ]
+
+        meta = json.loads(a_row["metadata"]) if isinstance(a_row["metadata"], str) else (a_row["metadata"] or {})
+        return ReliabilityAssessment(
+            reliability_status=a_row["reliability_status"],
+            evidence_status=a_row["evidence_status"],
+            reliability_risk_score=a_row["reliability_risk_score"],
+            critical_count=a_row["critical_count"],
+            high_count=a_row["high_count"],
+            medium_count=a_row["medium_count"],
+            low_count=a_row["low_count"],
+            findings=findings,
+            summary=a_row["summary"] or "",
+            metadata=meta,
+        )
+
+
+class AsyncpgEngineeringActionRepository(EngineeringActionRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_actions(self, actions: List[EngineeringAction]) -> int:
+        if not actions:
+            return 0
+        query = """
+            INSERT INTO engineering_actions (
+                id, action_id, analysis_id, organization_id, repository_id,
+                pr_number, commit_sha, action_type, title, description,
+                reason, severity, confidence, evidence, affected_files,
+                affected_symbols, provenance, status, source_finding_id,
+                source_finding_type, metadata, created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb,
+                $18, $19, $20, $21::jsonb, $22, $23
+            )
+            ON CONFLICT (action_id)
+            DO UPDATE SET
+                status = EXCLUDED.status,
+                severity = EXCLUDED.severity,
+                confidence = EXCLUDED.confidence,
+                evidence = EXCLUDED.evidence,
+                affected_files = EXCLUDED.affected_files,
+                affected_symbols = EXCLUDED.affected_symbols,
+                provenance = EXCLUDED.provenance,
+                metadata = EXCLUDED.metadata,
+                updated_at = EXCLUDED.updated_at;
+        """
+        async with self.pool.acquire() as conn:
+            for a in actions:
+                await conn.execute(
+                    query,
+                    a.id,
+                    a.action_id,
+                    a.analysis_id,
+                    a.organization_id,
+                    a.repository_id,
+                    a.pr_number,
+                    a.commit_sha,
+                    a.action_type,
+                    a.title,
+                    a.description,
+                    a.reason,
+                    a.severity,
+                    a.confidence,
+                    a.evidence,
+                    json.dumps(a.affected_files),
+                    json.dumps(a.affected_symbols),
+                    json.dumps(a.provenance),
+                    a.status,
+                    a.source_finding_id,
+                    a.source_finding_type,
+                    json.dumps(a.metadata),
+                    a.created_at,
+                    a.updated_at,
+                )
+        return len(actions)
+
+    async def get_by_id(self, org_id: UUID, action_id: str) -> Optional[EngineeringAction]:
+        query = """
+            SELECT id, action_id, analysis_id, organization_id, repository_id,
+                   pr_number, commit_sha, action_type, title, description,
+                   reason, severity, confidence, evidence, affected_files,
+                   affected_symbols, provenance, status, source_finding_id,
+                   source_finding_type, metadata, created_at, updated_at
+            FROM engineering_actions
+            WHERE organization_id = $1 AND action_id = $2;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, org_id, action_id)
+            if not row:
+                return None
+            return self._map_row(row)
+
+    async def get_by_analysis(self, org_id: UUID, analysis_id: UUID) -> List[EngineeringAction]:
+        query = """
+            SELECT id, action_id, analysis_id, organization_id, repository_id,
+                   pr_number, commit_sha, action_type, title, description,
+                   reason, severity, confidence, evidence, affected_files,
+                   affected_symbols, provenance, status, source_finding_id,
+                   source_finding_type, metadata, created_at, updated_at
+            FROM engineering_actions
+            WHERE organization_id = $1 AND analysis_id = $2
+            ORDER BY created_at ASC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, analysis_id)
+            return [self._map_row(r) for r in rows]
+
+    async def get_by_pr(self, org_id: UUID, repo_id: UUID, pr_number: int) -> List[EngineeringAction]:
+        query = """
+            SELECT id, action_id, analysis_id, organization_id, repository_id,
+                   pr_number, commit_sha, action_type, title, description,
+                   reason, severity, confidence, evidence, affected_files,
+                   affected_symbols, provenance, status, source_finding_id,
+                   source_finding_type, metadata, created_at, updated_at
+            FROM engineering_actions
+            WHERE organization_id = $1 AND repository_id = $2 AND pr_number = $3
+            ORDER BY created_at ASC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, repo_id, pr_number)
+            return [self._map_row(r) for r in rows]
+
+    async def update_status(
+        self, org_id: UUID, action_id: str, status: str, actor_id: str = "system", details: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        from app.domain.models import utc_now
+        query = """
+            UPDATE engineering_actions
+            SET status = $3, updated_at = $4
+            WHERE organization_id = $1 AND action_id = $2;
+        """
+        async with self.pool.acquire() as conn:
+            res = await conn.execute(query, org_id, action_id, status, utc_now())
+            return "UPDATE 1" in res
+
+    def _map_row(self, r: Any) -> EngineeringAction:
+        files = json.loads(r["affected_files"]) if isinstance(r["affected_files"], str) else (r["affected_files"] or [])
+        symbols = json.loads(r["affected_symbols"]) if isinstance(r["affected_symbols"], str) else (r["affected_symbols"] or [])
+        prov = json.loads(r["provenance"]) if isinstance(r["provenance"], str) else (r["provenance"] or {})
+        meta = json.loads(r["metadata"]) if isinstance(r["metadata"], str) else (r["metadata"] or {})
+        return EngineeringAction(
+            id=r["id"],
+            action_id=r["action_id"],
+            analysis_id=r["analysis_id"],
+            organization_id=r["organization_id"],
+            repository_id=r["repository_id"],
+            pr_number=r["pr_number"],
+            commit_sha=r["commit_sha"],
+            action_type=r["action_type"],
+            title=r["title"],
+            description=r["description"],
+            reason=r["reason"],
+            severity=r["severity"],
+            confidence=r["confidence"],
+            evidence=r["evidence"],
+            affected_files=files,
+            affected_symbols=symbols,
+            provenance=prov,
+            status=r["status"],
+            source_finding_id=r["source_finding_id"],
+            source_finding_type=r["source_finding_type"],
+            metadata=meta,
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+
+
+class AsyncpgRemediationPlanRepository(RemediationPlanRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_plan(self, plan: RemediationPlan) -> RemediationPlan:
+        query = """
+            INSERT INTO remediation_plans (
+                id, action_id, organization_id, repository_id,
+                title, summary, steps, is_multi_repo, coordinated_repos,
+                expected_impact, provenance, created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, $11::jsonb, $12, $13
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                steps = EXCLUDED.steps,
+                expected_impact = EXCLUDED.expected_impact,
+                updated_at = EXCLUDED.updated_at;
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                plan.id,
+                plan.action_id,
+                plan.organization_id,
+                plan.repository_id,
+                plan.title,
+                plan.summary,
+                json.dumps([s.model_dump() for s in plan.steps]),
+                plan.is_multi_repo,
+                json.dumps(plan.coordinated_repos),
+                plan.expected_impact,
+                json.dumps(plan.provenance),
+                plan.created_at,
+                plan.updated_at,
+            )
+        return plan
+
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[RemediationPlan]:
+        query = """
+            SELECT id, action_id, organization_id, repository_id,
+                   title, summary, steps, is_multi_repo, coordinated_repos,
+                   expected_impact, provenance, created_at, updated_at
+            FROM remediation_plans
+            WHERE organization_id = $1 AND action_id = $2
+            ORDER BY created_at DESC LIMIT 1;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, org_id, action_id)
+            if not row:
+                return None
+            steps_raw = json.loads(row["steps"]) if isinstance(row["steps"], str) else (row["steps"] or [])
+            steps = [RemediationStep(**s) for s in steps_raw]
+            coords = json.loads(row["coordinated_repos"]) if isinstance(row["coordinated_repos"], str) else (row["coordinated_repos"] or [])
+            prov = json.loads(row["provenance"]) if isinstance(row["provenance"], str) else (row["provenance"] or {})
+            return RemediationPlan(
+                id=row["id"],
+                action_id=row["action_id"],
+                organization_id=row["organization_id"],
+                repository_id=row["repository_id"],
+                title=row["title"],
+                summary=row["summary"],
+                steps=steps,
+                is_multi_repo=row["is_multi_repo"],
+                coordinated_repos=coords,
+                expected_impact=row["expected_impact"],
+                provenance=prov,
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+
+
+class AsyncpgPatchProposalRepository(PatchProposalRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_patch(self, patch: PatchProposal) -> PatchProposal:
+        query = """
+            INSERT INTO patch_proposals (
+                id, action_id, organization_id, repository_id,
+                target_file, target_symbol, original_context, proposed_replacement,
+                unified_diff, rationale, source_finding, confidence, validation_plan,
+                status, model, provider, fallback_used, prompt_version, trace_id,
+                created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb,
+                $14, $15, $16, $17, $18, $19, $20, $21
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                unified_diff = EXCLUDED.unified_diff,
+                validation_plan = EXCLUDED.validation_plan,
+                updated_at = EXCLUDED.updated_at;
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                patch.id,
+                patch.action_id,
+                patch.organization_id,
+                patch.repository_id,
+                patch.target_file,
+                patch.target_symbol,
+                patch.original_context,
+                patch.proposed_replacement,
+                patch.unified_diff,
+                patch.rationale,
+                patch.source_finding,
+                patch.confidence,
+                json.dumps(patch.validation_plan),
+                patch.status,
+                patch.model,
+                patch.provider,
+                patch.fallback_used,
+                patch.prompt_version,
+                patch.trace_id,
+                patch.created_at,
+                patch.updated_at,
+            )
+        return patch
+
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[PatchProposal]:
+        query = """
+            SELECT id, action_id, organization_id, repository_id,
+                   target_file, target_symbol, original_context, proposed_replacement,
+                   unified_diff, rationale, source_finding, confidence, validation_plan,
+                   status, model, provider, fallback_used, prompt_version, trace_id,
+                   created_at, updated_at
+            FROM patch_proposals
+            WHERE organization_id = $1 AND action_id = $2
+            ORDER BY created_at DESC LIMIT 1;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, org_id, action_id)
+            if not row:
+                return None
+            val_plan = json.loads(row["validation_plan"]) if isinstance(row["validation_plan"], str) else (row["validation_plan"] or {})
+            return PatchProposal(
+                id=row["id"],
+                action_id=row["action_id"],
+                organization_id=row["organization_id"],
+                repository_id=row["repository_id"],
+                target_file=row["target_file"],
+                target_symbol=row["target_symbol"],
+                original_context=row["original_context"],
+                proposed_replacement=row["proposed_replacement"],
+                unified_diff=row["unified_diff"],
+                rationale=row["rationale"],
+                source_finding=row["source_finding"],
+                confidence=row["confidence"],
+                validation_plan=val_plan,
+                status=row["status"],
+                model=row["model"],
+                provider=row["provider"],
+                fallback_used=row["fallback_used"],
+                prompt_version=row["prompt_version"],
+                trace_id=row["trace_id"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+
+    async def update_status(self, org_id: UUID, patch_id: UUID, status: str) -> bool:
+        from app.domain.models import utc_now
+        query = """
+            UPDATE patch_proposals
+            SET status = $3, updated_at = $4
+            WHERE organization_id = $1 AND id = $2;
+        """
+        async with self.pool.acquire() as conn:
+            res = await conn.execute(query, org_id, patch_id, status, utc_now())
+            return "UPDATE 1" in res
+
+
+class AsyncpgRemediationEffectivenessRepository(RemediationEffectivenessRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def save_effectiveness(self, record: RemediationEffectiveness) -> RemediationEffectiveness:
+        query = """
+            INSERT INTO remediation_effectiveness (
+                id, action_id, organization_id, repository_id,
+                before_risk_score, after_risk_score, risk_delta,
+                before_merge_readiness, after_merge_readiness, merge_readiness_delta,
+                findings_fixed, findings_persisted, new_findings_introduced,
+                tests_added, tests_passed, is_effective, remediation_summary,
+                metadata, created_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18::jsonb, $19
+            )
+            ON CONFLICT (id) DO NOTHING;
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                record.id,
+                record.action_id,
+                record.organization_id,
+                record.repository_id,
+                record.before_risk_score,
+                record.after_risk_score,
+                record.risk_delta,
+                record.before_merge_readiness,
+                record.after_merge_readiness,
+                record.merge_readiness_delta,
+                json.dumps(record.findings_fixed),
+                json.dumps(record.findings_persisted),
+                json.dumps(record.new_findings_introduced),
+                record.tests_added,
+                record.tests_passed,
+                record.is_effective,
+                record.remediation_summary,
+                json.dumps(record.metadata),
+                record.created_at,
+            )
+        return record
+
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[RemediationEffectiveness]:
+        query = """
+            SELECT id, action_id, organization_id, repository_id,
+                   before_risk_score, after_risk_score, risk_delta,
+                   before_merge_readiness, after_merge_readiness, merge_readiness_delta,
+                   findings_fixed, findings_persisted, new_findings_introduced,
+                   tests_added, tests_passed, is_effective, remediation_summary,
+                   metadata, created_at
+            FROM remediation_effectiveness
+            WHERE organization_id = $1 AND action_id = $2
+            ORDER BY created_at DESC LIMIT 1;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, org_id, action_id)
+            if not row:
+                return None
+            fixed = json.loads(row["findings_fixed"]) if isinstance(row["findings_fixed"], str) else (row["findings_fixed"] or [])
+            persisted = json.loads(row["findings_persisted"]) if isinstance(row["findings_persisted"], str) else (row["findings_persisted"] or [])
+            new_f = json.loads(row["new_findings_introduced"]) if isinstance(row["new_findings_introduced"], str) else (row["new_findings_introduced"] or [])
+            meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else (row["metadata"] or {})
+            return RemediationEffectiveness(
+                id=row["id"],
+                action_id=row["action_id"],
+                organization_id=row["organization_id"],
+                repository_id=row["repository_id"],
+                before_risk_score=row["before_risk_score"],
+                after_risk_score=row["after_risk_score"],
+                risk_delta=row["risk_delta"],
+                before_merge_readiness=row["before_merge_readiness"],
+                after_merge_readiness=row["after_merge_readiness"],
+                merge_readiness_delta=row["merge_readiness_delta"],
+                findings_fixed=fixed,
+                findings_persisted=persisted,
+                new_findings_introduced=new_f,
+                tests_added=row["tests_added"],
+                tests_passed=row["tests_passed"],
+                is_effective=row["is_effective"],
+                remediation_summary=row["remediation_summary"],
+                metadata=meta,
+                created_at=row["created_at"],
+            )
+
+
+class AsyncpgActionEventRepository(ActionEventRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def record_event(self, event: ActionEvent) -> ActionEvent:
+        query = """
+            INSERT INTO action_events (
+                id, organization_id, repository_id, action_id,
+                event_type, actor_id, details, trace_id, created_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9
+            );
+        """
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                query,
+                event.id,
+                event.organization_id,
+                event.repository_id,
+                event.action_id,
+                event.event_type,
+                event.actor_id,
+                json.dumps(event.details),
+                event.trace_id,
+                event.created_at,
+            )
+        return event
+
+    async def get_events_for_action(self, org_id: UUID, action_id: str) -> List[ActionEvent]:
+        query = """
+            SELECT id, organization_id, repository_id, action_id,
+                   event_type, actor_id, details, trace_id, created_at
+            FROM action_events
+            WHERE organization_id = $1 AND action_id = $2
+            ORDER BY created_at ASC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, action_id)
+            return [
+                ActionEvent(
+                    id=r["id"],
+                    organization_id=r["organization_id"],
+                    repository_id=r["repository_id"],
+                    action_id=r["action_id"],
+                    event_type=r["event_type"],
+                    actor_id=r["actor_id"],
+                    details=json.loads(r["details"]) if isinstance(r["details"], str) else (r["details"] or {}),
+                    trace_id=r["trace_id"],
+                    created_at=r["created_at"],
+                )
+                for r in rows
+            ]
+
+
+
 
 

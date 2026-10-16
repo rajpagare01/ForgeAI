@@ -16,9 +16,33 @@ from app.presentation.dtos import (
     TestStrategyDTO,
     TestValidationRequest,
     TestValidationResponse,
+    RepositoryDependencyDTO,
+    DependencyEvidenceDTO,
+    DownstreamRepositoryImpactDTO,
+    DistributedImpactDTO,
+    RegisterDependencyRequest,
+    DiscoverDependenciesRequest,
+    EngineeringActionDTO,
+    RemediationStepDTO,
+    RemediationPlanDTO,
+    PatchProposalDTO,
+    RemediationEffectivenessDTO,
+    ActionEventDTO,
+    ApproveActionRequest,
+    RejectActionRequest,
+    ApplyActionRequest,
+    ActionDetailsResponseDTO,
 )
 from app.core.database import db_pool
-from app.domain.models import TestValidationFeedback
+from app.domain.models import (
+    TestValidationFeedback,
+    RepositoryDependency,
+    DependencyEvidence,
+    DependencyType,
+    DependencyEvidenceType,
+    DependencyConfidence,
+    GitHubWriteMode,
+)
 from app.infrastructure.persistence.repositories import (
     AsyncpgCodeChunkRepository,
     AsyncpgGraphEdgeRepository,
@@ -27,11 +51,24 @@ from app.infrastructure.persistence.repositories import (
     AsyncpgTestRecommendationRepository,
     AsyncpgTestValidationFeedbackRepository,
     AsyncpgMergeEvaluationRepository,
+    AsyncpgRepositoryDependencyRepository,
+    AsyncpgSecurityAssessmentRepository,
+    AsyncpgReliabilityAssessmentRepository,
+    AsyncpgEngineeringActionRepository,
+    AsyncpgRemediationPlanRepository,
+    AsyncpgPatchProposalRepository,
+    AsyncpgRemediationEffectivenessRepository,
+    AsyncpgActionEventRepository,
 )
 from app.application.indexing_service import IndexingService
 from app.application.retrieval_service import RetrievalService
 from app.application.gemini_orchestration_service import GeminiOrchestrationService
 from app.application.test_intelligence_engine import TestIntelligenceEngine
+from app.application.dependency_discovery_engine import DependencyDiscoveryEngine
+from app.application.cross_repo_impact_engine import CrossRepositoryImpactEngine
+from app.application.remediation_service import RemediationService
+from app.infrastructure.client.source_control_client import SourceControlClient
+from app.infrastructure.client.testing_service_client import TestingServiceClient
 from app.workers.index_worker import DurableIndexWorker
 
 logger = logging.getLogger(__name__)
@@ -51,8 +88,27 @@ async def get_services():
     test_rec_repo = AsyncpgTestRecommendationRepository(pool)
     test_feedback_repo = AsyncpgTestValidationFeedbackRepository(pool)
     merge_eval_repo = AsyncpgMergeEvaluationRepository(pool)
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    sec_repo = AsyncpgSecurityAssessmentRepository(pool)
+    rel_repo = AsyncpgReliabilityAssessmentRepository(pool)
+    action_repo = AsyncpgEngineeringActionRepository(pool)
+    plan_repo = AsyncpgRemediationPlanRepository(pool)
+    patch_repo = AsyncpgPatchProposalRepository(pool)
+    effectiveness_repo = AsyncpgRemediationEffectivenessRepository(pool)
+    event_repo = AsyncpgActionEventRepository(pool)
+
     indexing_service = IndexingService(chunk_repo, edge_repo, job_repo=job_repo)
     retrieval_service = RetrievalService(chunk_repo, edge_repo)
+    source_control_client = SourceControlClient()
+    remediation_service = RemediationService(
+        action_repo=action_repo,
+        plan_repo=plan_repo,
+        patch_repo=patch_repo,
+        effectiveness_repo=effectiveness_repo,
+        event_repo=event_repo,
+        source_control_client=source_control_client,
+        default_write_mode=GitHubWriteMode.ADVISORY_ONLY.value,
+    )
     orchestration_service = GeminiOrchestrationService(
         retrieval_service=retrieval_service,
         analysis_repo=analysis_repo,
@@ -60,8 +116,16 @@ async def get_services():
         job_repo=job_repo,
         test_rec_repo=test_rec_repo,
         merge_eval_repo=merge_eval_repo,
+        dependency_repo=dep_repo,
+        security_assessment_repo=sec_repo,
+        reliability_assessment_repo=rel_repo,
+        action_repo=action_repo,
+        plan_repo=plan_repo,
+        patch_repo=patch_repo,
     )
-    return indexing_service, retrieval_service, orchestration_service, analysis_repo, test_rec_repo, test_feedback_repo, merge_eval_repo
+    return indexing_service, retrieval_service, orchestration_service, analysis_repo, test_rec_repo, test_feedback_repo, merge_eval_repo, dep_repo, sec_repo, rel_repo, remediation_service
+
+
 
 
 @router.get("/healthz")
@@ -271,6 +335,9 @@ async def analyze_pull_request(
         test_effectiveness=analysis.test_effectiveness,
         merge_readiness=analysis.merge_readiness,
         review_findings=analysis.review_findings or [],
+        security_assessment=analysis.security_assessment or meta.get("security_assessment"),
+        reliability_assessment=analysis.reliability_assessment or meta.get("reliability_assessment"),
+        unified_risk=analysis.unified_risk or meta.get("unified_risk"),
         changed_components=meta.get("changed_components"),
         direct_impact=meta.get("direct_impact"),
         transitive_impact=meta.get("transitive_impact"),
@@ -413,6 +480,9 @@ async def get_analyses_for_entity(
             test_effectiveness=a.test_effectiveness,
             merge_readiness=a.merge_readiness,
             review_findings=a.review_findings or [],
+            security_assessment=a.security_assessment or (a.impact_metadata or {}).get("security_assessment"),
+            reliability_assessment=a.reliability_assessment or (a.impact_metadata or {}).get("reliability_assessment"),
+            unified_risk=a.unified_risk or (a.impact_metadata or {}).get("unified_risk"),
             changed_components=(a.impact_metadata or {}).get("changed_components"),
             direct_impact=(a.impact_metadata or {}).get("direct_impact"),
             transitive_impact=(a.impact_metadata or {}).get("transitive_impact"),
@@ -459,4 +529,672 @@ async def get_merge_readiness_for_analysis(
         "risk_score": analysis.risk_score,
         "created_at": analysis.created_at.isoformat() if hasattr(analysis.created_at, "isoformat") else str(analysis.created_at),
     }
+
+
+@router.get("/analyses/{analysis_id}/security", response_model=Dict[str, Any])
+async def get_security_assessment_for_analysis(
+    analysis_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves deterministic static security assessment and redacted findings for an analysis.
+    Enforces tenant isolation via organization_id.
+    """
+    pool = await db_pool.get_pool()
+    sec_repo = AsyncpgSecurityAssessmentRepository(pool)
+    result = await sec_repo.get_by_analysis_id(org_id, analysis_id)
+    if result:
+        assessment, findings = result
+        return {
+            "analysis_id": str(analysis_id),
+            "organization_id": str(org_id),
+            "security_status": assessment.security_status,
+            "evidence_status": assessment.evidence_status,
+            "security_risk_score": assessment.security_risk_score,
+            "critical_count": assessment.critical_count,
+            "high_count": assessment.high_count,
+            "medium_count": assessment.medium_count,
+            "low_count": assessment.low_count,
+            "summary": assessment.summary,
+            "findings": [f.model_dump() for f in findings],
+        }
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    analysis = await analysis_repo.get_by_id(org_id, analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
+    sec = analysis.security_assessment or (analysis.impact_metadata or {}).get("security_assessment") or {}
+    return {
+        "analysis_id": str(analysis_id),
+        "organization_id": str(org_id),
+        **sec,
+    }
+
+
+@router.get("/analyses/{analysis_id}/reliability", response_model=Dict[str, Any])
+async def get_reliability_assessment_for_analysis(
+    analysis_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves deterministic reliability assessment and findings for an analysis.
+    Enforces tenant isolation via organization_id.
+    """
+    pool = await db_pool.get_pool()
+    rel_repo = AsyncpgReliabilityAssessmentRepository(pool)
+    result = await rel_repo.get_by_analysis_id(org_id, analysis_id)
+    if result:
+        assessment, findings = result
+        return {
+            "analysis_id": str(analysis_id),
+            "organization_id": str(org_id),
+            "reliability_status": assessment.reliability_status,
+            "evidence_status": assessment.evidence_status,
+            "reliability_risk_score": assessment.reliability_risk_score,
+            "critical_count": assessment.critical_count,
+            "high_count": assessment.high_count,
+            "medium_count": assessment.medium_count,
+            "low_count": assessment.low_count,
+            "summary": assessment.summary,
+            "findings": [f.model_dump() for f in findings],
+        }
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    analysis = await analysis_repo.get_by_id(org_id, analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
+    rel = analysis.reliability_assessment or (analysis.impact_metadata or {}).get("reliability_assessment") or {}
+    return {
+        "analysis_id": str(analysis_id),
+        "organization_id": str(org_id),
+        **rel,
+    }
+
+
+# ============================================================
+# CROSS-REPOSITORY DEPENDENCY & DISTRIBUTED CHANGE INTELLIGENCE
+# ============================================================
+
+@router.post("/repositories/{repository_id}/dependencies", response_model=RepositoryDependencyDTO)
+async def register_repository_dependency(
+    repository_id: UUID,
+    req: RegisterDependencyRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Registers or updates an authoritative cross-repository dependency.
+    Tenant isolation is enforced via organization_id.
+    """
+    pool = await db_pool.get_pool()
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+
+    dep = RepositoryDependency(
+        organization_id=org_id,
+        source_repository_id=req.source_repository_id,
+        target_repository_id=req.target_repository_id,
+        dependency_type=req.dependency_type,
+        evidence_type=req.evidence_type,
+        confidence=req.confidence,
+        source_reference=req.source_reference,
+        target_reference=req.target_reference,
+        metadata=req.metadata,
+    )
+    saved = await dep_repo.upsert_dependency(dep)
+
+    evidences_dto = []
+    if req.evidence_file_path:
+        ev = DependencyEvidence(
+            organization_id=org_id,
+            dependency_id=saved.id,
+            evidence_kind=f"MANUAL_{req.dependency_type}",
+            file_path=req.evidence_file_path,
+            excerpt=req.evidence_excerpt,
+            commit_sha=req.commit_sha,
+        )
+        saved_ev = await dep_repo.save_evidence(ev)
+        evidences_dto.append(DependencyEvidenceDTO(
+            id=saved_ev.id,
+            evidence_kind=saved_ev.evidence_kind,
+            file_path=saved_ev.file_path,
+            excerpt=saved_ev.excerpt,
+            commit_sha=saved_ev.commit_sha,
+        ))
+
+    return RepositoryDependencyDTO(
+        id=saved.id,
+        organization_id=saved.organization_id,
+        source_repository_id=saved.source_repository_id,
+        target_repository_id=saved.target_repository_id,
+        dependency_type=saved.dependency_type,
+        evidence_type=saved.evidence_type,
+        confidence=saved.confidence,
+        source_reference=saved.source_reference,
+        target_reference=saved.target_reference,
+        current_state=saved.current_state,
+        metadata=saved.metadata,
+        evidence=evidences_dto,
+    )
+
+
+@router.get("/repositories/{repository_id}/dependencies", response_model=List[RepositoryDependencyDTO])
+async def list_repository_dependencies(
+    repository_id: UUID,
+    role: str = Query("both", description="Role to filter by: 'source' (repos this repo depends on), 'target' (repos that depend on this repo), or 'both'"),
+    state: str = Query("ACTIVE", description="Dependency state: 'ACTIVE', 'STALE', or empty for all"),
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Lists cross-repository dependencies involving repository_id.
+    Strictly isolated by organization_id.
+    """
+    pool = await db_pool.get_pool()
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+
+    deps = []
+    if role in ("source", "both"):
+        as_source = await dep_repo.get_dependencies_for_source(org_id, repository_id, state=state)
+        deps.extend(as_source)
+    if role in ("target", "both"):
+        as_target = await dep_repo.get_dependencies_for_target(org_id, repository_id, state=state)
+        existing_ids = {d.id for d in deps}
+        deps.extend([d for d in as_target if d.id not in existing_ids])
+
+    results = []
+    for d in deps:
+        evidence_list = await dep_repo.get_evidence_for_dependency(org_id, d.id)
+        results.append(RepositoryDependencyDTO(
+            id=d.id,
+            organization_id=d.organization_id,
+            source_repository_id=d.source_repository_id,
+            target_repository_id=d.target_repository_id,
+            dependency_type=d.dependency_type,
+            evidence_type=d.evidence_type,
+            confidence=d.confidence,
+            source_reference=d.source_reference,
+            target_reference=d.target_reference,
+            current_state=d.current_state,
+            metadata=d.metadata,
+            evidence=[
+                DependencyEvidenceDTO(
+                    id=e.id,
+                    evidence_kind=e.evidence_kind,
+                    file_path=e.file_path,
+                    excerpt=e.excerpt,
+                    commit_sha=e.commit_sha,
+                )
+                for e in evidence_list
+            ],
+        ))
+    return results
+
+
+@router.get("/organizations/dependencies", response_model=List[RepositoryDependencyDTO])
+async def list_organization_dependencies(
+    state: str = Query("ACTIVE", description="Dependency state: 'ACTIVE', 'STALE', or empty for all"),
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves the entire cross-repository dependency topology for an organization.
+    Used for organizational architecture diagrams and system blast radius mapping.
+    """
+    pool = await db_pool.get_pool()
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    deps = await dep_repo.get_all_org_dependencies(org_id, state=state)
+
+    results = []
+    for d in deps:
+        evidence_list = await dep_repo.get_evidence_for_dependency(org_id, d.id)
+        results.append(RepositoryDependencyDTO(
+            id=d.id,
+            organization_id=d.organization_id,
+            source_repository_id=d.source_repository_id,
+            target_repository_id=d.target_repository_id,
+            dependency_type=d.dependency_type,
+            evidence_type=d.evidence_type,
+            confidence=d.confidence,
+            source_reference=d.source_reference,
+            target_reference=d.target_reference,
+            current_state=d.current_state,
+            metadata=d.metadata,
+            evidence=[
+                DependencyEvidenceDTO(
+                    id=e.id,
+                    evidence_kind=e.evidence_kind,
+                    file_path=e.file_path,
+                    excerpt=e.excerpt,
+                    commit_sha=e.commit_sha,
+                )
+                for e in evidence_list
+            ],
+        ))
+    return results
+
+
+@router.post("/repositories/{repository_id}/discover-dependencies", response_model=List[RepositoryDependencyDTO])
+async def discover_repository_dependencies(
+    repository_id: UUID,
+    req: DiscoverDependenciesRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Scans submitted manifest files (pom.xml, requirements.txt, package.json, openapi.yaml, etc.)
+    and discovers authoritative cross-repository dependencies without embeddings or heuristics.
+    """
+    pool = await db_pool.get_pool()
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    sc_client = SourceControlClient()
+
+    all_org_repos = await sc_client.get_organization_repositories(org_id)
+    files_payload = [{"file_path": f.file_path, "content": f.content} for f in req.files]
+
+    discovered = DependencyDiscoveryEngine.discover_dependencies_from_files(
+        organization_id=org_id,
+        repository_id=repository_id,
+        changed_files=files_payload,
+        all_org_repositories=all_org_repos,
+        commit_sha=req.commit_sha or "",
+    )
+
+    results = []
+    for dep, evidences in discovered:
+        saved = await dep_repo.upsert_dependency(dep)
+        ev_dtos = []
+        for ev in evidences:
+            ev.dependency_id = saved.id
+            saved_ev = await dep_repo.save_evidence(ev)
+            ev_dtos.append(DependencyEvidenceDTO(
+                id=saved_ev.id,
+                evidence_kind=saved_ev.evidence_kind,
+                file_path=saved_ev.file_path,
+                excerpt=saved_ev.excerpt,
+                commit_sha=saved_ev.commit_sha,
+            ))
+        results.append(RepositoryDependencyDTO(
+            id=saved.id,
+            organization_id=saved.organization_id,
+            source_repository_id=saved.source_repository_id,
+            target_repository_id=saved.target_repository_id,
+            dependency_type=saved.dependency_type,
+            evidence_type=saved.evidence_type,
+            confidence=saved.confidence,
+            source_reference=saved.source_reference,
+            target_reference=saved.target_reference,
+            current_state=saved.current_state,
+            metadata=saved.metadata,
+            evidence=ev_dtos,
+        ))
+    return results
+
+
+@router.get("/repositories/{repository_id}/distributed-impact", response_model=DistributedImpactDTO)
+async def get_repository_distributed_impact(
+    repository_id: UUID,
+    pr_number: Optional[int] = Query(None, description="PR number to assess distributed impact for"),
+    commit_sha: Optional[str] = Query(None, description="Commit SHA to assess"),
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Evaluates distributed change impact for a repository PR or commit:
+    - Downstream repository dependents
+    - Contract compatibility status (COMPATIBLE, POTENTIALLY_BREAKING, BREAKING)
+    - Downstream CI and test health
+    - Deterministic distributed and combined risk scores
+    """
+    pool = await db_pool.get_pool()
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    sc_client = SourceControlClient()
+    testing_client = TestingServiceClient()
+
+    # 1. Fetch changed files for PR if pr_number is provided
+    changed_files = []
+    changed_symbols = []
+    if pr_number:
+        pr_data = await sc_client.get_pull_request_changes(org_id, repository_id, pr_number)
+        if pr_data:
+            changed_files = pr_data.get("files", [])
+
+    # 2. Derive contract compatibility
+    contract_status, contract_rationale = DependencyDiscoveryEngine.classify_contract_compatibility(
+        changed_files=changed_files,
+        changed_symbols=changed_symbols,
+    )
+
+    # 3. Retrieve downstream dependencies
+    direct_downstream_deps = await dep_repo.get_dependencies_for_target(org_id, repository_id, state="ACTIVE")
+    all_org_repos = await sc_client.get_organization_repositories(org_id)
+
+    # 4. Ingest downstream CI & test evidence
+    downstream_ci_evidence = {}
+    downstream_test_evidence = {}
+    for dep in direct_downstream_deps:
+        downstream_rid = dep.source_repository_id
+        downstream_rid_str = str(downstream_rid)
+        try:
+            runs = await testing_client.get_recent_workflow_runs(org_id, downstream_rid)
+            if runs:
+                latest_run = runs[0]
+                downstream_ci_evidence[downstream_rid_str] = {
+                    "id": latest_run.get("id"),
+                    "workflowRunId": latest_run.get("workflowRunId") or latest_run.get("id"),
+                    "status": latest_run.get("status"),
+                    "conclusion": latest_run.get("conclusion") or latest_run.get("status"),
+                }
+                test_results = await testing_client.list_test_runs(org_id, downstream_rid)
+                if test_results:
+                    downstream_test_evidence[downstream_rid_str] = test_results
+        except Exception as e:
+            logger.debug("Could not fetch downstream CI/test data for %s: %s", downstream_rid, e)
+
+    # 5. Execute distributed impact evaluation
+    assessment = CrossRepositoryImpactEngine.analyze_distributed_impact(
+        organization_id=org_id,
+        source_repository_id=repository_id,
+        source_repository_name=str(repository_id),
+        changed_files=changed_files,
+        changed_symbols=changed_symbols,
+        contract_status=contract_status,
+        contract_rationale=contract_rationale,
+        local_risk_score=20.0,
+        direct_downstream_deps=direct_downstream_deps,
+        downstream_ci_evidence=downstream_ci_evidence,
+        downstream_test_evidence=downstream_test_evidence,
+        all_org_repositories=all_org_repos,
+        pr_number=pr_number or 0,
+        commit_sha=commit_sha or "",
+    )
+
+    return DistributedImpactDTO(
+        distributed_risk_score=assessment.distributed_risk_score,
+        distributed_risk_level=assessment.distributed_risk_level,
+        combined_risk_score=assessment.combined_risk_score,
+        combined_risk_level=assessment.combined_risk_level,
+        direct_downstream_count=assessment.direct_downstream_count,
+        transitive_downstream_count=assessment.transitive_downstream_count,
+        max_cross_repo_depth=assessment.max_cross_repo_depth,
+        contract_status=assessment.contract_status,
+        contract_rationale=contract_rationale,
+        downstream_impacts=[
+            DownstreamRepositoryImpactDTO(
+                repository_id=imp.repository_id,
+                repository_name=imp.repository_name,
+                dependency_type=imp.dependency_type,
+                dependency_confidence=imp.dependency_confidence,
+                evidence_type=imp.evidence_type,
+                source_reference=imp.source_reference,
+                target_reference=imp.target_reference,
+                contract_status=imp.contract_status,
+                affected_symbols=imp.affected_symbols,
+                downstream_tests=imp.downstream_tests,
+                ci_status=imp.ci_status,
+                ci_run_id=imp.ci_run_id,
+                ci_conclusion=imp.ci_conclusion,
+                depth=imp.depth,
+                provenance_path=imp.provenance_path,
+            )
+            for imp in assessment.downstream_impacts
+        ],
+        distributed_risk_factors=assessment.distributed_risk_factors,
+        provenance=assessment.provenance,
+    )
+
+
+# ======================================================================
+# Milestone: Engineering Workflow Automation & Controlled AI Remediation Endpoints
+# ======================================================================
+
+@router.get("/analyses/{analysis_id}/actions", response_model=List[EngineeringActionDTO])
+async def get_analysis_actions(
+    analysis_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves all deterministic engineering actions derived for a specific analysis.
+    Enforces tenant isolation via organization_id.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    actions = await remediation_service.get_actions_for_analysis(org_id, analysis_id)
+    return [
+        EngineeringActionDTO(
+            id=a.id,
+            action_id=a.action_id,
+            analysis_id=a.analysis_id,
+            organization_id=a.organization_id,
+            repository_id=a.repository_id,
+            pr_number=a.pr_number,
+            commit_sha=a.commit_sha,
+            action_type=a.action_type,
+            title=a.title,
+            description=a.description,
+            reason=a.reason,
+            severity=a.severity,
+            confidence=a.confidence,
+            evidence=a.evidence,
+            affected_files=a.affected_files,
+            affected_symbols=a.affected_symbols,
+            provenance=a.provenance,
+            status=a.status,
+            source_finding_id=a.source_finding_id,
+            source_finding_type=a.source_finding_type,
+            metadata=a.metadata,
+            created_at=a.created_at,
+            updated_at=a.updated_at,
+        )
+        for a in actions
+    ]
+
+
+@router.get("/actions/{action_id}", response_model=ActionDetailsResponseDTO)
+async def get_action_details(
+    action_id: str,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves complete action details including structured remediation plan,
+    patch proposal diff, post-patch validation, effectiveness, and audit trail.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    details = await remediation_service.get_action_details(org_id, action_id)
+
+    a = details["action"]
+    action_dto = EngineeringActionDTO(**a)
+
+    plan_dto = None
+    if details.get("plan"):
+        p = details["plan"]
+        steps = [RemediationStepDTO(**s) for s in p.get("steps", [])]
+        plan_dto = RemediationPlanDTO(
+            id=p["id"],
+            action_id=p["action_id"],
+            organization_id=p["organization_id"],
+            repository_id=p["repository_id"],
+            title=p["title"],
+            summary=p["summary"],
+            steps=steps,
+            is_multi_repo=p.get("is_multi_repo", False),
+            coordinated_repos=p.get("coordinated_repos", []),
+            expected_impact=p.get("expected_impact", ""),
+            provenance=p.get("provenance", {}),
+            created_at=p["created_at"],
+            updated_at=p["updated_at"],
+        )
+
+    patch_dto = None
+    if details.get("patch"):
+        patch_dto = PatchProposalDTO(**details["patch"])
+
+    eff_dto = None
+    if details.get("effectiveness"):
+        eff_dto = RemediationEffectivenessDTO(**details["effectiveness"])
+
+    events_dtos = [ActionEventDTO(**e) for e in details.get("events", [])]
+
+    return ActionDetailsResponseDTO(
+        action=action_dto,
+        plan=plan_dto,
+        patch=patch_dto,
+        effectiveness=eff_dto,
+        events=events_dtos,
+        write_mode=details.get("write_mode", "ADVISORY_ONLY"),
+    )
+
+
+@router.post("/actions/{action_id}/approve", response_model=EngineeringActionDTO)
+async def approve_action(
+    action_id: str,
+    req: ApproveActionRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Human Approval Gate: Explicitly records developer approval for an engineering action.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    action = await remediation_service.approve_action(
+        organization_id=org_id,
+        action_id=action_id,
+        actor_id=req.actor_id,
+        comment=req.comment,
+    )
+    return EngineeringActionDTO(
+        id=action.id,
+        action_id=action.action_id,
+        analysis_id=action.analysis_id,
+        organization_id=action.organization_id,
+        repository_id=action.repository_id,
+        pr_number=action.pr_number,
+        commit_sha=action.commit_sha,
+        action_type=action.action_type,
+        title=action.title,
+        description=action.description,
+        reason=action.reason,
+        severity=action.severity,
+        confidence=action.confidence,
+        evidence=action.evidence,
+        affected_files=action.affected_files,
+        affected_symbols=action.affected_symbols,
+        provenance=action.provenance,
+        status=action.status,
+        source_finding_id=action.source_finding_id,
+        source_finding_type=action.source_finding_type,
+        metadata=action.metadata,
+        created_at=action.created_at,
+        updated_at=action.updated_at,
+    )
+
+
+@router.post("/actions/{action_id}/reject", response_model=EngineeringActionDTO)
+async def reject_action(
+    action_id: str,
+    req: RejectActionRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Human Approval Gate: Explicitly records developer rejection for an engineering action.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    action = await remediation_service.reject_action(
+        organization_id=org_id,
+        action_id=action_id,
+        actor_id=req.actor_id,
+        reason=req.reason,
+    )
+    return EngineeringActionDTO(
+        id=action.id,
+        action_id=action.action_id,
+        analysis_id=action.analysis_id,
+        organization_id=action.organization_id,
+        repository_id=action.repository_id,
+        pr_number=action.pr_number,
+        commit_sha=action.commit_sha,
+        action_type=action.action_type,
+        title=action.title,
+        description=action.description,
+        reason=action.reason,
+        severity=action.severity,
+        confidence=action.confidence,
+        evidence=action.evidence,
+        affected_files=action.affected_files,
+        affected_symbols=action.affected_symbols,
+        provenance=action.provenance,
+        status=action.status,
+        source_finding_id=action.source_finding_id,
+        source_finding_type=action.source_finding_type,
+        metadata=action.metadata,
+        created_at=action.created_at,
+        updated_at=action.updated_at,
+    )
+
+
+@router.get("/actions/{action_id}/patch", response_model=PatchProposalDTO)
+async def get_action_patch(
+    action_id: str,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves proposed unified diff patch for an engineering action.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    details = await remediation_service.get_action_details(org_id, action_id)
+    if not details.get("patch"):
+        raise HTTPException(status_code=404, detail=f"No patch proposal exists for action '{action_id}'.")
+    return PatchProposalDTO(**details["patch"])
+
+
+@router.post("/actions/{action_id}/validate")
+async def validate_action_patch(
+    action_id: str,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Executes safe static post-patch validation (in-memory patch application,
+    AST syntax parsing, zero secret introduction, rule re-evaluation).
+    Never executes arbitrary repository scripts.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    return await remediation_service.validate_patch(org_id, action_id)
+
+
+@router.post("/actions/{action_id}/apply")
+async def apply_action_patch(
+    action_id: str,
+    req: ApplyActionRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Controlled Patch Application Endpoint:
+    Enforces:
+    1. Authentication & tenant isolation
+    2. Explicit developer approval (status == APPROVED)
+    3. GitHub write mode check (Advisory Mode blocks application with 403)
+    4. Safe branch & PR creation (never modifies main directly)
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    return await remediation_service.apply_action(
+        organization_id=org_id,
+        action_id=action_id,
+        actor_id=req.actor_id,
+        write_mode_override=req.write_mode,
+    )
+
+
+@router.get("/actions/{action_id}/effectiveness", response_model=RemediationEffectivenessDTO)
+async def get_action_effectiveness(
+    action_id: str,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves deterministic before/after effectiveness metrics for an applied remediation.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    details = await remediation_service.get_action_details(org_id, action_id)
+    if not details.get("effectiveness"):
+        raise HTTPException(status_code=404, detail=f"No effectiveness metrics found for action '{action_id}'.")
+    return RemediationEffectivenessDTO(**details["effectiveness"])
+
+
 

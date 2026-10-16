@@ -53,8 +53,12 @@ class MergeReadinessEngine:
         actual_ci_results: Optional[Dict[str, Any]],
         review_findings: Optional[List[Dict[str, Any]]] = None,
         security_findings: Optional[List[Dict[str, Any]]] = None,
+        reliability_findings: Optional[List[Dict[str, Any]]] = None,
         provenance_records: Optional[List[Dict[str, Any]]] = None,
         policy: Optional[MergePolicy] = None,
+        distributed_risk_assessment: Optional[Any] = None,
+        security_assessment: Optional[Any] = None,
+        reliability_assessment: Optional[Any] = None,
     ) -> MergeReadiness:
         """
         Executes deterministic merge-readiness evaluation.
@@ -62,6 +66,7 @@ class MergeReadinessEngine:
         policy = policy or get_default_merge_policy()
         review_findings = review_findings or []
         security_findings = security_findings or []
+        reliability_findings = reliability_findings or []
         provenance_records = provenance_records or []
 
         blocking_reasons: List[str] = []
@@ -312,10 +317,22 @@ class MergeReadinessEngine:
         })
 
         # ----------------------------------------------------------------------
-        # 5. Security Posture Evaluation
+        # 5. Security Posture Evaluation (Merge Policy v3)
         # ----------------------------------------------------------------------
-        sec_blockers = [f for f in security_findings if f.get("severity") in ("CRITICAL", "HIGH") or f.get("is_blocker")]
-        sec_warnings = [f for f in security_findings if f.get("severity") in ("MEDIUM", "LOW")]
+        if security_assessment and hasattr(security_assessment, "findings") and not security_findings:
+            security_findings = [f.model_dump() if hasattr(f, "model_dump") else f for f in security_assessment.findings]
+
+        sec_blockers = [
+            f for f in security_findings
+            if (f.get("severity") in ("CRITICAL", "HIGH") or f.get("is_blocker"))
+            and f.get("confidence") != "LOW"
+        ]
+        sec_warnings = [
+            f for f in security_findings
+            if f.get("severity") in ("MEDIUM", "LOW") or f.get("confidence") == "LOW"
+        ]
+
+        sec_ev_status = getattr(security_assessment, "evidence_status", None) if security_assessment else None
 
         if sec_blockers:
             sec_status = SecurityStatus.SECURITY_BLOCKER.value
@@ -330,7 +347,18 @@ class MergeReadinessEngine:
             sec_conf = "MEDIUM"
             sec_ev = f"Security warning: {sec_warnings[0].get('title', 'Potential security concern')}."
             warnings.append(f"Security advisory: {sec_warnings[0].get('title', 'Security concern')}.")
-        elif not security_findings:
+        elif sec_ev_status == "AVAILABLE":
+            sec_status = SecurityStatus.NO_SECURITY_FINDINGS.value
+            sec_check_status = "PASSED"
+            sec_conf = "HIGH"
+            sec_ev = "Security review completed with zero identified concerns."
+        elif sec_ev_status == "PARTIAL":
+            sec_status = SecurityStatus.NO_SECURITY_FINDINGS.value
+            sec_check_status = "WARNING"
+            sec_conf = "MEDIUM"
+            sec_ev = "Static security scan clean, but dependency vulnerability database is unavailable."
+            warnings.append("Security advisory: Dependency vulnerability database is unavailable.")
+        elif not security_findings and not security_assessment:
             # Truthful reporting when static security analysis is not configured in pipeline
             sec_status = SecurityStatus.SECURITY_EVIDENCE_UNAVAILABLE.value
             sec_check_status = "WARNING" if not policy.block_on_security_evidence_unavailable else "FAILED"
@@ -359,6 +387,83 @@ class MergeReadinessEngine:
             "status": sec_check_status,
             "security_status": sec_status,
             "evidence": sec_ev,
+        })
+
+        # ----------------------------------------------------------------------
+        # 5b. Reliability Posture Evaluation (Merge Policy v3)
+        # ----------------------------------------------------------------------
+        if reliability_assessment and hasattr(reliability_assessment, "findings") and not reliability_findings:
+            reliability_findings = [f.model_dump() if hasattr(f, "model_dump") else f for f in reliability_assessment.findings]
+        reliability_findings = reliability_findings or []
+
+        rel_blockers = [
+            f for f in reliability_findings
+            if (f.get("severity") == "CRITICAL" or f.get("is_blocker"))
+            and f.get("confidence") != "LOW"
+        ]
+        rel_warnings = [
+            f for f in reliability_findings
+            if f.get("severity") in ("HIGH", "MEDIUM") or f.get("confidence") == "LOW"
+        ]
+
+        rel_ev_status = getattr(reliability_assessment, "evidence_status", None) if reliability_assessment else None
+
+        if rel_blockers:
+            rel_status = "FAILED"
+            rel_check_status = "FAILED"
+            rel_conf = "HIGH"
+            rel_ev = f"Reliability blocker detected: {rel_blockers[0].get('title', 'Reliability failure risk')}."
+            blocking_reasons.append(f"Reliability blocker detected: {rel_blockers[0].get('title', 'Failure risk')}.")
+            required_actions.append("Remediate identified reliability failure risk before merge.")
+        elif rel_warnings:
+            rel_status = "WARNING"
+            rel_check_status = "WARNING"
+            rel_conf = "MEDIUM"
+            rel_ev = f"Reliability advisory: {rel_warnings[0].get('title', 'Reliability concern')}."
+            warnings.append(f"Reliability advisory: {rel_warnings[0].get('title', 'Reliability concern')}.")
+        elif rel_ev_status == "PARTIAL":
+            rel_status = "PASSED"
+            rel_check_status = "WARNING"
+            rel_conf = "MEDIUM"
+            rel_ev = "Static reliability scan clean, but runtime trace telemetry is unavailable."
+            warnings.append("Reliability advisory: Runtime trace telemetry unavailable.")
+        elif not reliability_findings and not reliability_assessment:
+            if getattr(policy, "block_on_reliability_evidence_unavailable", False):
+                rel_status = "UNAVAILABLE"
+                rel_check_status = "FAILED"
+                rel_conf = "LOW"
+                rel_ev = "Reliability analysis evidence is mandatory under current policy but unavailable."
+                blocking_reasons.append("Reliability analysis evidence is mandatory under current policy but unavailable.")
+            elif getattr(policy, "warn_on_reliability_evidence_unavailable", False):
+                rel_status = "UNAVAILABLE"
+                rel_check_status = "WARNING"
+                rel_conf = "LOW"
+                rel_ev = "Reliability analysis evidence unavailable."
+                warnings.append("Reliability analysis evidence unavailable.")
+            else:
+                rel_status = "PASSED"
+                rel_check_status = "PASSED"
+                rel_conf = "HIGH"
+                rel_ev = "Reliability analysis completed with zero identified concerns."
+        else:
+            rel_status = "PASSED"
+            rel_check_status = "PASSED"
+            rel_conf = "HIGH"
+            rel_ev = "Reliability analysis completed with zero identified concerns."
+
+        all_checks.append(RequiredCheck(
+            name="reliability_posture_evaluation",
+            source="RELIABILITY_ANALYSIS",
+            status=rel_check_status,
+            confidence=rel_conf,
+            evidence=rel_ev,
+        ))
+        evidence_chain.append({
+            "dimension": "RELIABILITY_ANALYSIS",
+            "check": "reliability_posture_evaluation",
+            "status": rel_check_status,
+            "reliability_status": rel_status,
+            "evidence": rel_ev,
         })
 
         # ----------------------------------------------------------------------
@@ -448,6 +553,187 @@ class MergeReadinessEngine:
             required_actions.append("Resolve all CRITICAL review findings prior to merge.")
 
         # ----------------------------------------------------------------------
+        # 8b. Cross-Repository Dependency & Contract Compatibility Check
+        # ----------------------------------------------------------------------
+        if distributed_risk_assessment is not None:
+            if hasattr(distributed_risk_assessment, "model_dump"):
+                dra_data = distributed_risk_assessment.model_dump()
+            elif isinstance(distributed_risk_assessment, dict):
+                dra_data = distributed_risk_assessment
+            else:
+                dra_data = getattr(distributed_risk_assessment, "__dict__", {})
+
+            contract_st = dra_data.get("contract_status", "UNKNOWN")
+            impacts = dra_data.get("downstream_impacts", [])
+            dist_score = dra_data.get("distributed_risk_score", 0.0)
+
+            # Separate authoritative vs low-confidence
+            authoritative_impacts = [
+                imp for imp in impacts
+                if (imp.get("dependency_confidence") if isinstance(imp, dict) else getattr(imp, "dependency_confidence", "")) in ("HIGH", "MEDIUM")
+            ]
+            low_conf_impacts = [
+                imp for imp in impacts
+                if (imp.get("dependency_confidence") if isinstance(imp, dict) else getattr(imp, "dependency_confidence", "")) == "LOW"
+            ]
+
+            # 1. Contract compatibility check
+            if contract_st == "BREAKING" and len(authoritative_impacts) > 0:
+                if policy.block_on_breaking_contract_with_dependents:
+                    contract_chk_status = "FAILED"
+                    contract_conf = "HIGH"
+                    contract_ev = f"BREAKING contract detected on exported interface with {len(authoritative_impacts)} authoritative downstream dependent repositories."
+                    blocking_reasons.append(contract_ev)
+                    required_actions.append("Coordinate contract migration with downstream repositories or introduce backward-compatible versioning.")
+                else:
+                    contract_chk_status = "WARNING"
+                    contract_conf = "HIGH"
+                    contract_ev = f"BREAKING contract detected on exported interface with {len(authoritative_impacts)} downstream dependent repositories (advisory)."
+                    warnings.append(contract_ev)
+            elif contract_st == "POTENTIALLY_BREAKING" and len(authoritative_impacts) > 0:
+                contract_chk_status = "WARNING"
+                contract_conf = "MEDIUM"
+                contract_ev = f"POTENTIALLY_BREAKING contract change affecting {len(authoritative_impacts)} downstream dependents."
+                if policy.warn_on_potentially_breaking_contract:
+                    warnings.append(contract_ev)
+            elif contract_st == "COMPATIBLE":
+                contract_chk_status = "PASSED"
+                contract_conf = "HIGH"
+                contract_ev = f"Contract changes are backward-compatible across {len(authoritative_impacts)} downstream dependents."
+            else:
+                contract_chk_status = "PASSED" if len(authoritative_impacts) == 0 else "WARNING"
+                contract_conf = "MEDIUM"
+                contract_ev = f"Contract status is {contract_st} with {len(authoritative_impacts)} downstream dependents."
+
+            all_checks.append(RequiredCheck(
+                name="contract_compatibility",
+                source="CONTRACT_ANALYSIS",
+                status=contract_chk_status,
+                confidence=contract_conf,
+                evidence=contract_ev,
+            ))
+            evidence_chain.append({
+                "dimension": "API_CONTRACT",
+                "check": "contract_compatibility",
+                "status": contract_chk_status,
+                "evidence": contract_ev,
+            })
+
+            # 2. Downstream CI Health check
+            downstream_ci_fails = [
+                imp for imp in authoritative_impacts
+                if (imp.get("ci_status") if isinstance(imp, dict) else getattr(imp, "ci_status", "")) == "FAIL"
+            ]
+            downstream_ci_missing = [
+                imp for imp in authoritative_impacts
+                if (imp.get("ci_status") if isinstance(imp, dict) else getattr(imp, "ci_status", "")) in ("UNKNOWN", "NOT_FOUND")
+            ]
+
+            if downstream_ci_fails:
+                if policy.block_on_downstream_ci_failure:
+                    downstream_ci_chk_status = "FAILED"
+                    downstream_ci_conf = "HIGH"
+                    downstream_ci_ev = f"{len(downstream_ci_fails)} downstream dependent repositories have failing CI workflows."
+                    blocking_reasons.append(downstream_ci_ev)
+                    required_actions.append("Ensure downstream CI pipelines pass before merging.")
+                else:
+                    downstream_ci_chk_status = "WARNING"
+                    downstream_ci_conf = "HIGH"
+                    downstream_ci_ev = f"{len(downstream_ci_fails)} downstream repositories have failing CI workflows (advisory)."
+                    warnings.append(downstream_ci_ev)
+            elif downstream_ci_missing and policy.warn_on_downstream_ci_missing:
+                downstream_ci_chk_status = "WARNING"
+                downstream_ci_conf = "MEDIUM"
+                downstream_ci_ev = f"Downstream CI evidence not found or unverified for {len(downstream_ci_missing)} dependents."
+                warnings.append(downstream_ci_ev)
+            else:
+                downstream_ci_chk_status = "PASSED"
+                downstream_ci_conf = "HIGH"
+                downstream_ci_ev = "All downstream repository CI checks passed or no downstream failures reported."
+
+            all_checks.append(RequiredCheck(
+                name="downstream_ci_health",
+                source="DOWNSTREAM_CI",
+                status=downstream_ci_chk_status,
+                confidence=downstream_ci_conf,
+                evidence=downstream_ci_ev,
+            ))
+            evidence_chain.append({
+                "dimension": "DOWNSTREAM_CI",
+                "check": "downstream_ci_health",
+                "status": downstream_ci_chk_status,
+                "evidence": downstream_ci_ev,
+            })
+
+            # 3. Downstream Test Validation check
+            downstream_test_fails = []
+            for imp in authoritative_impacts:
+                tests = imp.get("downstream_tests", []) if isinstance(imp, dict) else getattr(imp, "downstream_tests", [])
+                for t in tests:
+                    if t.get("status") == "FAILED" or t.get("conclusion") == "failure":
+                        downstream_test_fails.append(t)
+
+            if downstream_test_fails:
+                if policy.block_on_downstream_required_test_failure:
+                    downstream_test_chk_status = "FAILED"
+                    downstream_test_conf = "HIGH"
+                    downstream_test_ev = f"{len(downstream_test_fails)} downstream required tests failed."
+                    blocking_reasons.append(downstream_test_ev)
+                    required_actions.append("Fix breaking changes causing downstream test failures.")
+                else:
+                    downstream_test_chk_status = "WARNING"
+                    downstream_test_conf = "HIGH"
+                    downstream_test_ev = f"{len(downstream_test_fails)} downstream tests failed (advisory)."
+                    warnings.append(downstream_test_ev)
+            else:
+                downstream_test_chk_status = "PASSED"
+                downstream_test_conf = "HIGH"
+                downstream_test_ev = "All downstream required tests passed or verified."
+
+            all_checks.append(RequiredCheck(
+                name="downstream_test_validation",
+                source="TEST_INTELLIGENCE",
+                status=downstream_test_chk_status,
+                confidence=downstream_test_conf,
+                evidence=downstream_test_ev,
+            ))
+            evidence_chain.append({
+                "dimension": "TEST_INTELLIGENCE",
+                "check": "downstream_test_validation",
+                "status": downstream_test_chk_status,
+                "evidence": downstream_test_ev,
+            })
+
+            # 4. Overall Distributed Dependency Health check
+            dist_sub_statuses = [contract_chk_status, downstream_ci_chk_status, downstream_test_chk_status]
+            if "FAILED" in dist_sub_statuses:
+                dist_overall_status = "FAILED"
+            elif "WARNING" in dist_sub_statuses:
+                dist_overall_status = "WARNING"
+            else:
+                dist_overall_status = "PASSED"
+
+            all_checks.append(RequiredCheck(
+                name="distributed_dependency_health",
+                source="CROSS_REPO",
+                status=dist_overall_status,
+                confidence="HIGH",
+                evidence=f"Distributed health across {len(impacts)} downstream repositories (distributed risk score: {dist_score:.1f}).",
+            ))
+            evidence_chain.append({
+                "dimension": "CROSS_REPO",
+                "check": "distributed_dependency_health",
+                "status": dist_overall_status,
+                "evidence": f"Evaluated {len(authoritative_impacts)} authoritative and {len(low_conf_impacts)} low-confidence dependencies.",
+            })
+
+            if low_conf_impacts:
+                evidence_chain.append({
+                    "dimension": "CROSS_REPO",
+                    "note": f"{len(low_conf_impacts)} low-confidence dependencies detected (informational only, non-blocking).",
+                })
+
+        # ----------------------------------------------------------------------
         # 9. Deterministic Readiness Score Formula
         # ----------------------------------------------------------------------
         # Base score starts at 100.0
@@ -472,10 +758,14 @@ class MergeReadinessEngine:
             policy.security_blocker_penalty if sec_status == SecurityStatus.SECURITY_BLOCKER.value
             else (policy.security_warning_penalty if sec_status == SecurityStatus.SECURITY_WARNING.value else 0.0)
         )
+        rel_pen = (
+            policy.reliability_critical_penalty if rel_status == "FAILED"
+            else (policy.reliability_high_penalty if rel_status == "WARNING" else 0.0)
+        )
         finding_pen = (len(critical_findings) * policy.critical_finding_penalty) + (len(high_findings) * policy.high_finding_penalty)
         sync_pen = policy.sync_gap_penalty if not is_synced else 0.0
 
-        total_penalty = risk_pen + failed_chk_pen + missing_chk_pen + failed_test_pen + ci_fail_pen + sec_pen + finding_pen + sync_pen
+        total_penalty = risk_pen + failed_chk_pen + missing_chk_pen + failed_test_pen + ci_fail_pen + sec_pen + rel_pen + finding_pen + sync_pen
         readiness_score = round(max(0.0, min(100.0, 100.0 - total_penalty)), 1)
 
         # ----------------------------------------------------------------------

@@ -208,7 +208,7 @@ public class TokenRotationService {
     assert analysis.organization_id == org_id
     assert analysis.entity_type == "PR"
     assert analysis.entity_id == f"{repo_id}#{pr_number}"
-    assert analysis.prompt_version in ("v1.0.0", "v1.1.0", "v1.2.0")
+    assert analysis.prompt_version in ("v1.0.0", "v1.1.0", "v1.2.0", "v1.3.0", "v1.4.0", "v1.5.0")
     assert analysis.execution_duration_ms >= 0
 
     # Assert calling dependencies identified via recursive CTE traversal

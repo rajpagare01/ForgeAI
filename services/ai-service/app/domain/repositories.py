@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob
+from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob, RepositoryDependency, DependencyEvidence
 
 
 class CodeChunkRepository(ABC):
@@ -146,5 +146,165 @@ class MergeEvaluationRepository(ABC):
         self, org_id: UUID, repo_id: UUID, pr_number: int
     ) -> List[Any]:
         pass
+
+
+class RepositoryDependencyRepository(ABC):
+    """
+    Repository interface for cross-repository dependency persistence.
+    Every method enforces tenant isolation via organization_id.
+    """
+
+    @abstractmethod
+    async def upsert_dependency(self, dep: RepositoryDependency) -> RepositoryDependency:
+        """Insert or update a dependency relationship (upsert by unique key)."""
+        pass
+
+    @abstractmethod
+    async def get_dependencies_for_source(
+        self, org_id: UUID, source_repo_id: UUID, state: str = "ACTIVE"
+    ) -> List[RepositoryDependency]:
+        """Returns all dependencies where source_repository_id = source_repo_id."""
+        pass
+
+    @abstractmethod
+    async def get_dependencies_for_target(
+        self, org_id: UUID, target_repo_id: UUID, state: str = "ACTIVE"
+    ) -> List[RepositoryDependency]:
+        """Returns all repos that depend on target_repo_id (reverse lookup)."""
+        pass
+
+    @abstractmethod
+    async def get_all_org_dependencies(
+        self, org_id: UUID, state: str = "ACTIVE"
+    ) -> List[RepositoryDependency]:
+        """Returns all dependencies for an organization (for architecture view)."""
+        pass
+
+    @abstractmethod
+    async def mark_stale(self, org_id: UUID, dependency_id: UUID) -> None:
+        """Marks a dependency as STALE without destroying the historical record."""
+        pass
+
+    @abstractmethod
+    async def save_evidence(self, evidence: DependencyEvidence) -> DependencyEvidence:
+        """Saves a dependency evidence record."""
+        pass
+
+    @abstractmethod
+    async def get_evidence_for_dependency(
+        self, org_id: UUID, dependency_id: UUID
+    ) -> List[DependencyEvidence]:
+        pass
+
+
+class SecurityAssessmentRepository(ABC):
+    @abstractmethod
+    async def save_assessment(
+        self,
+        assessment: Any,
+        organization_id: UUID,
+        repository_id: UUID,
+        pr_number: int,
+        commit_sha: str,
+        analysis_id: Optional[UUID] = None,
+    ) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_latest_assessment(
+        self, org_id: UUID, repo_id: UUID, pr_number: int
+    ) -> Optional[Any]:
+        pass
+
+
+class ReliabilityAssessmentRepository(ABC):
+    @abstractmethod
+    async def save_assessment(
+        self,
+        assessment: Any,
+        organization_id: UUID,
+        repository_id: UUID,
+        pr_number: int,
+        commit_sha: str,
+        analysis_id: Optional[UUID] = None,
+    ) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_latest_assessment(
+        self, org_id: UUID, repo_id: UUID, pr_number: int
+    ) -> Optional[Any]:
+        pass
+
+
+class EngineeringActionRepository(ABC):
+    @abstractmethod
+    async def save_actions(self, actions: List[Any]) -> int:
+        pass
+
+    @abstractmethod
+    async def get_by_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    async def get_by_analysis(self, org_id: UUID, analysis_id: UUID) -> List[Any]:
+        pass
+
+    @abstractmethod
+    async def get_by_pr(self, org_id: UUID, repo_id: UUID, pr_number: int) -> List[Any]:
+        pass
+
+    @abstractmethod
+    async def update_status(
+        self, org_id: UUID, action_id: str, status: str, actor_id: str = "system", details: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        pass
+
+
+class RemediationPlanRepository(ABC):
+    @abstractmethod
+    async def save_plan(self, plan: Any) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        pass
+
+
+class PatchProposalRepository(ABC):
+    @abstractmethod
+    async def save_patch(self, patch: Any) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    async def update_status(self, org_id: UUID, patch_id: UUID, status: str) -> bool:
+        pass
+
+
+class RemediationEffectivenessRepository(ABC):
+    @abstractmethod
+    async def save_effectiveness(self, record: Any) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        pass
+
+
+class ActionEventRepository(ABC):
+    @abstractmethod
+    async def record_event(self, event: Any) -> Any:
+        pass
+
+    @abstractmethod
+    async def get_events_for_action(self, org_id: UUID, action_id: str) -> List[Any]:
+        pass
+
+
+
 
 

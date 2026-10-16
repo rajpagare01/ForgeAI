@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     USER_HEADER_NAME: str = "X-User-Id"
     PERMISSIONS_HEADER_NAME: str = "X-Permissions"
 
+    # Cross-Repository & Distributed Intelligence Settings
+    MAX_CROSS_REPO_DEPTH: int = 2
+
     def get_async_db_url(self) -> str:
         if self.ASYNC_DATABASE_URL:
             return self.ASYNC_DATABASE_URL

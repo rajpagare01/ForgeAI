@@ -49,7 +49,16 @@ class MergePolicy(BaseModel):
     warn_on_large_deletion_scope: bool = True
     large_deletion_threshold_lines: int = 200
 
-    # H. Score Penalty Weights (Readiness = 100 - sum(penalties))
+    # H. Cross-Repository & Distributed Dependency Policy (v2)
+    require_distributed_dependency_health: bool = True
+    block_on_breaking_contract_with_dependents: bool = True
+    block_on_downstream_required_test_failure: bool = True
+    block_on_downstream_ci_failure: bool = True
+    warn_on_potentially_breaking_contract: bool = True
+    warn_on_downstream_ci_missing: bool = True
+    allow_low_confidence_dependencies_without_blocking: bool = True
+
+    # I. Score Penalty Weights (Readiness = 100 - sum(penalties))
     risk_penalty_weight: float = 0.3  # risk_score * 0.3
     failed_check_penalty: float = 25.0
     missing_required_test_penalty: float = 20.0
@@ -63,8 +72,81 @@ class MergePolicy(BaseModel):
     security_warning_penalty: float = 15.0
     security_blocker_penalty: float = 50.0
     evidence_gap_penalty: float = 10.0
+    breaking_contract_penalty: float = 35.0
+    potentially_breaking_contract_penalty: float = 15.0
+    downstream_ci_failure_penalty: float = 30.0
+    downstream_test_failure_penalty: float = 30.0
+
+    # J. Security & Reliability Policy (v3)
+    block_on_critical_security: bool = True
+    block_on_high_security: bool = True
+    warn_on_medium_security: bool = True
+    allow_low_confidence_security_without_blocking: bool = True
+    block_on_critical_reliability: bool = True
+    warn_on_high_reliability: bool = True
+    warn_on_reliability_evidence_unavailable: bool = False
+    block_on_reliability_evidence_unavailable: bool = False
+    security_blockers_block_merge: bool = True
+    reliability_blockers_block_merge: bool = True
+    security_critical_penalty: float = 40.0
+    security_high_penalty: float = 25.0
+    reliability_critical_penalty: float = 35.0
+    reliability_high_penalty: float = 20.0
+
+    @property
+    def version(self) -> str:
+        return self.policy_version
 
 
 def get_default_merge_policy() -> MergePolicy:
-    """Returns the standard production merge policy v1."""
-    return MergePolicy()
+    """Returns the standard production merge policy (v3)."""
+    return get_merge_policy_v3()
+
+
+def get_merge_policy_v1() -> MergePolicy:
+    """Returns the repository-local merge policy v1."""
+    return MergePolicy(
+        policy_version="merge-policy-v1",
+        name="ForgeAI Local Strict Policy v1",
+        description="Standard deterministic merge gate ensuring repo-local synchronization, test execution, CI health, and security integrity.",
+        require_distributed_dependency_health=False,
+        block_on_breaking_contract_with_dependents=False,
+        block_on_downstream_required_test_failure=False,
+        block_on_downstream_ci_failure=False,
+    )
+
+
+def get_merge_policy_v2() -> MergePolicy:
+    """Returns the distributed cross-repository merge policy v2."""
+    return MergePolicy(
+        policy_version="merge-policy-v2",
+        name="ForgeAI Distributed Cross-Repository Policy v2",
+        description="Advanced deterministic merge gate evaluating repo-local gates plus cross-repository dependency contracts, downstream CI health, and distributed test impact.",
+        require_distributed_dependency_health=True,
+        block_on_breaking_contract_with_dependents=True,
+        block_on_downstream_required_test_failure=True,
+        block_on_downstream_ci_failure=True,
+        warn_on_potentially_breaking_contract=True,
+    )
+
+
+def get_merge_policy_v3() -> MergePolicy:
+    """Returns the full Security, Reliability & Compliance intelligence merge policy v3."""
+    return MergePolicy(
+        policy_version="merge-policy-v3",
+        name="ForgeAI Security, Reliability & Compliance Policy v3",
+        description="Enterprise merge policy evaluating local gates, cross-repository contracts, deterministic security vulnerabilities, and reliability failure risks.",
+        require_distributed_dependency_health=True,
+        block_on_breaking_contract_with_dependents=True,
+        block_on_downstream_required_test_failure=True,
+        block_on_downstream_ci_failure=True,
+        warn_on_potentially_breaking_contract=True,
+        block_on_critical_security=True,
+        block_on_high_security=True,
+        warn_on_medium_security=True,
+        allow_low_confidence_security_without_blocking=True,
+        block_on_critical_reliability=True,
+        warn_on_high_reliability=True,
+    )
+
+

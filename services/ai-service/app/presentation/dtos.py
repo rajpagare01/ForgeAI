@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from uuid import UUID
+from datetime import datetime
+
 
 
 class IndexFileInput(BaseModel):
@@ -92,8 +94,76 @@ class MergeReadinessDTO(BaseModel):
     missing_checks: List[str] = Field(default_factory=list)
     required_tests: List[Dict[str, Any]] = Field(default_factory=list)
     security_status: str = "SECURITY_EVIDENCE_UNAVAILABLE"
+    reliability_status: str = "PASSED"
+    unified_risk_score: float = 0.0
     github_mode: str = "MODE_A_ADVISORY"
     evidence: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SecurityFindingDTO(BaseModel):
+    id: Optional[UUID] = None
+    rule_id: str
+    category: str
+    severity: str
+    confidence: str = "HIGH"
+    title: str
+    description: str
+    file_path: str
+    line_number: Optional[int] = None
+    redacted_evidence: str
+    remediation: str
+    is_blocker: bool = False
+
+
+class SecurityAssessmentDTO(BaseModel):
+    security_status: str
+    evidence_status: str
+    security_risk_score: float = 0.0
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+    findings: List[SecurityFindingDTO] = Field(default_factory=list)
+    summary: str = ""
+
+
+class ReliabilityFindingDTO(BaseModel):
+    id: Optional[UUID] = None
+    rule_id: str
+    category: str
+    severity: str
+    confidence: str = "HIGH"
+    title: str
+    description: str
+    file_path: str
+    line_number: Optional[int] = None
+    evidence: str
+    remediation: str
+    failure_scenario: str = ""
+    is_blocker: bool = False
+
+
+class ReliabilityAssessmentDTO(BaseModel):
+    reliability_status: str
+    evidence_status: str
+    reliability_risk_score: float = 0.0
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+    findings: List[ReliabilityFindingDTO] = Field(default_factory=list)
+    summary: str = ""
+
+
+class UnifiedRiskScoreDTO(BaseModel):
+    local_risk: float = 0.0
+    distributed_risk: float = 0.0
+    security_risk: float = 0.0
+    reliability_risk: float = 0.0
+    final_risk: float = 0.0
+    final_risk_level: str = "LOW"
+    risk_formula: str = ""
+    dimension_contributions: Dict[str, float] = Field(default_factory=dict)
 
 
 class TestStrategyDTO(BaseModel):
@@ -142,6 +212,9 @@ class AnalysisResponseDTO(BaseModel):
     test_effectiveness: Optional[Dict[str, Any]] = None
     merge_readiness: Optional[Dict[str, Any]] = None
     review_findings: List[Dict[str, Any]] = Field(default_factory=list)
+    security_assessment: Optional[Dict[str, Any]] = None
+    reliability_assessment: Optional[Dict[str, Any]] = None
+    unified_risk: Optional[Dict[str, Any]] = None
     changed_components: Optional[Dict[str, Any]] = None
     direct_impact: Optional[List[Dict[str, Any]]] = None
     transitive_impact: Optional[List[Dict[str, Any]]] = None
@@ -177,4 +250,225 @@ class PushSyncResponse(BaseModel):
     chunks_indexed: int
     cache_hits: int
     edges_indexed: int
+
+
+# ============================================================
+# CROSS-REPOSITORY & DISTRIBUTED CHANGE INTELLIGENCE DTOS
+# ============================================================
+
+class DependencyEvidenceDTO(BaseModel):
+    id: Optional[UUID] = None
+    evidence_kind: Optional[str] = None
+    file_path: Optional[str] = None
+    excerpt: Optional[str] = None
+    commit_sha: Optional[str] = None
+
+
+class RepositoryDependencyDTO(BaseModel):
+    id: Optional[UUID] = None
+    organization_id: UUID
+    source_repository_id: UUID
+    target_repository_id: UUID
+    dependency_type: str
+    evidence_type: str = "EXPLICIT"
+    confidence: str = "HIGH"
+    source_reference: Optional[str] = None
+    target_reference: Optional[str] = None
+    current_state: str = "ACTIVE"
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    evidence: List[DependencyEvidenceDTO] = Field(default_factory=list)
+
+
+class DownstreamRepositoryImpactDTO(BaseModel):
+    repository_id: UUID
+    repository_name: str = ""
+    dependency_type: str
+    dependency_confidence: str = "LOW"
+    evidence_type: str = "DISCOVERED"
+    source_reference: Optional[str] = None
+    target_reference: Optional[str] = None
+    contract_status: str = "UNKNOWN"
+    affected_symbols: List[str] = Field(default_factory=list)
+    downstream_tests: List[Dict[str, Any]] = Field(default_factory=list)
+    ci_status: str = "NOT_FOUND"
+    ci_run_id: Optional[str] = None
+    ci_conclusion: Optional[str] = None
+    depth: int = 1
+    provenance_path: List[str] = Field(default_factory=list)
+
+
+class DistributedImpactDTO(BaseModel):
+    distributed_risk_score: float = 0.0
+    distributed_risk_level: str = "NONE"
+    combined_risk_score: float = 0.0
+    combined_risk_level: str = "LOW"
+    direct_downstream_count: int = 0
+    transitive_downstream_count: int = 0
+    max_cross_repo_depth: int = 0
+    contract_status: str = "UNKNOWN"
+    contract_rationale: Optional[str] = None
+    downstream_impacts: List[DownstreamRepositoryImpactDTO] = Field(default_factory=list)
+    distributed_risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
+    provenance: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class RegisterDependencyRequest(BaseModel):
+    source_repository_id: UUID
+    target_repository_id: UUID
+    dependency_type: str
+    evidence_type: str = "EXPLICIT"
+    confidence: str = "HIGH"
+    source_reference: Optional[str] = None
+    target_reference: Optional[str] = None
+    evidence_file_path: Optional[str] = None
+    evidence_excerpt: Optional[str] = None
+    commit_sha: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DiscoverDependenciesRequest(BaseModel):
+    repository_id: UUID
+    files: List[IndexFileInput] = Field(default_factory=list)
+    commit_sha: Optional[str] = None
+
+
+# ======================================================================
+# Milestone: Engineering Workflow Automation & Controlled AI Remediation DTOs
+# ======================================================================
+
+class EngineeringActionDTO(BaseModel):
+    id: UUID
+    action_id: str
+    analysis_id: Optional[UUID] = None
+    organization_id: UUID
+    repository_id: UUID
+    pr_number: int
+    commit_sha: str
+    action_type: str
+    title: str
+    description: str
+    reason: str
+    severity: str
+    confidence: str
+    evidence: str
+    affected_files: List[str] = Field(default_factory=list)
+    affected_symbols: List[str] = Field(default_factory=list)
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    status: str
+    source_finding_id: Optional[str] = None
+    source_finding_type: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class RemediationStepDTO(BaseModel):
+    step_number: int
+    target_file: str
+    target_symbol: str
+    change_description: str
+    validation_strategy: str
+    status: str
+    repository_id: Optional[UUID] = None
+    repository_name: Optional[str] = None
+
+
+class RemediationPlanDTO(BaseModel):
+    id: UUID
+    action_id: str
+    organization_id: UUID
+    repository_id: UUID
+    title: str
+    summary: str
+    steps: List[RemediationStepDTO] = Field(default_factory=list)
+    is_multi_repo: bool = False
+    coordinated_repos: List[str] = Field(default_factory=list)
+    expected_impact: str
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class PatchProposalDTO(BaseModel):
+    id: UUID
+    action_id: str
+    organization_id: UUID
+    repository_id: UUID
+    target_file: str
+    target_symbol: str
+    original_context: str
+    proposed_replacement: str
+    unified_diff: str
+    rationale: str
+    source_finding: str
+    confidence: str
+    validation_plan: Dict[str, Any] = Field(default_factory=dict)
+    status: str
+    model: str
+    provider: str
+    fallback_used: bool = False
+    prompt_version: str
+    trace_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RemediationEffectivenessDTO(BaseModel):
+    id: UUID
+    action_id: str
+    organization_id: UUID
+    repository_id: UUID
+    before_risk_score: float
+    after_risk_score: float
+    risk_delta: float
+    before_merge_readiness: str
+    after_merge_readiness: str
+    merge_readiness_delta: str
+    findings_fixed: List[str] = Field(default_factory=list)
+    findings_persisted: List[str] = Field(default_factory=list)
+    new_findings_introduced: List[str] = Field(default_factory=list)
+    tests_added: int = 0
+    tests_passed: bool = True
+    is_effective: bool = False
+    remediation_summary: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class ActionEventDTO(BaseModel):
+    id: UUID
+    organization_id: UUID
+    repository_id: UUID
+    action_id: str
+    event_type: str
+    actor_id: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+    trace_id: Optional[str] = None
+    created_at: datetime
+
+
+class ApproveActionRequest(BaseModel):
+    actor_id: str = "developer"
+    comment: Optional[str] = None
+
+
+class RejectActionRequest(BaseModel):
+    actor_id: str = "developer"
+    reason: Optional[str] = None
+
+
+class ApplyActionRequest(BaseModel):
+    actor_id: str = "developer"
+    write_mode: Optional[str] = None  # ADVISORY_ONLY or CONTROLLED_WRITE
+
+
+class ActionDetailsResponseDTO(BaseModel):
+    action: EngineeringActionDTO
+    plan: Optional[RemediationPlanDTO] = None
+    patch: Optional[PatchProposalDTO] = None
+    effectiveness: Optional[RemediationEffectivenessDTO] = None
+    events: List[ActionEventDTO] = Field(default_factory=list)
+    write_mode: str = "ADVISORY_ONLY"
+
+
 

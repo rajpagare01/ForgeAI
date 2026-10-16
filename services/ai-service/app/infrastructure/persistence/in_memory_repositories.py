@@ -10,6 +10,11 @@ from app.domain.repositories import (
     TestRecommendationRepository,
     TestValidationFeedbackRepository,
     MergeEvaluationRepository,
+    EngineeringActionRepository,
+    RemediationPlanRepository,
+    PatchProposalRepository,
+    RemediationEffectivenessRepository,
+    ActionEventRepository,
 )
 
 
@@ -305,5 +310,133 @@ class InMemoryMergeEvaluationRepository(MergeEvaluationRepository):
             and getattr(e, "repository_id", None) == repo_id
             and getattr(e, "pr_number", None) == pr_number
         ]
+
+
+class InMemoryEngineeringActionRepository(EngineeringActionRepository):
+    def __init__(self):
+        self.actions: List[Any] = []
+
+    async def save_actions(self, actions: List[Any]) -> int:
+        for action in actions:
+            # Upsert by action_id within tenant
+            existing = next(
+                (
+                    a for a in self.actions
+                    if getattr(a, "organization_id", None) == getattr(action, "organization_id", None)
+                    and getattr(a, "action_id", None) == getattr(action, "action_id", None)
+                ),
+                None,
+            )
+            if existing:
+                self.actions.remove(existing)
+            self.actions.append(action)
+        return len(actions)
+
+    async def get_by_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        for a in reversed(self.actions):
+            if getattr(a, "organization_id", None) == org_id and getattr(a, "action_id", None) == action_id:
+                return a
+        return None
+
+    async def get_by_analysis(self, org_id: UUID, analysis_id: UUID) -> List[Any]:
+        return [
+            a for a in self.actions
+            if getattr(a, "organization_id", None) == org_id
+            and getattr(a, "analysis_id", None) == analysis_id
+        ]
+
+    async def get_by_pr(self, org_id: UUID, repo_id: UUID, pr_number: int) -> List[Any]:
+        return [
+            a for a in self.actions
+            if getattr(a, "organization_id", None) == org_id
+            and getattr(a, "repository_id", None) == repo_id
+            and getattr(a, "pr_number", None) == pr_number
+        ]
+
+    async def update_status(
+        self, org_id: UUID, action_id: str, status: str, actor_id: str = "system", details: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        from app.domain.models import utc_now
+        for a in self.actions:
+            if getattr(a, "organization_id", None) == org_id and getattr(a, "action_id", None) == action_id:
+                setattr(a, "status", status)
+                setattr(a, "updated_at", utc_now())
+                if details and hasattr(a, "metadata") and isinstance(a.metadata, dict):
+                    a.metadata["last_status_change"] = {
+                        "actor_id": actor_id,
+                        "status": status,
+                        "details": details,
+                        "timestamp": utc_now().isoformat(),
+                    }
+                return True
+        return False
+
+
+class InMemoryRemediationPlanRepository(RemediationPlanRepository):
+    def __init__(self):
+        self.plans: Dict[str, Any] = {}
+
+    async def save_plan(self, plan: Any) -> Any:
+        key = f"{getattr(plan, 'organization_id')}:{getattr(plan, 'action_id')}"
+        self.plans[key] = plan
+        return plan
+
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        key = f"{org_id}:{action_id}"
+        return self.plans.get(key)
+
+
+class InMemoryPatchProposalRepository(PatchProposalRepository):
+    def __init__(self):
+        self.patches: Dict[str, Any] = {}
+
+    async def save_patch(self, patch: Any) -> Any:
+        key = f"{getattr(patch, 'organization_id')}:{getattr(patch, 'action_id')}"
+        self.patches[key] = patch
+        return patch
+
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        key = f"{org_id}:{action_id}"
+        return self.patches.get(key)
+
+    async def update_status(self, org_id: UUID, patch_id: UUID, status: str) -> bool:
+        from app.domain.models import utc_now
+        for patch in self.patches.values():
+            if getattr(patch, "organization_id", None) == org_id and getattr(patch, "id", None) == patch_id:
+                setattr(patch, "status", status)
+                setattr(patch, "updated_at", utc_now())
+                return True
+        return False
+
+
+class InMemoryRemediationEffectivenessRepository(RemediationEffectivenessRepository):
+    def __init__(self):
+        self.records: Dict[str, Any] = {}
+
+    async def save_effectiveness(self, record: Any) -> Any:
+        key = f"{getattr(record, 'organization_id')}:{getattr(record, 'action_id')}"
+        self.records[key] = record
+        return record
+
+    async def get_by_action_id(self, org_id: UUID, action_id: str) -> Optional[Any]:
+        key = f"{org_id}:{action_id}"
+        return self.records.get(key)
+
+
+class InMemoryActionEventRepository(ActionEventRepository):
+    def __init__(self):
+        self.events: List[Any] = []
+
+    async def record_event(self, event: Any) -> Any:
+        self.events.append(event)
+        return event
+
+    async def get_events_for_action(self, org_id: UUID, action_id: str) -> List[Any]:
+        return [
+            e for e in self.events
+            if getattr(e, "organization_id", None) == org_id
+            and getattr(e, "action_id", None) == action_id
+        ]
+
 
 

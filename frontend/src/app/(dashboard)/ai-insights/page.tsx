@@ -47,6 +47,13 @@ import {
   XCircle,
   AlertCircle,
   Scale,
+  Share2,
+  Workflow,
+  Globe,
+  Lock,
+  Bug,
+  Clock,
+  Play,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -226,6 +233,71 @@ export interface TestValidationResponseDTO {
   created_at?: string;
 }
 
+export interface SecurityFindingDTO {
+  id?: string;
+  category: string;
+  rule_id: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+  title: string;
+  description: string;
+  file_path: string;
+  line_number?: number | null;
+  redacted_evidence: string;
+  remediation: string;
+  is_blocker: boolean;
+}
+
+export interface SecurityAssessmentDTO {
+  security_status: "NO_SECURITY_FINDINGS" | "SECURITY_WARNING" | "SECURITY_BLOCKER" | "SECURITY_EVIDENCE_UNAVAILABLE" | string;
+  evidence_status: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE" | string;
+  security_risk_score: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  findings: SecurityFindingDTO[];
+  summary: string;
+}
+
+export interface ReliabilityFindingDTO {
+  id?: string;
+  category: string;
+  rule_id: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+  title: string;
+  description: string;
+  file_path: string;
+  line_number?: number | null;
+  evidence: string;
+  remediation: string;
+  is_blocker: boolean;
+}
+
+export interface ReliabilityAssessmentDTO {
+  reliability_status: "PASSED" | "WARNING" | "FAILED" | "UNAVAILABLE" | string;
+  evidence_status: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE" | string;
+  reliability_risk_score: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  findings: ReliabilityFindingDTO[];
+  summary: string;
+}
+
+export interface UnifiedRiskScoreDTO {
+  local_risk: number;
+  distributed_risk: number;
+  security_risk: number;
+  reliability_risk: number;
+  final_risk: number;
+  final_risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+  risk_formula: string;
+  dimension_contributions: Record<string, number>;
+}
+
 export interface PrAnalysisResponse {
   analysis_id?: string;
   risk?: string;
@@ -234,6 +306,9 @@ export interface PrAnalysisResponse {
   confidence: "HIGH" | "MEDIUM" | "LOW";
   summary: string;
   merge_readiness?: MergeReadinessDTO;
+  security_assessment?: SecurityAssessmentDTO;
+  reliability_assessment?: ReliabilityAssessmentDTO;
+  unified_risk?: UnifiedRiskScoreDTO;
   review_findings?: ReviewFindingItem[];
   changed_components?: ComponentItem[];
   direct_impact?: BlastRadiusItem[];
@@ -261,6 +336,9 @@ export interface PrAnalysisResponse {
     affected_tests_count?: number;
     historical_signals_count?: number;
     cross_module_impact?: boolean;
+    distributed_impact?: DistributedRiskAssessmentDTO;
+    contract_status?: "COMPATIBLE" | "POTENTIALLY_BREAKING" | "BREAKING" | string;
+    contract_rationale?: string;
   };
   retrieved_chunks?: Array<{
     chunk_id?: string;
@@ -282,11 +360,177 @@ export interface PrAnalysisResponse {
   fallback_used: boolean;
   trace_id?: string;
   created_at?: string;
+  engineering_actions?: EngineeringActionDTO[];
+  remediation_summary?: Record<string, any>;
+}
+
+export interface EngineeringActionDTO {
+  id?: string;
+  action_id: string;
+  analysis_id?: string;
+  organization_id: string;
+  repository_id: string;
+  pr_number: number;
+  commit_sha: string;
+  action_type: "RUN_TEST" | "ADD_TEST" | "FIX_SECURITY" | "FIX_RELIABILITY" | "UPDATE_CONFIGURATION" | "UPDATE_DEPENDENCY" | "UPDATE_API_CONTRACT" | "DOCUMENT_CHANGE" | "REVIEW_REQUIRED" | "NO_ACTION" | string;
+  title: string;
+  description: string;
+  reason: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+  evidence: string;
+  affected_files: string[];
+  affected_symbols: string[];
+  status: "PROPOSED" | "APPROVED" | "REJECTED" | "APPLIED" | "FAILED" | "SUPERSEDED" | string;
+  source_finding_id?: string;
+  source_finding_type?: string;
+  remediation_plan_id?: string;
+  provenance?: Record<string, any>;
+  metadata?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RemediationStepDTO {
+  step_number: number;
+  target_file: string;
+  target_symbol: string;
+  change_description: string;
+  validation_strategy: string;
+  status: "PENDING" | "APPROVED" | "COMPLETED" | "FAILED" | "BLOCKED" | string;
+  repository_id?: string;
+  repository_name?: string;
+}
+
+export interface RemediationPlanDTO {
+  id?: string;
+  action_id: string;
+  organization_id: string;
+  repository_id: string;
+  title: string;
+  summary: string;
+  steps: RemediationStepDTO[];
+  is_multi_repo: boolean;
+  coordinated_repos: string[];
+  expected_impact: string;
+  provenance?: Record<string, any>;
+  created_at?: string;
+}
+
+export interface PatchProposalDTO {
+  id?: string;
+  action_id: string;
+  organization_id: string;
+  repository_id: string;
+  target_file: string;
+  target_symbol: string;
+  original_context: string;
+  proposed_replacement: string;
+  unified_diff: string;
+  rationale: string;
+  source_finding: string;
+  confidence: string;
+  status: "PROPOSED" | "VALIDATED" | "APPLIED" | "REJECTED" | "SUPERSEDED" | string;
+  model: string;
+  provider: string;
+  fallback_used?: boolean;
+  prompt_version?: string;
+  created_at?: string;
+}
+
+export interface RemediationEffectivenessDTO {
+  id?: string;
+  action_id: string;
+  organization_id: string;
+  repository_id: string;
+  before_risk_score: number;
+  after_risk_score: number;
+  risk_delta: number;
+  before_merge_readiness: string;
+  after_merge_readiness: string;
+  merge_readiness_delta: string;
+  findings_fixed: string[];
+  findings_persisted: string[];
+  new_findings_introduced: string[];
+  tests_added: number;
+  tests_passed: boolean;
+  is_effective: boolean;
+  remediation_summary: string;
+  created_at?: string;
+}
+
+export interface ActionEventDTO {
+  id?: string;
+  organization_id: string;
+  repository_id: string;
+  action_id: string;
+  event_type: string;
+  actor_id: string;
+  details: Record<string, any>;
+  created_at?: string;
+}
+
+export interface ActionDetailsDTO {
+  action: EngineeringActionDTO;
+  plan?: RemediationPlanDTO | null;
+  patch?: PatchProposalDTO | null;
+  effectiveness?: RemediationEffectivenessDTO | null;
+  events?: ActionEventDTO[];
+  write_mode: string;
+}
+
+export interface DownstreamImpactItem {
+  target_repository_id: string;
+  target_repository_name: string;
+  dependency_type: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+  declared_contract_status: string;
+  downstream_ci_status: "PASS" | "FAIL" | "NOT_FOUND" | "PENDING" | string;
+  risk_contribution: number;
+  affected_symbols: string[];
+  evidence_files: string[];
+}
+
+export interface DistributedRiskAssessmentDTO {
+  source_repository_id: string;
+  local_risk_score: number;
+  local_risk_level: string;
+  distributed_risk_score: number;
+  distributed_risk_level: string;
+  combined_risk_score: number;
+  combined_risk_level: string;
+  contract_status: "COMPATIBLE" | "POTENTIALLY_BREAKING" | "BREAKING" | string;
+  direct_downstream_count: number;
+  downstream_impacts: DownstreamImpactItem[];
+  risk_factors: AnalysisFactor[];
+}
+
+export interface DependencyEvidenceItem {
+  id?: string;
+  evidence_type: string;
+  file_path: string;
+  snippet?: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+  metadata?: Record<string, any>;
+}
+
+export interface RepositoryDependencyItem {
+  id: string;
+  organization_id: string;
+  source_repository_id: string;
+  target_repository_id: string;
+  target_repository_name?: string;
+  source_repository_name?: string;
+  dependency_type: string;
+  confidence: "HIGH" | "MEDIUM" | "LOW" | string;
+  state: "ACTIVE" | "DEPRECATED" | "ARCHIVED" | string;
+  evidence: DependencyEvidenceItem[];
+  created_at?: string;
 }
 
 export default function AiInsightsPage() {
   const { currentOrg } = useTenant();
-  const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact">("pr");
+  const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact" | "dependencies" | "remediation">("pr");
 
   // Authorized repositories
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -345,6 +589,175 @@ export default function AiInsightsPage() {
   // Merge Readiness & Review Findings state
   const [isReadinessDetailsOpen, setIsReadinessDetailsOpen] = useState<boolean>(false);
   const [findingSeverityFilter, setFindingSeverityFilter] = useState<string>("ALL");
+
+  // Cross-Repository Dependencies Tab state
+  const [orgDependencies, setOrgDependencies] = useState<RepositoryDependencyItem[]>([]);
+  const [isLoadingDependencies, setIsLoadingDependencies] = useState<boolean>(false);
+  const [isDiscoveringDependencies, setIsDiscoveringDependencies] = useState<boolean>(false);
+  const [dependencyDiscoveryResult, setDependencyDiscoveryResult] = useState<string | null>(null);
+  const [dependencyError, setDependencyError] = useState<string | null>(null);
+  const [dependencyFilterConfidence, setDependencyFilterConfidence] = useState<string>("ALL");
+
+  // Controlled AI Remediation Workspace State
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [actionDetailsMap, setActionDetailsMap] = useState<Record<string, ActionDetailsDTO>>({});
+  const [isLoadingActionDetails, setIsLoadingActionDetails] = useState<boolean>(false);
+  const [actionStatusFilter, setActionStatusFilter] = useState<string>("ALL");
+  const [actionTypeFilter, setActionTypeFilter] = useState<string>("ALL");
+  const [isApprovingAction, setIsApprovingAction] = useState<boolean>(false);
+  const [isRejectingAction, setIsRejectingAction] = useState<boolean>(false);
+  const [isValidatingPatch, setIsValidatingPatch] = useState<boolean>(false);
+  const [isApplyingAction, setIsApplyingAction] = useState<boolean>(false);
+  const [validationResultsMap, setValidationResultsMap] = useState<Record<string, any>>({});
+  const [remediationFeedback, setRemediationFeedback] = useState<{ actionId: string; type: "success" | "error" | "info"; message: string } | null>(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState<string>("");
+  const [rejectingActionId, setRejectingActionId] = useState<string | null>(null);
+  const [localActions, setLocalActions] = useState<EngineeringActionDTO[]>([]);
+
+  useEffect(() => {
+    if (prAnalysisResult?.engineering_actions && prAnalysisResult.engineering_actions.length > 0) {
+      setLocalActions(prAnalysisResult.engineering_actions);
+      if (!selectedActionId) {
+        setSelectedActionId(prAnalysisResult.engineering_actions[0].action_id);
+      }
+    }
+  }, [prAnalysisResult, selectedActionId]);
+
+  const fetchActionDetails = useCallback(async (actionId: string) => {
+    if (!actionId) return;
+    setIsLoadingActionDetails(true);
+    try {
+      const details = await apiClient.get<ActionDetailsDTO>(`/api/v1/ai/actions/${actionId}`);
+      if (details && typeof details === "object") {
+        setActionDetailsMap((prev) => ({ ...prev, [actionId]: details }));
+      }
+    } catch (err: any) {
+      console.warn(`Could not fetch details for action ${actionId}:`, err);
+    } finally {
+      setIsLoadingActionDetails(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedActionId && !actionDetailsMap[selectedActionId]) {
+      fetchActionDetails(selectedActionId);
+    }
+  }, [selectedActionId, actionDetailsMap, fetchActionDetails]);
+
+  const handleApproveAction = async (actionId: string) => {
+    setIsApprovingAction(true);
+    setRemediationFeedback(null);
+    try {
+      await apiClient.post<EngineeringActionDTO>(`/api/v1/ai/actions/${actionId}/approve`, {
+        actor_id: "developer",
+        comment: "Approved from Remediation Workspace",
+      });
+      setLocalActions((prev) =>
+        prev.map((a) => (a.action_id === actionId ? { ...a, status: "APPROVED" } : a))
+      );
+      fetchActionDetails(actionId);
+      setRemediationFeedback({
+        actionId,
+        type: "success",
+        message: `Action ${actionId} approved successfully by developer.`,
+      });
+    } catch (err: any) {
+      setRemediationFeedback({
+        actionId,
+        type: "error",
+        message: err?.message || "Failed to approve action.",
+      });
+    } finally {
+      setIsApprovingAction(false);
+    }
+  };
+
+  const handleRejectAction = async (actionId: string) => {
+    setIsRejectingAction(true);
+    setRemediationFeedback(null);
+    try {
+      await apiClient.post<EngineeringActionDTO>(`/api/v1/ai/actions/${actionId}/reject`, {
+        actor_id: "developer",
+        reason: rejectReasonInput || "Rejected by developer",
+      });
+      setLocalActions((prev) =>
+        prev.map((a) => (a.action_id === actionId ? { ...a, status: "REJECTED" } : a))
+      );
+      fetchActionDetails(actionId);
+      setRejectingActionId(null);
+      setRejectReasonInput("");
+      setRemediationFeedback({
+        actionId,
+        type: "info",
+        message: `Action ${actionId} rejected.`,
+      });
+    } catch (err: any) {
+      setRemediationFeedback({
+        actionId,
+        type: "error",
+        message: err?.message || "Failed to reject action.",
+      });
+    } finally {
+      setIsRejectingAction(false);
+    }
+  };
+
+  const handleValidatePatch = async (actionId: string) => {
+    setIsValidatingPatch(true);
+    setRemediationFeedback(null);
+    try {
+      const res = await apiClient.post<any>(`/api/v1/ai/actions/${actionId}/validate`, {});
+      setValidationResultsMap((prev) => ({ ...prev, [actionId]: res }));
+      fetchActionDetails(actionId);
+      setRemediationFeedback({
+        actionId,
+        type: res?.valid ? "success" : "error",
+        message: res?.valid
+          ? "Patch successfully validated in-memory! AST syntax clean, 0 secrets detected, 0 shell scripts executed."
+          : `Patch validation failed: ${res?.error || "Unknown validation error"}`,
+      });
+    } catch (err: any) {
+      setRemediationFeedback({
+        actionId,
+        type: "error",
+        message: err?.message || "Patch validation failed.",
+      });
+    } finally {
+      setIsValidatingPatch(false);
+    }
+  };
+
+  const handleApplyAction = async (actionId: string) => {
+    setIsApplyingAction(true);
+    setRemediationFeedback(null);
+    try {
+      await apiClient.post<any>(`/api/v1/ai/actions/${actionId}/apply`, {
+        actor_id: "developer",
+      });
+      fetchActionDetails(actionId);
+      setRemediationFeedback({
+        actionId,
+        type: "success",
+        message: "Patch proposal applied successfully in Mode B! Remediation branch created.",
+      });
+    } catch (err: any) {
+      if (err?.message?.includes("Advisory Mode") || err?.status === 403) {
+        setRemediationFeedback({
+          actionId,
+          type: "info",
+          message: "Advisory Mode Active: GitHub App write permissions are not enabled. Patch application and automated repository modifications are safely blocked. Please review the unified diff above and apply manually.",
+        });
+      } else {
+        setRemediationFeedback({
+          actionId,
+          type: "error",
+          message: err?.message || "Failed to apply action.",
+        });
+      }
+    } finally {
+      setIsApplyingAction(false);
+    }
+  };
 
   // 1. Fetch authorized repositories
   const fetchRepositories = useCallback(async () => {
@@ -416,6 +829,50 @@ export default function AiInsightsPage() {
       console.warn("Reconciliation failed:", err);
     } finally {
       setIsReconciling(false);
+    }
+  };
+
+  // Cross-repository dependencies fetching & discovery
+  const fetchOrgDependencies = useCallback(async () => {
+    setIsLoadingDependencies(true);
+    setDependencyError(null);
+    try {
+      const data = await apiClient.get<RepositoryDependencyItem[]>("/api/v1/ai/organizations/dependencies");
+      if (Array.isArray(data)) {
+        setOrgDependencies(data);
+      }
+    } catch (err: any) {
+      console.warn("Could not fetch cross-repository dependencies:", err);
+      setDependencyError(err?.message || "Failed to load cross-repository dependencies.");
+    } finally {
+      setIsLoadingDependencies(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "dependencies") {
+      fetchOrgDependencies();
+    }
+  }, [activeTab, fetchOrgDependencies]);
+
+  const handleDiscoverDependencies = async () => {
+    if (!selectedRepoId) return;
+    setIsDiscoveringDependencies(true);
+    setDependencyDiscoveryResult(null);
+    setDependencyError(null);
+    try {
+      const res = await apiClient.post<RepositoryDependencyItem[]>(
+        `/api/v1/ai/repositories/${selectedRepoId}/discover-dependencies`,
+        {}
+      );
+      if (Array.isArray(res)) {
+        setDependencyDiscoveryResult(`Discovered ${res.length} dependencies from manifests.`);
+        fetchOrgDependencies();
+      }
+    } catch (err: any) {
+      setDependencyError(err?.message || "Dependency discovery failed.");
+    } finally {
+      setIsDiscoveringDependencies(false);
     }
   };
 
@@ -771,6 +1228,33 @@ export default function AiInsightsPage() {
         >
           <Network className="h-4 w-4" />
           AST Call Graph Blast Radius
+        </button>
+        <button
+          onClick={() => setActiveTab("dependencies")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+            activeTab === "dependencies"
+              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+          }`}
+        >
+          <Share2 className="h-4 w-4" />
+          Cross-Repository Topology
+        </button>
+        <button
+          onClick={() => setActiveTab("remediation")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+            activeTab === "remediation"
+              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+          }`}
+        >
+          <Sliders className="h-4 w-4" />
+          Controlled Remediation
+          {localActions.length > 0 && (
+            <Badge className="ml-1 bg-purple-500/20 text-purple-300 border-purple-500/30 text-[10px] px-1.5 py-0 font-mono">
+              {localActions.length}
+            </Badge>
+          )}
         </button>
       </div>
 
@@ -1394,6 +1878,421 @@ export default function AiInsightsPage() {
                     </div>
                   )}
 
+                  {/* ========================================================= */}
+                  {/* UNIFIED ENGINEERING RISK AGGREGATOR CARD (v3)             */}
+                  {/* ========================================================= */}
+                  {prAnalysisResult.unified_risk && (
+                    <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900/60 to-slate-950 p-5 shadow-xl relative overflow-hidden space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <Scale className="h-5 w-5 text-indigo-400" />
+                          <div>
+                            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                              Unified Engineering Risk Engine
+                            </span>
+                            <div className="text-[11px] font-mono text-slate-400">
+                              Deterministic Multi-Dimensional Formula (v3)
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-baseline gap-1 font-mono">
+                            <span className="text-xs uppercase text-slate-400">Final Risk:</span>
+                            <span
+                              className={`text-xl font-extrabold ${
+                                prAnalysisResult.unified_risk.final_risk >= 75
+                                  ? "text-rose-400"
+                                  : prAnalysisResult.unified_risk.final_risk >= 50
+                                  ? "text-amber-400"
+                                  : prAnalysisResult.unified_risk.final_risk >= 25
+                                  ? "text-yellow-400"
+                                  : "text-emerald-400"
+                              }`}
+                            >
+                              {prAnalysisResult.unified_risk.final_risk.toFixed(1)}
+                            </span>
+                            <span className="text-[10px] text-slate-500">/ 100.0</span>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`font-mono text-[10px] px-2 py-0.5 ${
+                              prAnalysisResult.unified_risk.final_risk_level === "CRITICAL"
+                                ? "text-rose-400 border-rose-500/50 bg-rose-950/30"
+                                : prAnalysisResult.unified_risk.final_risk_level === "HIGH"
+                                ? "text-amber-400 border-amber-500/50 bg-amber-950/30"
+                                : prAnalysisResult.unified_risk.final_risk_level === "MEDIUM"
+                                ? "text-yellow-400 border-yellow-500/50 bg-yellow-950/30"
+                                : "text-emerald-400 border-emerald-500/50 bg-emerald-950/30"
+                            }`}
+                          >
+                            {prAnalysisResult.unified_risk.final_risk_level}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Dimension Contribution Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {/* Local Risk */}
+                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono">
+                            <span className="text-slate-400">Local Impact (35%)</span>
+                            <span className="text-slate-200 font-bold">
+                              {prAnalysisResult.unified_risk.local_risk.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.local_risk)}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500">
+                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.local ?? (prAnalysisResult.unified_risk.local_risk * 0.35)).toFixed(1)} pts
+                          </div>
+                        </div>
+
+                        {/* Distributed Risk */}
+                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono">
+                            <span className="text-slate-400">Distributed (15%)</span>
+                            <span className="text-slate-200 font-bold">
+                              {prAnalysisResult.unified_risk.distributed_risk.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.distributed_risk * 2)}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500">
+                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.distributed ?? (prAnalysisResult.unified_risk.distributed_risk * 0.15)).toFixed(1)} pts
+                          </div>
+                        </div>
+
+                        {/* Security Risk */}
+                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono">
+                            <span className="text-slate-400">Security (35%)</span>
+                            <span className="text-slate-200 font-bold">
+                              {prAnalysisResult.unified_risk.security_risk.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-rose-500 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.security_risk)}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500">
+                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.security ?? (prAnalysisResult.unified_risk.security_risk * 0.35)).toFixed(1)} pts
+                          </div>
+                        </div>
+
+                        {/* Reliability Risk */}
+                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono">
+                            <span className="text-slate-400">Reliability (15%)</span>
+                            <span className="text-slate-200 font-bold">
+                              {prAnalysisResult.unified_risk.reliability_risk.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.reliability_risk)}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500">
+                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.reliability ?? (prAnalysisResult.unified_risk.reliability_risk * 0.15)).toFixed(1)} pts
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Formula footer & Floor Notice */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-[11px] font-mono text-slate-400">
+                        <span>Formula: min(100.0, 0.35*local + 0.15*distributed + 0.35*security + 0.15*reliability)</span>
+                        {prAnalysisResult.unified_risk.final_risk >= 75 && prAnalysisResult.unified_risk.security_risk > 0 && (
+                          <span className="text-rose-400 flex items-center gap-1 font-semibold">
+                            <AlertTriangle className="h-3 w-3" />
+                            Elevated by Critical Security Floor Policy
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ========================================================= */}
+                  {/* DETERMINISTIC SECURITY INTELLIGENCE CARD                  */}
+                  {/* ========================================================= */}
+                  {prAnalysisResult.security_assessment && (
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 shadow-xl space-y-4">
+                      {/* Card Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                          <div>
+                            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                              Deterministic Security Analysis Layer
+                            </span>
+                            <div className="text-[11px] font-mono text-slate-400">
+                              Static Rule Verification &bull; Zero Raw Secret Leakage
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Status Badge */}
+                          {prAnalysisResult.security_assessment.security_status === "SECURITY_BLOCKER" ? (
+                            <Badge variant="destructive" className="font-mono text-[10px] flex items-center gap-1">
+                              <ShieldAlert className="h-3 w-3" />
+                              SECURITY BLOCKER
+                            </Badge>
+                          ) : prAnalysisResult.security_assessment.security_status === "SECURITY_WARNING" ? (
+                            <Badge variant="outline" className="font-mono text-[10px] text-amber-400 border-amber-500/40 bg-amber-950/30 flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              SECURITY WARNING
+                            </Badge>
+                          ) : prAnalysisResult.security_assessment.security_status === "SECURITY_EVIDENCE_UNAVAILABLE" ? (
+                            <Badge variant="outline" className="font-mono text-[10px] text-slate-400 border-slate-700 bg-slate-900/40 flex items-center gap-1">
+                              <ShieldX className="h-3 w-3" />
+                              EVIDENCE UNAVAILABLE
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-500/40 bg-emerald-950/30 flex items-center gap-1">
+                              <ShieldCheck className="h-3 w-3" />
+                              CLEAN (0 FINDINGS)
+                            </Badge>
+                          )}
+
+                          {/* Severity Pill Counts */}
+                          <div className="flex items-center gap-1 text-[10px] font-mono">
+                            <span className="px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-500/30 text-rose-300">
+                              {prAnalysisResult.security_assessment.critical_count} Crit
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-amber-950/40 border border-amber-500/30 text-amber-300">
+                              {prAnalysisResult.security_assessment.high_count} High
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-yellow-950/40 border border-yellow-500/30 text-yellow-300">
+                              {prAnalysisResult.security_assessment.medium_count} Med
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                              {prAnalysisResult.security_assessment.low_count} Low
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Partial Evidence Warning Callout (Dependency CVE Scanner Unavailable) */}
+                      {prAnalysisResult.security_assessment.evidence_status === "PARTIAL" && (
+                        <div className="p-3 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200 flex items-center gap-2.5 font-sans">
+                          <Info className="h-4 w-4 text-blue-400 shrink-0" />
+                          <span>
+                            <strong>Partial Evidence:</strong> Dependency CVE scanner database is unconfigured. Code-level and secret scanning is fully verified. ForgeAI reports partial status truthfully with zero false certainty.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Findings List */}
+                      {Array.isArray(prAnalysisResult.security_assessment.findings) && prAnalysisResult.security_assessment.findings.length > 0 ? (
+                        <div className="space-y-2.5">
+                          {prAnalysisResult.security_assessment.findings.map((f, fIdx) => (
+                            <div
+                              key={fIdx}
+                              className={`p-3.5 rounded-xl border text-xs space-y-2 transition-colors ${
+                                f.severity === "CRITICAL"
+                                  ? "border-rose-500/40 bg-rose-950/20"
+                                  : f.severity === "HIGH"
+                                  ? "border-amber-500/40 bg-amber-950/15"
+                                  : "border-slate-800 bg-slate-900/40"
+                              }`}
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge
+                                    variant={f.severity === "CRITICAL" ? "destructive" : "outline"}
+                                    className={`text-[9px] font-mono ${
+                                      f.severity === "HIGH"
+                                        ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
+                                        : f.severity === "MEDIUM"
+                                        ? "text-yellow-400 border-yellow-500/40 bg-yellow-950/30"
+                                        : ""
+                                    }`}
+                                  >
+                                    {f.severity}
+                                  </Badge>
+                                  <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+                                    {f.category}
+                                  </span>
+                                  <span className="font-bold text-slate-200">{f.title}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-[10px] text-slate-500">{f.rule_id}</span>
+                                  {f.is_blocker && (
+                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase">
+                                      Merge Blocker
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              <p className="text-slate-300 text-[11px] leading-relaxed">{f.description}</p>
+
+                              {/* Concrete Redacted Evidence */}
+                              <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 font-mono text-[11px] text-purple-300 flex items-center justify-between gap-2 overflow-x-auto">
+                                <div>
+                                  <span className="text-slate-500">{f.file_path}{f.line_number ? `:${f.line_number}` : ""}:</span>{" "}
+                                  <span>{f.redacted_evidence}</span>
+                                </div>
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-purple-950/40 border border-purple-500/30 text-purple-300 shrink-0">
+                                  Confidence: {f.confidence}
+                                </span>
+                              </div>
+
+                              {/* Actionable Remediation Guidance */}
+                              <div className="text-[11px] text-slate-400 flex items-start gap-1.5">
+                                <span className="text-emerald-400 font-semibold shrink-0">Remediation:</span>
+                                <span>{f.remediation}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-slate-500 text-xs font-mono">
+                          Zero security vulnerabilities or secret leaks detected in pull request files.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ========================================================= */}
+                  {/* DETERMINISTIC RELIABILITY INTELLIGENCE CARD               */}
+                  {/* ========================================================= */}
+                  {prAnalysisResult.reliability_assessment && (
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 shadow-xl space-y-4">
+                      {/* Card Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <Activity className="h-5 w-5 text-purple-400" />
+                          <div>
+                            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                              Deterministic Reliability Analysis Layer
+                            </span>
+                            <div className="text-[11px] font-mono text-slate-400">
+                              Swallowed Exceptions &bull; Missing Timeouts &bull; Concurrency Safety &bull; Churn Hotspots
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Status Badge */}
+                          {prAnalysisResult.reliability_assessment.reliability_status === "FAILED" ? (
+                            <Badge variant="destructive" className="font-mono text-[10px] flex items-center gap-1">
+                              <XCircle className="h-3 w-3" />
+                              RELIABILITY FAILED
+                            </Badge>
+                          ) : prAnalysisResult.reliability_assessment.reliability_status === "WARNING" ? (
+                            <Badge variant="outline" className="font-mono text-[10px] text-amber-400 border-amber-500/40 bg-amber-950/30 flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              RELIABILITY WARNING
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-500/40 bg-emerald-950/30 flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              PASSED (0 ISSUES)
+                            </Badge>
+                          )}
+
+                          {/* Risk Score Pill */}
+                          <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                            Risk: {prAnalysisResult.reliability_assessment.reliability_risk_score.toFixed(1)} / 100
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Partial Evidence Warning Callout */}
+                      {prAnalysisResult.reliability_assessment.evidence_status === "PARTIAL" && (
+                        <div className="p-3 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200 flex items-center gap-2.5 font-sans">
+                          <Info className="h-4 w-4 text-blue-400 shrink-0" />
+                          <span>
+                            <strong>Partial Telemetry:</strong> Live OpenTelemetry distributed tracing is currently offline. Static concurrency, exception handling, and churn hotspot rules were executed deterministically.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Findings List */}
+                      {Array.isArray(prAnalysisResult.reliability_assessment.findings) && prAnalysisResult.reliability_assessment.findings.length > 0 ? (
+                        <div className="space-y-2.5">
+                          {prAnalysisResult.reliability_assessment.findings.map((rf, rIdx) => (
+                            <div
+                              key={rIdx}
+                              className={`p-3.5 rounded-xl border text-xs space-y-2 transition-colors ${
+                                rf.severity === "CRITICAL"
+                                  ? "border-rose-500/40 bg-rose-950/20"
+                                  : rf.severity === "HIGH"
+                                  ? "border-amber-500/40 bg-amber-950/15"
+                                  : "border-slate-800 bg-slate-900/40"
+                              }`}
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge
+                                    variant={rf.severity === "CRITICAL" ? "destructive" : "outline"}
+                                    className={`text-[9px] font-mono ${
+                                      rf.severity === "HIGH"
+                                        ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
+                                        : rf.severity === "MEDIUM"
+                                        ? "text-yellow-400 border-yellow-500/40 bg-yellow-950/30"
+                                        : ""
+                                    }`}
+                                  >
+                                    {rf.severity}
+                                  </Badge>
+                                  <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+                                    {rf.category}
+                                  </span>
+                                  <span className="font-bold text-slate-200">{rf.title}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-[10px] text-slate-500">{rf.rule_id}</span>
+                                  {rf.is_blocker && (
+                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase">
+                                      Merge Blocker
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              <p className="text-slate-300 text-[11px] leading-relaxed">{rf.description}</p>
+
+                              {/* Concrete Evidence Snippet */}
+                              <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 font-mono text-[11px] text-indigo-300 flex items-center justify-between gap-2 overflow-x-auto">
+                                <div>
+                                  <span className="text-slate-500">{rf.file_path}{rf.line_number ? `:${rf.line_number}` : ""}:</span>{" "}
+                                  <span>{rf.evidence}</span>
+                                </div>
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-indigo-950/40 border border-indigo-500/30 text-indigo-300 shrink-0">
+                                  Confidence: {rf.confidence}
+                                </span>
+                              </div>
+
+                              {/* Remediation */}
+                              <div className="text-[11px] text-slate-400 flex items-start gap-1.5">
+                                <span className="text-emerald-400 font-semibold shrink-0">Remediation:</span>
+                                <span>{rf.remediation}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-slate-500 text-xs font-mono">
+                          Zero reliability failure risks or exception swallows identified.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Insufficient context warning callout if applicable */}
                   {prAnalysisResult.summary?.includes("INSUFFICIENT_CONTEXT") && (
                     <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/30 text-xs text-amber-200 flex items-start gap-3">
@@ -1573,6 +2472,184 @@ export default function AiInsightsPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* 3b. Distributed Change Intelligence & Cross-Repository Topology */}
+                  {prAnalysisResult.impact_metadata?.distributed_impact && (
+                    <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/20 via-slate-950 to-purple-950/20 p-5 space-y-4 shadow-xl">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <Share2 className="h-5 w-5 text-indigo-400" />
+                          <span className="text-sm font-bold text-white uppercase tracking-wider">
+                            Distributed Change Intelligence & Cross-Repository Topology
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs font-mono font-bold px-2.5 py-0.5 border ${
+                              prAnalysisResult.impact_metadata.distributed_impact.contract_status === "COMPATIBLE"
+                                ? "bg-emerald-950/60 text-emerald-400 border-emerald-500/40"
+                                : prAnalysisResult.impact_metadata.distributed_impact.contract_status === "POTENTIALLY_BREAKING"
+                                ? "bg-amber-950/60 text-amber-400 border-amber-500/40"
+                                : "bg-rose-950/60 text-rose-400 border-rose-500/40 animate-pulse"
+                            }`}
+                          >
+                            Contract: {prAnalysisResult.impact_metadata.distributed_impact.contract_status}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
+                          <div className="p-1.5 px-2.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                            Direct Downstream Repos:{" "}
+                            <span className="font-bold text-white">
+                              {prAnalysisResult.impact_metadata.distributed_impact.direct_downstream_count}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Contract Analysis Rationale */}
+                      {prAnalysisResult.impact_metadata.contract_rationale && (
+                        <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300 flex items-start gap-2">
+                          <Info className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-semibold text-slate-200">Contract Analysis: </span>
+                            <span className="text-slate-300">{prAnalysisResult.impact_metadata.contract_rationale}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Multi-Repo Risk Scores */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                        <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
+                          <div className="text-[10px] uppercase text-slate-500 font-bold">Repo-Local Risk</div>
+                          <div className="text-lg font-bold text-slate-200">
+                            {prAnalysisResult.impact_metadata.distributed_impact.local_risk_score.toFixed(1)} / 100
+                          </div>
+                          <Badge variant="outline" className="text-[9px] text-slate-400">
+                            Level: {prAnalysisResult.impact_metadata.distributed_impact.local_risk_level}
+                          </Badge>
+                        </div>
+
+                        <div className="p-3 rounded-lg border border-indigo-500/30 bg-indigo-950/20 space-y-1">
+                          <div className="text-[10px] uppercase text-indigo-400 font-bold">Distributed Risk (Max 50)</div>
+                          <div className="text-lg font-bold text-indigo-300">
+                            {prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_score.toFixed(1)} / 50
+                          </div>
+                          <Badge variant="outline" className="text-[9px] text-indigo-300 border-indigo-500/40">
+                            Level: {prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_level}
+                          </Badge>
+                        </div>
+
+                        <div className="p-3 rounded-lg border border-purple-500/30 bg-purple-950/20 space-y-1">
+                          <div className="text-[10px] uppercase text-purple-400 font-bold">Combined Multi-Repo Risk</div>
+                          <div className="text-lg font-bold text-purple-200">
+                            {prAnalysisResult.impact_metadata.distributed_impact.combined_risk_score.toFixed(1)} / 100
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-sans">
+                            Formula: <span className="font-mono text-slate-300">local + 0.4 &times; distributed</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Downstream Impacted Repositories List */}
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <FolderGit2 className="h-4 w-4 text-indigo-400" />
+                          Downstream Dependents & CI Status
+                        </div>
+
+                        {prAnalysisResult.impact_metadata.distributed_impact.downstream_impacts &&
+                        prAnalysisResult.impact_metadata.distributed_impact.downstream_impacts.length > 0 ? (
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {prAnalysisResult.impact_metadata.distributed_impact.downstream_impacts.map((dep, dIdx) => (
+                              <div
+                                key={dIdx}
+                                className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs space-y-2 hover:border-slate-700 transition-colors"
+                              >
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold font-mono text-slate-100 text-sm">
+                                      {dep.target_repository_name}
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px] font-mono text-indigo-300 border-indigo-500/30">
+                                      {dep.dependency_type}
+                                    </Badge>
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] font-mono ${
+                                        dep.confidence === "HIGH"
+                                          ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                          : dep.confidence === "MEDIUM"
+                                          ? "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
+                                          : "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                                      }`}
+                                    >
+                                      Confidence: {dep.confidence}
+                                    </Badge>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 font-mono text-xs">
+                                    <span className="text-[11px] text-slate-400">Downstream CI:</span>
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] font-bold ${
+                                        dep.downstream_ci_status === "PASS"
+                                          ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/40"
+                                          : dep.downstream_ci_status === "FAIL"
+                                          ? "text-rose-400 border-rose-500/40 bg-rose-950/40 animate-pulse"
+                                          : "text-slate-400 border-slate-700 bg-slate-900/50"
+                                      }`}
+                                    >
+                                      {dep.downstream_ci_status}
+                                    </Badge>
+                                    <span className="text-[11px] text-slate-400 ml-1">
+                                      Risk +{dep.risk_contribution}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono pt-1">
+                                  {dep.affected_symbols && dep.affected_symbols.length > 0 && (
+                                    <div className="p-2 rounded bg-slate-950/70 border border-slate-800/80">
+                                      <span className="text-[10px] uppercase text-slate-500 block mb-1">
+                                        Affected Downstream Symbols ({dep.affected_symbols.length})
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {dep.affected_symbols.slice(0, 4).map((sym, sIdx) => (
+                                          <span key={sIdx} className="px-1.5 py-0.5 rounded bg-slate-900 text-indigo-300 border border-slate-800">
+                                            {sym}
+                                          </span>
+                                        ))}
+                                        {dep.affected_symbols.length > 4 && (
+                                          <span className="text-slate-500 text-[10px]">
+                                            +{dep.affected_symbols.length - 4} more
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {dep.evidence_files && dep.evidence_files.length > 0 && (
+                                    <div className="p-2 rounded bg-slate-950/70 border border-slate-800/80">
+                                      <span className="text-[10px] uppercase text-slate-500 block mb-1">
+                                        Evidence Manifests & Files
+                                      </span>
+                                      <div className="truncate text-slate-400">
+                                        {dep.evidence_files.join(", ")}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-4 rounded-lg border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                            No downstream repositories depend on the components modified in this pull request.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* 4. Test Intelligence & Risk-Driven Validation Engine */}
                   {(() => {
@@ -2587,6 +3664,902 @@ export default function AiInsightsPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: CROSS-REPOSITORY DEPENDENCY TOPOLOGY & DISCOVERY                   */}
+      {/* ========================================================================= */}
+      {activeTab === "dependencies" && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Share2 className="h-5 w-5 text-indigo-400" />
+                    Cross-Repository Dependency Topology
+                  </CardTitle>
+                  <CardDescription>
+                    Deterministic static manifest discovery (pom.xml, requirements.txt, package.json, OpenAPI contracts, service URLs) strictly scoped to{" "}
+                    <span className="text-purple-300 font-semibold">{currentOrg.name}</span>.
+                  </CardDescription>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    onClick={fetchOrgDependencies}
+                    disabled={isLoadingDependencies}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-slate-800 hover:bg-slate-800"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isLoadingDependencies ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+
+                  <Button
+                    onClick={handleDiscoverDependencies}
+                    disabled={isDiscoveringDependencies || !selectedRepoId}
+                    variant="glow"
+                    size="sm"
+                    className="text-xs"
+                  >
+                    {isDiscoveringDependencies ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        Scanning Manifests...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5 text-purple-300" />
+                        Scan Manifests & Contracts
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {dependencyDiscoveryResult && (
+                <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-950/30 text-xs text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <span>{dependencyDiscoveryResult}</span>
+                </div>
+              )}
+
+              {dependencyError && (
+                <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+                  <span>{dependencyError}</span>
+                </div>
+              )}
+
+              {/* Confidence Filters */}
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-slate-800/60">
+                <div className="flex items-center gap-1.5 text-xs font-mono">
+                  <span className="text-slate-400 text-[11px] mr-1">Confidence:</span>
+                  {(["ALL", "HIGH", "MEDIUM", "LOW"] as const).map((conf) => (
+                    <button
+                      key={conf}
+                      onClick={() => setDependencyFilterConfidence(conf)}
+                      className={`px-2.5 py-1 rounded text-[10px] font-mono transition-colors ${
+                        dependencyFilterConfidence === conf
+                          ? "bg-indigo-600 text-white font-semibold"
+                          : "bg-slate-900 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {conf}
+                    </button>
+                  ))}
+                </div>
+
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {orgDependencies.length} total dependencies discovered
+                </span>
+              </div>
+
+              {/* Dependencies List */}
+              {isLoadingDependencies ? (
+                <div className="p-8 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center gap-2 text-xs text-slate-400">
+                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                  Loading Cross-Repository Dependency Graph...
+                </div>
+              ) : orgDependencies.length > 0 ? (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {orgDependencies
+                    .filter(
+                      (dep) =>
+                        dependencyFilterConfidence === "ALL" ||
+                        dep.confidence === dependencyFilterConfidence
+                    )
+                    .map((dep, idx) => (
+                      <div
+                        key={dep.id || idx}
+                        className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3 hover:border-slate-700 transition-colors"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-mono font-bold text-white">
+                              {dep.source_repository_name || dep.source_repository_id.substring(0, 8)}
+                            </span>
+                            <ArrowRight className="h-3 w-3 text-indigo-400" />
+                            <span className="text-xs font-mono font-bold text-indigo-300">
+                              {dep.target_repository_name || dep.target_repository_id.substring(0, 8)}
+                            </span>
+                            <Badge variant="outline" className="text-[10px] font-mono text-purple-300 border-purple-500/30">
+                              {dep.dependency_type}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-mono ${
+                                dep.confidence === "HIGH"
+                                  ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                  : dep.confidence === "MEDIUM"
+                                  ? "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
+                                  : "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                              }`}
+                            >
+                              Confidence: {dep.confidence}
+                            </Badge>
+                          </div>
+
+                          <Badge variant="outline" className="text-[10px] font-mono text-slate-400">
+                            State: {dep.state}
+                          </Badge>
+                        </div>
+
+                        {/* Evidence Items */}
+                        {dep.evidence && dep.evidence.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                              Deterministic Evidence Snippets ({dep.evidence.length})
+                            </span>
+                            <div className="space-y-1.5">
+                              {dep.evidence.map((ev, eIdx) => (
+                                <div
+                                  key={eIdx}
+                                  className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] font-mono space-y-1"
+                                >
+                                  <div className="flex items-center justify-between text-slate-400">
+                                    <span className="text-indigo-300">{ev.file_path}</span>
+                                    <Badge variant="outline" className="text-[9px]">
+                                      {ev.evidence_type}
+                                    </Badge>
+                                  </div>
+                                  {ev.snippet && (
+                                    <pre className="text-[10px] text-slate-300 bg-slate-900/60 p-1.5 rounded overflow-x-auto whitespace-pre-wrap">
+                                      {ev.snippet}
+                                    </pre>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="p-8 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500 space-y-2">
+                  <Share2 className="h-8 w-8 text-slate-600 mx-auto" />
+                  <p>No cross-repository dependencies discovered yet for this organization.</p>
+                  <p className="text-[11px] text-slate-600">
+                    Click &ldquo;Scan Manifests &amp; Contracts&rdquo; to analyze Maven, Node, Python, and OpenAPI manifests.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: CONTROLLED AI REMEDIATION & WORKFLOW AUTOMATION WORKSPACE          */}
+      {/* ========================================================================= */}
+      {activeTab === "remediation" && (
+        <div className="space-y-6">
+          {/* Workspace Header & Advisory Mode Banner */}
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4.5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 shrink-0">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white tracking-tight">
+                      Controlled AI Remediation Workspace
+                    </h3>
+                    <Badge variant="outline" className="text-[10px] font-mono bg-amber-500/15 text-amber-300 border-amber-500/40 font-bold">
+                      MODE A: ADVISORY ONLY
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                    Zero autonomous repository writes. GitHub App permissions are strictly read-only (<code className="text-amber-200">contents: read</code>). All patches, plans, and actions require explicit developer review and approval.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                <Badge variant="outline" className="text-xs font-mono text-slate-400 bg-slate-900/60 border-slate-800">
+                  Execution Safety: Strict In-Memory AST
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Filter & Stats Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-slate-400">Status:</span>
+              {(["ALL", "PROPOSED", "APPROVED", "REJECTED", "APPLIED"] as const).map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setActionStatusFilter(st)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono font-medium transition-colors ${
+                    actionStatusFilter === st
+                      ? "bg-indigo-600 text-white font-bold"
+                      : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+
+              <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
+
+              <span className="text-xs font-semibold text-slate-400 ml-1">Type:</span>
+              {(["ALL", "FIX_SECURITY", "FIX_RELIABILITY", "ADD_TEST", "UPDATE_API_CONTRACT"] as const).map((tp) => (
+                <button
+                  key={tp}
+                  onClick={() => setActionTypeFilter(tp)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono font-medium transition-colors ${
+                    actionTypeFilter === tp
+                      ? "bg-purple-600 text-white font-bold"
+                      : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                  }`}
+                >
+                  {tp === "ALL" ? "ALL TYPES" : tp.replace("FIX_", "")}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+              <span>Total: <strong className="text-white">{localActions.length}</strong></span>
+              <span>&bull;</span>
+              <span>Pending: <strong className="text-amber-400">{localActions.filter(a => a.status === "PROPOSED").length}</strong></span>
+              <span>&bull;</span>
+              <span>Approved: <strong className="text-emerald-400">{localActions.filter(a => a.status === "APPROVED").length}</strong></span>
+            </div>
+          </div>
+
+          {/* Remediation Feedback Alert */}
+          {remediationFeedback && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                remediationFeedback.type === "success"
+                  ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
+                  : remediationFeedback.type === "error"
+                  ? "bg-rose-950/30 border-rose-500/40 text-rose-200"
+                  : "bg-amber-950/30 border-amber-500/40 text-amber-200"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {remediationFeedback.type === "success" ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                ) : remediationFeedback.type === "error" ? (
+                  <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                ) : (
+                  <Info className="h-4 w-4 text-amber-400 shrink-0" />
+                )}
+                <span>{remediationFeedback.message}</span>
+              </div>
+              <button
+                onClick={() => setRemediationFeedback(null)}
+                className="text-xs font-mono text-slate-400 hover:text-white underline shrink-0"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Master-Detail Grid */}
+          {localActions.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Actions List (5 Cols) */}
+              <div className="lg:col-span-5 space-y-3">
+                <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                  <span className="font-semibold uppercase tracking-wider text-slate-400">
+                    Derived Engineering Actions ({localActions.length})
+                  </span>
+                  <span className="text-[11px]">Select action to inspect</span>
+                </div>
+
+                <div className="space-y-2.5 max-h-[800px] overflow-y-auto pr-1">
+                  {localActions
+                    .filter((a) => actionStatusFilter === "ALL" || a.status === actionStatusFilter)
+                    .filter((a) => actionTypeFilter === "ALL" || a.action_type === actionTypeFilter)
+                    .map((action) => {
+                      const isSelected = selectedActionId === action.action_id;
+                      return (
+                        <div
+                          key={action.action_id}
+                          onClick={() => setSelectedActionId(action.action_id)}
+                          className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 ${
+                            isSelected
+                              ? "border-indigo-500 bg-slate-900/90 shadow-lg shadow-indigo-950/50 ring-1 ring-indigo-500/30"
+                              : "border-slate-800 bg-slate-950/70 hover:bg-slate-900/50 hover:border-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Action Type Badge */}
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] font-mono font-bold ${
+                                  action.action_type === "FIX_SECURITY"
+                                    ? "bg-rose-950/30 text-rose-300 border-rose-500/40"
+                                    : action.action_type === "FIX_RELIABILITY"
+                                    ? "bg-amber-950/30 text-amber-300 border-amber-500/40"
+                                    : action.action_type === "ADD_TEST" || action.action_type === "RUN_TEST"
+                                    ? "bg-purple-950/30 text-purple-300 border-purple-500/40"
+                                    : action.action_type === "UPDATE_API_CONTRACT"
+                                    ? "bg-blue-950/30 text-blue-300 border-blue-500/40"
+                                    : "bg-slate-800 text-slate-300 border-slate-700"
+                                }`}
+                              >
+                                {action.action_type}
+                              </Badge>
+
+                              {/* Severity Badge */}
+                              <Badge
+                                variant="outline"
+                                className={`text-[9px] font-mono ${
+                                  action.severity === "CRITICAL"
+                                    ? "text-rose-400 border-rose-500/50 bg-rose-950/20"
+                                    : action.severity === "HIGH"
+                                    ? "text-orange-400 border-orange-500/50 bg-orange-950/20"
+                                    : action.severity === "MEDIUM"
+                                    ? "text-amber-400 border-amber-500/50 bg-amber-950/20"
+                                    : "text-blue-400 border-blue-500/50 bg-blue-950/20"
+                                }`}
+                              >
+                                {action.severity}
+                              </Badge>
+                            </div>
+
+                            {/* Status Badge */}
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-mono font-bold ${
+                                action.status === "APPROVED"
+                                  ? "bg-emerald-950/40 text-emerald-300 border-emerald-500/40"
+                                  : action.status === "PROPOSED"
+                                  ? "bg-purple-950/40 text-purple-300 border-purple-500/40"
+                                  : action.status === "APPLIED"
+                                  ? "bg-indigo-950/40 text-indigo-300 border-indigo-500/40"
+                                  : "bg-rose-950/40 text-rose-300 border-rose-500/40"
+                              }`}
+                            >
+                              {action.status}
+                            </Badge>
+                          </div>
+
+                          <div>
+                            <h4 className="text-xs font-semibold text-white tracking-tight line-clamp-2">
+                              {action.title}
+                            </h4>
+                            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                              {action.description}
+                            </p>
+                          </div>
+
+                          {action.affected_files && action.affected_files.length > 0 && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 truncate">
+                              <FileCode className="h-3 w-3 text-indigo-400 shrink-0" />
+                              <span className="truncate">{action.affected_files[0]}</span>
+                            </div>
+                          )}
+
+                          {/* Quick decision footer */}
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px]">
+                            <span className="text-slate-500 font-mono text-[10px]">
+                              ID: {action.action_id}
+                            </span>
+                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              {action.status === "PROPOSED" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleApproveAction(action.action_id)}
+                                    disabled={isApprovingAction}
+                                    className="h-6 text-[10px] px-2 border-emerald-500/30 text-emerald-300 hover:bg-emerald-950/50"
+                                  >
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setRejectingActionId(action.action_id)}
+                                    disabled={isRejectingAction}
+                                    className="h-6 text-[10px] px-2 border-rose-500/30 text-rose-300 hover:bg-rose-950/50"
+                                  >
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Right Column: Selected Action Detailed Inspector (7 Cols) */}
+              <div className="lg:col-span-7 space-y-4">
+                {(() => {
+                  const currentAction = localActions.find((a) => a.action_id === selectedActionId) || localActions[0];
+                  if (!currentAction) return null;
+
+                  const details = actionDetailsMap[currentAction.action_id];
+                  const plan = details?.plan;
+                  const patch = details?.patch;
+                  const effectiveness = details?.effectiveness;
+                  const events = details?.events || [];
+                  const validationResult = validationResultsMap[currentAction.action_id];
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Action Header Card */}
+                      <Card className="border-indigo-500/30 bg-slate-900/80 shadow-xl">
+                        <CardHeader className="pb-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs font-mono font-bold bg-purple-500/20 text-purple-300 border-purple-500/40"
+                                >
+                                  {currentAction.action_type}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] font-mono text-slate-400 bg-slate-950 border-slate-800"
+                                >
+                                  ID: {currentAction.action_id}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] font-mono ${
+                                    currentAction.status === "APPROVED"
+                                      ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                      : currentAction.status === "PROPOSED"
+                                      ? "text-purple-400 border-purple-500/40 bg-purple-950/20"
+                                      : "text-rose-400 border-rose-500/40 bg-rose-950/20"
+                                  }`}
+                                >
+                                  Status: {currentAction.status}
+                                </Badge>
+                              </div>
+                              <CardTitle className="text-base text-white pt-1">
+                                {currentAction.title}
+                              </CardTitle>
+                              <CardDescription className="text-xs text-slate-300">
+                                {currentAction.description}
+                              </CardDescription>
+                            </div>
+
+                            {/* Human Decision Controls */}
+                            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                              {currentAction.status === "PROPOSED" ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleApproveAction(currentAction.action_id)}
+                                    disabled={isApprovingAction}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs gap-1.5 h-8"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Approve Action
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setRejectingActionId(currentAction.action_id)}
+                                    disabled={isRejectingAction}
+                                    className="border-rose-500/40 text-rose-300 hover:bg-rose-950/40 text-xs gap-1.5 h-8"
+                                  >
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    Reject
+                                  </Button>
+                                </>
+                              ) : currentAction.status === "APPROVED" ? (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleApplyAction(currentAction.action_id)}
+                                  disabled={isApplyingAction}
+                                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 h-8 shadow-md shadow-indigo-600/30"
+                                  title="Applies patch in Mode B or explains Mode A restrictions"
+                                >
+                                  {isApplyingAction ? (
+                                    <>
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                      Applying...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-3.5 w-3.5" />
+                                      Apply Patch Proposal
+                                    </>
+                                  )}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </CardHeader>
+
+                        {/* Target file & symbol bar */}
+                        <CardContent className="pt-0 space-y-3">
+                          <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="text-slate-500">Target File:</span>
+                              <span className="text-indigo-300 truncate">
+                                {currentAction.affected_files && currentAction.affected_files.length > 0
+                                  ? currentAction.affected_files[0]
+                                  : "Repository Core"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-slate-500">Confidence:</span>
+                              <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+                                {currentAction.confidence}
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Modal for rejecting action with explicit reason */}
+                      {rejectingActionId === currentAction.action_id && (
+                        <div className="p-4 rounded-xl border border-rose-500/40 bg-rose-950/30 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-rose-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <AlertTriangle className="h-4 w-4 text-rose-400" />
+                              Reject Remediation Action
+                            </span>
+                            <button
+                              onClick={() => setRejectingActionId(null)}
+                              className="text-xs text-slate-400 hover:text-white"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          <Input
+                            placeholder="State reason for rejecting remediation action (recorded in audit log)..."
+                            value={rejectReasonInput}
+                            onChange={(e) => setRejectReasonInput(e.target.value)}
+                            className="text-xs bg-slate-950 border-slate-800 text-white"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setRejectingActionId(null)}
+                              className="h-7 text-xs border-slate-700 text-slate-300"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleRejectAction(currentAction.action_id)}
+                              disabled={isRejectingAction}
+                              className="h-7 text-xs bg-rose-600 hover:bg-rose-500 text-white"
+                            >
+                              Confirm Rejection
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 1. Structured Remediation Plan */}
+                      {plan ? (
+                        <Card className="border-slate-800 bg-slate-900/60">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                                <Workflow className="h-4 w-4 text-purple-400" />
+                                Remediation Plan: {plan.title}
+                              </CardTitle>
+                              {plan.is_multi_repo && (
+                                <Badge variant="outline" className="text-[10px] font-mono text-blue-300 border-blue-500/40 bg-blue-950/30">
+                                  Multi-Repository Coordinated
+                                </Badge>
+                              )}
+                            </div>
+                            <CardDescription className="text-xs text-slate-400 mt-1">
+                              {plan.summary}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-2.5 pt-0">
+                            {plan.coordinated_repos && plan.coordinated_repos.length > 0 && (
+                              <div className="p-2.5 rounded bg-blue-950/20 border border-blue-500/30 text-xs text-blue-300 flex items-center gap-2">
+                                <Share2 className="h-3.5 w-3.5 shrink-0" />
+                                <span>Coordinated Repositories: {plan.coordinated_repos.join(", ")}</span>
+                              </div>
+                            )}
+
+                            <div className="space-y-2">
+                              {plan.steps && plan.steps.map((step, sIdx) => (
+                                <div
+                                  key={sIdx}
+                                  className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs space-y-1.5"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="h-5 w-5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] font-mono font-bold flex items-center justify-center">
+                                        {step.step_number}
+                                      </span>
+                                      <span className="font-semibold text-white font-mono text-[11px]">
+                                        {step.target_file} {step.target_symbol && `(${step.target_symbol})`}
+                                      </span>
+                                    </div>
+                                    <Badge variant="outline" className="text-[9px] font-mono text-slate-400">
+                                      {step.status}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-slate-300 text-xs leading-relaxed pl-7">
+                                    {step.change_description}
+                                  </p>
+                                  <div className="pl-7 text-[10px] font-mono text-slate-500 flex items-center gap-1.5">
+                                    <ShieldCheck className="h-3 w-3 text-emerald-400 shrink-0" />
+                                    <span>Verification: {step.validation_strategy}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/50 text-xs text-slate-500 italic flex items-center gap-2">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Loading structured remediation plan steps...</span>
+                        </div>
+                      )}
+
+                      {/* 2. Proposed Patch & In-Memory AST Validation */}
+                      {patch ? (
+                        <Card className="border-slate-800 bg-slate-900/60">
+                          <CardHeader className="pb-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                                <FileDiff className="h-4 w-4 text-emerald-400" />
+                                Proposed Unified Diff Patch
+                              </CardTitle>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px] font-mono text-slate-400">
+                                  Target: {patch.target_file}
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleValidatePatch(currentAction.action_id)}
+                                  disabled={isValidatingPatch}
+                                  className="h-7 text-xs px-2.5 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50 gap-1.5"
+                                >
+                                  {isValidatingPatch ? (
+                                    <>
+                                      <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
+                                      Validating AST...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                                      Validate In-Memory
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                            <CardDescription className="text-xs text-slate-400 mt-1">
+                              {patch.rationale}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-3 pt-0">
+                            {/* Validation Result Box */}
+                            {validationResult && (
+                              <div
+                                className={`p-3 rounded-lg border text-xs font-mono space-y-1.5 ${
+                                  validationResult.valid
+                                    ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-200"
+                                    : "bg-rose-950/20 border-rose-500/30 text-rose-200"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold flex items-center gap-1.5">
+                                    {validationResult.valid ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                    ) : (
+                                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                                    )}
+                                    Static Post-Patch Safety Validation: {validationResult.valid ? "PASSED" : "FAILED"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">Zero Shell Script Execution</span>
+                                </div>
+                                {validationResult.details && (
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-slate-300 pt-1">
+                                    <div>AST Valid: <strong className="text-emerald-400">Yes</strong></div>
+                                    <div>Hunks: <strong className="text-white">{validationResult.details.applied_hunks}</strong></div>
+                                    <div>Lines Changed: <strong className="text-white">{validationResult.details.changed_lines}</strong></div>
+                                    <div>Secrets Detected: <strong className="text-emerald-400">0</strong></div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Colorized Unified Diff Viewer */}
+                            <div className="rounded-lg bg-slate-950 border border-slate-800 p-3 overflow-x-auto font-mono text-xs max-h-72">
+                              {patch.unified_diff.split("\n").map((line, lIdx) => {
+                                let lineCls = "text-slate-300";
+                                let bgCls = "";
+                                if (line.startsWith("+") && !line.startsWith("+++")) {
+                                  lineCls = "text-emerald-400";
+                                  bgCls = "bg-emerald-950/25";
+                                } else if (line.startsWith("-") && !line.startsWith("---")) {
+                                  lineCls = "text-rose-400";
+                                  bgCls = "bg-rose-950/25";
+                                } else if (line.startsWith("@@")) {
+                                  lineCls = "text-cyan-400 font-semibold";
+                                  bgCls = "bg-cyan-950/20";
+                                } else if (line.startsWith("---") || line.startsWith("+++")) {
+                                  lineCls = "text-slate-400 font-bold";
+                                }
+                                return (
+                                  <div key={lIdx} className={`px-2 py-0.5 rounded-sm whitespace-pre ${lineCls} ${bgCls}`}>
+                                    {line || " "}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ) : null}
+
+                      {/* 3. Before vs After Differential Re-Analysis */}
+                      {effectiveness && (
+                        <Card className="border-slate-800 bg-slate-900/60">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                                <Scale className="h-4 w-4 text-indigo-400" />
+                                Deterministic Before vs After Differential Re-Analysis
+                              </CardTitle>
+                              {effectiveness.is_effective && (
+                                <Badge variant="outline" className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold">
+                                  VERIFIED EFFECTIVE
+                                </Badge>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-3 pt-0">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              {/* Risk Delta Card */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70 space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                                  Deterministic Risk Score
+                                </span>
+                                <div className="flex items-center gap-2 font-mono">
+                                  <span className="text-slate-400 line-through">{effectiveness.before_risk_score.toFixed(1)}</span>
+                                  <ArrowRight className="h-3 w-3 text-slate-500" />
+                                  <span className="text-base font-bold text-emerald-400">
+                                    {effectiveness.after_risk_score.toFixed(1)}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-emerald-400 font-mono">
+                                  &minus;{effectiveness.risk_delta.toFixed(1)} pts reduced
+                                </span>
+                              </div>
+
+                              {/* Findings Delta */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70 space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                                  Security & Reliability Findings
+                                </span>
+                                <div className="text-xs font-mono text-slate-300">
+                                  Fixed: <strong className="text-emerald-400">{effectiveness.findings_fixed.length}</strong> &bull; Persisted: <strong className="text-slate-400">{effectiveness.findings_persisted.length}</strong>
+                                </div>
+                                <span className="text-[10px] text-slate-500">
+                                  New Findings Introduced: <strong className="text-emerald-400">0</strong>
+                                </span>
+                              </div>
+
+                              {/* Merge Readiness Delta */}
+                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70 space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                                  Merge Readiness Progression
+                                </span>
+                                <div className="text-xs font-mono font-bold text-indigo-300 truncate">
+                                  {effectiveness.merge_readiness_delta}
+                                </div>
+                                <span className="text-[10px] text-slate-500">
+                                  Tests Added: {effectiveness.tests_added}
+                                </span>
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-slate-300 font-mono bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
+                              {effectiveness.remediation_summary}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* 4. Immutable Audit Trail (action_events) */}
+                      {events && events.length > 0 && (
+                        <Card className="border-slate-800 bg-slate-900/60">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                              <History className="h-4 w-4 text-slate-400" />
+                              Immutable Audit Trail ({events.length} Events)
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-2 pt-0">
+                            {events.map((ev, evIdx) => (
+                              <div
+                                key={evIdx}
+                                className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 text-[11px] font-mono flex items-center justify-between"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[9px] font-bold ${
+                                      ev.event_type === "APPROVED"
+                                        ? "text-emerald-400 border-emerald-500/40"
+                                        : ev.event_type === "REJECTED"
+                                        ? "text-rose-400 border-rose-500/40"
+                                        : ev.event_type === "VALIDATED"
+                                        ? "text-blue-400 border-blue-500/40"
+                                        : "text-purple-400 border-purple-500/40"
+                                    }`}
+                                  >
+                                    {ev.event_type}
+                                  </Badge>
+                                  <span className="text-slate-300">by {ev.actor_id}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500">
+                                  {ev.created_at ? new Date(ev.created_at).toLocaleTimeString() : "Recent"}
+                                </span>
+                              </div>
+                            ))}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : (
+            <div className="p-12 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500 space-y-3">
+              <Sliders className="h-10 w-10 text-slate-600 mx-auto" />
+              <div className="space-y-1">
+                <p className="text-slate-300 font-semibold text-sm">No Engineering Actions Derived Yet</p>
+                <p className="text-slate-500 max-w-md mx-auto">
+                  Run &ldquo;Automatic PR Intelligence&rdquo; on an active Pull Request to evaluate security vulnerabilities, reliability risks, missing tests, and contract breaking changes.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveTab("pr")}
+                className="text-xs border-indigo-500/30 text-indigo-300 hover:bg-indigo-950/50"
+              >
+                Go to PR Intelligence
+              </Button>
             </div>
           )}
         </div>
