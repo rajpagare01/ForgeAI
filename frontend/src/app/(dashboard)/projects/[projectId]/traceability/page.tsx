@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useTenant } from "@/lib/tenant-context";
 import { apiClient } from "@/lib/api-client";
 import {
   ProjectTraceabilityResponse,
@@ -32,6 +33,7 @@ import {
 function TraceabilityMatrixContent() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "";
+  const { currentOrg, isLoading: isTenantLoading } = useTenant();
 
   const [traceData, setTraceData] = useState<ProjectTraceabilityResponse | null>(null);
   const [snapshots, setSnapshots] = useState<TraceabilitySnapshot[]>([]);
@@ -46,7 +48,7 @@ function TraceabilityMatrixContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId || isTenantLoading || !currentOrg?.id) return;
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -59,26 +61,48 @@ function TraceabilityMatrixContent() {
       if (traceResp.status === "fulfilled") {
         setTraceData(traceResp.value);
       } else {
+        setTraceData(null);
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to load project traceability", {
+            projectId,
+            orgId: currentOrg?.id,
+            error: traceResp.reason,
+          });
+        }
         setErrorMessage("Failed to load traceability data. The project might not exist or the service is unreachable.");
       }
 
       if (snapResp.status === "fulfilled" && Array.isArray(snapResp.value)) {
         setSnapshots(snapResp.value);
+      } else {
+        setSnapshots([]);
       }
 
       if (repoResp.status === "fulfilled" && Array.isArray(repoResp.value)) {
         setRepositories(repoResp.value);
+      } else {
+        setRepositories([]);
       }
     } catch (err: any) {
+      setTraceData(null);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("An error occurred while loading traceability", {
+          projectId,
+          orgId: currentOrg?.id,
+          error: err,
+        });
+      }
       setErrorMessage(err.message || "An error occurred while loading traceability.");
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, currentOrg?.id, isTenantLoading]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (projectId && !isTenantLoading && currentOrg?.id) {
+      loadData();
+    }
+  }, [loadData, projectId, isTenantLoading, currentOrg?.id]);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -171,7 +195,7 @@ function TraceabilityMatrixContent() {
             variant="outline"
             size="sm"
             onClick={handleSync}
-            disabled={isSyncing}
+            disabled={isSyncing || isLoading || isTenantLoading}
             className="gap-1.5 text-xs"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
@@ -182,6 +206,7 @@ function TraceabilityMatrixContent() {
             variant="outline"
             size="sm"
             onClick={() => setShowSnapshotDialog(true)}
+            disabled={isLoading || isTenantLoading}
             className="gap-1.5 text-xs"
           >
             <Camera className="h-3.5 w-3.5" />
@@ -192,7 +217,7 @@ function TraceabilityMatrixContent() {
             variant="glow"
             size="sm"
             onClick={handleExportAudit}
-            disabled={!traceData}
+            disabled={!traceData || isLoading || isTenantLoading}
             className="gap-1.5 text-xs"
           >
             <Download className="h-3.5 w-3.5" />
@@ -201,7 +226,7 @@ function TraceabilityMatrixContent() {
         </div>
       </div>
 
-      {errorMessage && (
+      {errorMessage && !isTenantLoading && (
         <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-center gap-3">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{errorMessage}</span>
@@ -388,185 +413,206 @@ function TraceabilityMatrixContent() {
       {activeTab === "spine" && (
         <TraceabilitySpineFlow
           chains={traceData?.chains || []}
-          isLoading={isLoading}
+          isLoading={isLoading || isTenantLoading}
           onSync={handleSync}
         />
       )}
 
       {/* Tab 2: Gap Inspector */}
       {activeTab === "gaps" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <div className="text-xs text-slate-400">
-              Showing {filteredGaps.length} of {gaps.length} detected governance gaps across the delivery spine.
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400">Filter Severity:</span>
-              {(["ALL", "HIGH", "MEDIUM", "LOW"] as const).map((sev) => (
-                <button
-                  key={sev}
-                  onClick={() => setGapFilter(sev)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                    gapFilter === sev
-                      ? "bg-indigo-600 text-white"
-                      : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
-                  }`}
-                >
-                  {sev}
-                </button>
-              ))}
-            </div>
+        (isLoading || isTenantLoading) ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
+            <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
+            <div className="text-sm font-semibold text-white">Auditing Governance Gaps...</div>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <div className="text-xs text-slate-400">
+                Showing {filteredGaps.length} of {gaps.length} detected governance gaps across the delivery spine.
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Filter Severity:</span>
+                {(["ALL", "HIGH", "MEDIUM", "LOW"] as const).map((sev) => (
+                  <button
+                    key={sev}
+                    onClick={() => setGapFilter(sev)}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                      gapFilter === sev
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {sev}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          {filteredGaps.length === 0 ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-12 text-center space-y-2">
-              <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
-              <h3 className="text-sm font-semibold text-white">Zero Governance Gaps Detected</h3>
-              <p className="text-xs text-slate-400">All requirements, tasks, PRs, and verification suites satisfy integrity invariants.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredGaps.map((gap, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-bold text-indigo-400">
-                      {gap.gapType}
-                    </span>
-                    <Badge
-                      variant={
-                        gap.severity === "HIGH" || gap.severity === "CRITICAL"
-                          ? "destructive"
-                          : gap.severity === "MEDIUM"
-                          ? "warning"
-                          : "secondary"
-                      }
-                    >
-                      {gap.severity}
-                    </Badge>
+            {filteredGaps.length === 0 ? (
+              <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-12 text-center space-y-2">
+                <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
+                <h3 className="text-sm font-semibold text-white">Zero Governance Gaps Detected</h3>
+                <p className="text-xs text-slate-400">All requirements, tasks, PRs, and verification suites satisfy integrity invariants.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredGaps.map((gap, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs font-bold text-indigo-400">
+                        {gap.gapType}
+                      </span>
+                      <Badge
+                        variant={
+                          gap.severity === "HIGH" || gap.severity === "CRITICAL"
+                            ? "destructive"
+                            : gap.severity === "MEDIUM"
+                            ? "warning"
+                            : "secondary"
+                        }
+                      >
+                        {gap.severity}
+                      </Badge>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-white">{gap.artifactName}</div>
+                      <div className="text-xs text-slate-400 mt-1">{gap.evidence}</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-amber-300/90 flex items-start gap-2">
+                      <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>{gap.recommendation}</span>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-xs font-semibold text-white">{gap.artifactName}</div>
-                    <div className="text-xs text-slate-400 mt-1">{gap.evidence}</div>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-amber-300/90 flex items-start gap-2">
-                    <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span>{gap.recommendation}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
       )}
 
       {/* Tab 3: Historical Snapshots */}
       {activeTab === "snapshots" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Immutable Governance Snapshots</h3>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSnapshotDialog(true)}
-              className="gap-1.5 text-xs"
-            >
-              <Camera className="h-3.5 w-3.5" />
-              New Snapshot
-            </Button>
+        (isLoading || isTenantLoading) ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
+            <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
+            <div className="text-sm font-semibold text-white">Loading Governance Snapshots...</div>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Immutable Governance Snapshots</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSnapshotDialog(true)}
+                className="gap-1.5 text-xs"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                New Snapshot
+              </Button>
+            </div>
 
-          {snapshots.length === 0 ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-12 text-center space-y-2">
-              <Clock className="h-8 w-8 text-slate-500 mx-auto" />
-              <h3 className="text-sm font-semibold text-white">No Snapshots Created Yet</h3>
-              <p className="text-xs text-slate-400">Save snapshots at major milestones or PR merges for immutable compliance records.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {snapshots.map((snap) => (
-                <div
-                  key={snap.id}
-                  className="flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-900/40"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">{snap.snapshotName}</span>
-                      {snap.prNumber && (
-                        <Badge variant="outline" className="font-mono text-[10px]">
-                          PR #{snap.prNumber}
-                        </Badge>
-                      )}
-                      {snap.commitSha && (
-                        <Badge variant="outline" className="font-mono text-[10px]">
-                          {snap.commitSha.substring(0, 7)}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Captured on {new Date(snap.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      try {
-                        const parsed = JSON.parse(snap.snapshotData);
-                        setTraceData(parsed);
-                        setActiveTab("spine");
-                      } catch {
-                        alert("Failed to parse snapshot data.");
-                      }
-                    }}
-                    className="text-xs"
+            {snapshots.length === 0 ? (
+              <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-12 text-center space-y-2">
+                <Clock className="h-8 w-8 text-slate-500 mx-auto" />
+                <h3 className="text-sm font-semibold text-white">No Snapshots Created Yet</h3>
+                <p className="text-xs text-slate-400">Save snapshots at major milestones or PR merges for immutable compliance records.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {snapshots.map((snap) => (
+                  <div
+                    key={snap.id}
+                    className="flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-900/40"
                   >
-                    View Snapshot
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white">{snap.snapshotName}</span>
+                        {snap.prNumber && (
+                          <Badge variant="outline" className="font-mono text-[10px]">
+                            PR #{snap.prNumber}
+                          </Badge>
+                        )}
+                        {snap.commitSha && (
+                          <Badge variant="outline" className="font-mono text-[10px]">
+                            {snap.commitSha.substring(0, 7)}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Captured on {new Date(snap.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        try {
+                          const parsed = JSON.parse(snap.snapshotData);
+                          setTraceData(parsed);
+                          setActiveTab("spine");
+                        } catch {
+                          alert("Failed to parse snapshot data.");
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      View Snapshot
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
       )}
 
       {/* Tab 4: Connected Repositories */}
       {activeTab === "repositories" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Project Connected Repositories</h3>
-            <Link href="/repositories">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                <PlusCircle className="h-3.5 w-3.5" />
-                Manage Source Control
-              </Button>
-            </Link>
+        (isLoading || isTenantLoading) ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
+            <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
+            <div className="text-sm font-semibold text-white">Loading Connected Repositories...</div>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Project Connected Repositories</h3>
+              <Link href="/repositories">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  Manage Source Control
+                </Button>
+              </Link>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(traceData?.repositories || repositories).map((repo: any) => (
-              <div
-                key={repo.id || repo.repositoryId}
-                className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <GitBranch className="h-4 w-4 text-sky-400" />
-                    <span className="font-semibold text-sm text-white">
-                      {repo.repositoryName || repo.name || "rajpagare01/ForgeAI"}
-                    </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(traceData?.repositories || repositories).map((repo: any) => (
+                <div
+                  key={repo.id || repo.repositoryId}
+                  className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <GitBranch className="h-4 w-4 text-sky-400" />
+                      <span className="font-semibold text-sm text-white">
+                        {repo.repositoryName || repo.name || "rajpagare01/ForgeAI"}
+                      </span>
+                    </div>
+                    <Badge variant="success">SYNCED</Badge>
                   </div>
-                  <Badge variant="success">SYNCED</Badge>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    Repository ID: {repo.repositoryId || repo.id}
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-500 font-mono">
-                  Repository ID: {repo.repositoryId || repo.id}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )
       )}
     </div>
   );

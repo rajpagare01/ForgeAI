@@ -80,7 +80,7 @@ class ApiClient {
 
   public getActiveOrgId(): string | null {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem("forgeai_org_id") || "org-forgeai-core";
+    return localStorage.getItem("forgeai_org_id") || null;
   }
 
   public setActiveOrgId(orgId: string): void {
@@ -172,8 +172,11 @@ class ApiClient {
 
     // 2. Multi-Tenant Scoping Header
     const orgId = options.orgId || this.getActiveOrgId();
-    if (orgId && !headers.has("X-Org-Id")) {
-      headers.set("X-Org-Id", orgId);
+    const isValidUuid =
+      typeof orgId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId);
+    if (isValidUuid && !headers.has("X-Org-Id")) {
+      headers.set("X-Org-Id", orgId as string);
     }
 
     // 3. JWT Bearer Token Injection

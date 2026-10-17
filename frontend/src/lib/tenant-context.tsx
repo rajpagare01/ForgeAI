@@ -15,7 +15,7 @@ interface TenantContextType {
 }
 
 const FALLBACK_DEFAULT_ORG: Organization = {
-  id: "00000000-0000-0000-0000-000000000001",
+  id: "cc28c8a3-2224-4bad-9ab2-ea36ede52577",
   name: "ForgeAI Core Engineering",
   slug: "forgeai-core",
   role: "ADMIN",

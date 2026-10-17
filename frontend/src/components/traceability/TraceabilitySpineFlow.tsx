@@ -65,13 +65,13 @@ function convertChainToNode(chain: TraceabilitySpineChain): TraceabilityNode {
 
   return {
     requirement: {
-      key: req.identifier,
+      key: req.identifier || (req as any)?.key || (req as any)?.id || "REQ",
       title: req.title,
       status: (req.status === "VERIFIED" || req.status === "COMPLETED" ? "VERIFIED" : req.status === "ACTIVE" ? "ACTIVE" : "DRAFT") as any,
     },
     task: {
       id: task?.id,
-      key: task?.taskKey || "NO TASK",
+      key: task?.taskKey || (task as any)?.key || "NO TASK",
       title: task?.title || "No assigned task",
       status: task?.status || "TODO",
       priority: task?.priority || "MEDIUM",
