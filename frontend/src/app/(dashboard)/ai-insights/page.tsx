@@ -790,7 +790,7 @@ export default function AiInsightsPage() {
 
   useEffect(() => {
     fetchRepositories();
-  }, [currentOrg.id, fetchRepositories]);
+  }, [currentOrg?.id, fetchRepositories]);
 
   // Fetch repository sync status
   const fetchSyncStatus = useCallback(async () => {
@@ -2355,23 +2355,38 @@ export default function AiInsightsPage() {
                         <FileCode className="h-4 w-4 text-indigo-400" />
                         Directly Changed Components
                       </div>
-                      {prAnalysisResult.changed_components && prAnalysisResult.changed_components.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-                          {prAnalysisResult.changed_components.map((comp, idx) => (
-                            <div
-                              key={idx}
-                              className="px-2 py-1 rounded border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-300 flex items-center gap-1.5"
-                            >
-                              <Badge variant="outline" className="text-[9px] font-mono text-indigo-400 px-1 py-0">
-                                {comp.type}
-                              </Badge>
-                              <span className="truncate max-w-xs">{comp.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-slate-500 italic">No specific symbols identified</div>
-                      )}
+                      {(() => {
+                        const raw = prAnalysisResult.changed_components;
+                        let items: { type: string; name: string }[] = [];
+                        if (Array.isArray(raw)) {
+                          items = raw;
+                        } else if (raw && typeof raw === "object") {
+                          const symbols = Array.isArray((raw as any).symbols) ? (raw as any).symbols : [];
+                          const files = Array.isArray((raw as any).files) ? (raw as any).files : [];
+                          items = [
+                            ...symbols.map((s: string) => ({ type: "SYMBOL", name: s })),
+                            ...files.map((f: string) => ({ type: "FILE", name: f })),
+                          ];
+                        }
+                        if (items.length === 0) {
+                          return <div className="text-xs text-slate-500 italic">No specific symbols identified</div>;
+                        }
+                        return (
+                          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                            {items.map((comp, idx) => (
+                              <div
+                                key={idx}
+                                className="px-2 py-1 rounded border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-300 flex items-center gap-1.5"
+                              >
+                                <Badge variant="outline" className="text-[9px] font-mono text-indigo-400 px-1 py-0">
+                                  {comp.type}
+                                </Badge>
+                                <span className="truncate max-w-xs">{comp.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Affected Modules */}
@@ -2387,7 +2402,7 @@ export default function AiInsightsPage() {
                           </Badge>
                         )}
                       </div>
-                      {prAnalysisResult.affected_modules && prAnalysisResult.affected_modules.length > 0 ? (
+                      {Array.isArray(prAnalysisResult.affected_modules) && prAnalysisResult.affected_modules.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {prAnalysisResult.affected_modules.map((mod, idx) => (
                             <Badge
@@ -2415,10 +2430,10 @@ export default function AiInsightsPage() {
                           Direct Blast Radius (Depth 1)
                         </span>
                         <Badge variant="outline" className="text-[10px] font-mono">
-                          {prAnalysisResult.direct_impact?.length || 0} callers
+                          {Array.isArray(prAnalysisResult.direct_impact) ? prAnalysisResult.direct_impact.length : 0} callers
                         </Badge>
                       </div>
-                      {prAnalysisResult.direct_impact && prAnalysisResult.direct_impact.length > 0 ? (
+                      {Array.isArray(prAnalysisResult.direct_impact) && prAnalysisResult.direct_impact.length > 0 ? (
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
                           {prAnalysisResult.direct_impact.map((item, idx) => (
                             <div
@@ -2447,10 +2462,10 @@ export default function AiInsightsPage() {
                           Transitive Blast Radius (Depth 2-3)
                         </span>
                         <Badge variant="outline" className="text-[10px] font-mono">
-                          {prAnalysisResult.transitive_impact?.length || 0} callers
+                          {Array.isArray(prAnalysisResult.transitive_impact) ? prAnalysisResult.transitive_impact.length : 0} callers
                         </Badge>
                       </div>
-                      {prAnalysisResult.transitive_impact && prAnalysisResult.transitive_impact.length > 0 ? (
+                      {Array.isArray(prAnalysisResult.transitive_impact) && prAnalysisResult.transitive_impact.length > 0 ? (
                         <div className="space-y-1.5 max-h-48 overflow-y-auto">
                           {prAnalysisResult.transitive_impact.map((item, idx) => (
                             <div
