@@ -206,11 +206,13 @@ export interface GitHubHealth {
   appId?: number | null;
   privateKeyPresent?: boolean;
   webhookSecretPresent?: boolean;
-  status: "CONFIGURED" | "UNCONFIGURED";
+  status: "CONFIGURED" | "UNCONFIGURED" | "UNREACHABLE";
   totalInstallations?: number;
   activeInstallations?: number;
   quarantinedInstallations?: number;
   quarantineWarning?: string;
+  httpStatus?: number;
+  message?: string;
 }
 
 export interface GitHubInstallation {

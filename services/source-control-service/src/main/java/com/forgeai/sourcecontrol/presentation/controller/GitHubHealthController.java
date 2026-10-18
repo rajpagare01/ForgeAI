@@ -4,6 +4,7 @@ import com.forgeai.sourcecontrol.domain.model.GitHubInstallation;
 import com.forgeai.sourcecontrol.domain.repository.GitHubInstallationRepository;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubAppConfig;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,6 +24,7 @@ import java.util.Map;
  *   <li>Includes quarantine count so operators can see unmapped installations awaiting claim.</li>
  * </ul>
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/github/health")
 @RequiredArgsConstructor
@@ -51,22 +53,31 @@ public class GitHubHealthController {
         }
 
         // Installation state (no auth required for diagnostic info)
-        List<GitHubInstallation> all = installationRepository.findAll();
-        long quarantined = all.stream()
-                .filter(i -> QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
-                .count();
-        long active = all.stream()
-                .filter(i -> !QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
-                .count();
+        try {
+            List<GitHubInstallation> all = installationRepository.findAll();
+            long quarantined = all.stream()
+                    .filter(i -> QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
+                    .count();
+            long active = all.stream()
+                    .filter(i -> !QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
+                    .count();
 
-        report.put("status", "CONFIGURED");
-        report.put("totalInstallations", all.size());
-        report.put("activeInstallations", active);
-        report.put("quarantinedInstallations", quarantined);
+            report.put("status", "CONFIGURED");
+            report.put("totalInstallations", all.size());
+            report.put("activeInstallations", active);
+            report.put("quarantinedInstallations", quarantined);
 
-        if (quarantined > 0) {
-            report.put("quarantineWarning",
-                    quarantined + " GitHub installation(s) are quarantined and awaiting org claim via POST /api/v1/installations/claim");
+            if (quarantined > 0) {
+                report.put("quarantineWarning",
+                        quarantined + " GitHub installation(s) are quarantined and awaiting org claim via POST /api/v1/installations/claim");
+            }
+        } catch (Exception e) {
+            log.warn("[GitHubHealth] Error querying installations from repository: {}", e.getMessage());
+            report.put("status", "CONFIGURED");
+            report.put("totalInstallations", 0);
+            report.put("activeInstallations", 0);
+            report.put("quarantinedInstallations", 0);
+            report.put("databaseWarning", "GitHub App credentials configured, but installation state query failed: " + e.getMessage());
         }
 
         return ResponseEntity.ok(report);

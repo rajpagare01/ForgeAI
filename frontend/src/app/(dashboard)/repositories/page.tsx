@@ -47,7 +47,7 @@ import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 
 export default function RepositoriesPage() {
-  const { currentOrg } = useTenant();
+  const { currentOrg, isLoading: isTenantLoading } = useTenant();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [githubHealth, setGithubHealth] = useState<GitHubHealth | null>(null);
   const [currentInstallation, setCurrentInstallation] = useState<GitHubInstallation | null>(null);
@@ -67,6 +67,7 @@ export default function RepositoriesPage() {
   const [isClaiming, setIsClaiming] = useState(false);
 
   const fetchData = useCallback(async () => {
+    if (isTenantLoading || !currentOrg?.id) return;
     setIsLoading(true);
     setError(null);
 
@@ -76,7 +77,12 @@ export default function RepositoriesPage() {
       setGithubHealth(health);
     } catch (e: any) {
       console.warn("Could not fetch GitHub health endpoint:", e);
-      setGithubHealth({ configured: false, status: "UNCONFIGURED" });
+      setGithubHealth({
+        configured: false,
+        status: "UNREACHABLE",
+        httpStatus: e?.status || undefined,
+        message: e?.message || "GitHub health endpoint unreachable",
+      });
     }
 
     // 2. Fetch current claimed installation for this organization
@@ -104,18 +110,38 @@ export default function RepositoriesPage() {
           lastSyncAt: r.updatedAt || r.createdAt || new Date().toISOString(),
         }));
         setRepositories(mapped);
+      } else {
+        setRepositories([]);
       }
     } catch (err: any) {
       console.warn("Failed to load repositories from Gateway:", err);
-      setError("Could not load repositories for the active organization.");
+      const status = err?.status;
+      let userFriendlyError = "Could not load repositories for the active organization.";
+
+      if (status === 401 || status === 403) {
+        userFriendlyError = `Authorization error (HTTP ${status}): Access denied to repositories for this organization.`;
+      } else if (status === 404) {
+        userFriendlyError = "Scope error (HTTP 404): Organization or repository scope not found.";
+      } else if (status === 503) {
+        userFriendlyError = "Service unavailable (HTTP 503): GitHub integration service is temporarily unavailable.";
+      } else if (err?.isNetworkError || !status) {
+        userFriendlyError = "Service unreachable: Unable to connect to Gateway or Source Control service.";
+      } else {
+        userFriendlyError = `Error loading repositories (HTTP ${status}): ${err.message || "Unexpected failure"}`;
+      }
+
+      setError(userFriendlyError);
+      setRepositories([]);
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg.id]);
+  }, [currentOrg.id, isTenantLoading]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!isTenantLoading && currentOrg?.id) {
+      fetchData();
+    }
+  }, [fetchData, isTenantLoading, currentOrg.id]);
 
   // Fetch available repos when connect modal is opened and installation exists
   const handleOpenConnectModal = async () => {
@@ -234,7 +260,7 @@ export default function RepositoriesPage() {
             Sync Now
           </Button>
 
-          {githubHealth?.configured && currentInstallation?.status === "ACTIVE" ? (
+          {githubHealth?.status === "CONFIGURED" && currentInstallation?.status === "ACTIVE" ? (
             <Button
               variant="glow"
               size="sm"
@@ -244,7 +270,7 @@ export default function RepositoriesPage() {
               <Plus className="h-4 w-4" />
               Connect GitHub Repo
             </Button>
-          ) : githubHealth?.configured ? (
+          ) : githubHealth?.status === "CONFIGURED" ? (
             <Button
               variant="glow"
               size="sm"
@@ -253,6 +279,16 @@ export default function RepositoriesPage() {
             >
               <KeyRound className="h-4 w-4" />
               Claim GitHub Installation
+            </Button>
+          ) : githubHealth?.status === "UNREACHABLE" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              className="gap-2 text-rose-400 border-rose-500/30 hover:bg-rose-950/20"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Retry Connection
             </Button>
           ) : (
             <Button
@@ -284,7 +320,31 @@ export default function RepositoriesPage() {
       )}
 
       {/* GitHub App Status / Diagnostic Banner */}
-      {!githubHealth?.configured ? (
+      {githubHealth?.status === "UNREACHABLE" ? (
+        <Card className="border-rose-500/30 bg-rose-950/20">
+          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
+            <div className="flex items-start md:items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <ServerOff className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-white">GitHub Integration Unreachable</h4>
+                  <Badge variant="destructive" className="text-[10px]">Unreachable</Badge>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                  Could not reach the GitHub health diagnostic endpoint. The API Gateway or Source Control service may be restarting or unreachable.
+                </p>
+              </div>
+            </div>
+            <div className="text-xs font-mono text-slate-400 shrink-0">
+              <span className="text-rose-400 font-medium">
+                {githubHealth.httpStatus ? `Status: ${githubHealth.httpStatus} Service Error` : "Status: Service Offline"}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : githubHealth?.status === "UNCONFIGURED" ? (
         <Card className="border-amber-500/30 bg-amber-950/20">
           <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
             <div className="flex items-start md:items-center gap-3">
@@ -305,7 +365,9 @@ export default function RepositoriesPage() {
               </div>
             </div>
             <div className="text-xs font-mono text-slate-400 shrink-0">
-              <span className="text-amber-400 font-medium">Status: 503 Disabled</span>
+              <span className="text-amber-400 font-medium">
+                {githubHealth.httpStatus ? `Status: ${githubHealth.httpStatus}` : "Status: Credentials Missing"}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -319,12 +381,12 @@ export default function RepositoriesPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h4 className="text-sm font-semibold text-white">GitHub App Configured — Installation Required</h4>
-                  <Badge variant="outline" className="text-[10px] text-sky-300 border-sky-500/40">App ID: {githubHealth.appId}</Badge>
+                  <Badge variant="outline" className="text-[10px] text-sky-300 border-sky-500/40">App ID: {githubHealth?.appId}</Badge>
                 </div>
                 <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
                   The ForgeAI GitHub App is configured on the server, but no GitHub installation has been claimed for this organization yet.
                   Install the GitHub App on your GitHub organization, then claim the installation ID here.
-                  {githubHealth.quarantinedInstallations && githubHealth.quarantinedInstallations > 0 ? (
+                  {githubHealth?.quarantinedInstallations && githubHealth.quarantinedInstallations > 0 ? (
                     <span className="block mt-1 text-sky-400 font-semibold">
                       Notice: {githubHealth.quarantinedInstallations} unmapped GitHub installation(s) received and held in quarantine awaiting owner claim.
                     </span>
@@ -382,21 +444,41 @@ export default function RepositoriesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center p-12 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin text-sky-400 mb-2" />
-              <p className="text-xs">Loading repositories from Gateway...</p>
+          {isLoading || isTenantLoading ? (
+            <div className="flex flex-col items-center justify-center p-12 text-slate-400 space-y-3">
+              <Loader2 className="h-8 w-8 animate-spin text-sky-400" />
+              <p className="text-xs font-medium text-white">Loading repositories from Gateway...</p>
+              <p className="text-xs text-slate-500">Querying active organization context for {currentOrg.name}...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center text-slate-400 space-y-3">
+              <div className="p-3 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                <AlertCircle className="h-8 w-8" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white">Failed to Load Repositories</p>
+                <p className="text-xs text-rose-300/90 max-w-md mx-auto">{error}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchData}
+                className="gap-2 text-xs mt-2"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry
+              </Button>
             </div>
           ) : repositories.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center text-slate-400">
               <Radio className="h-10 w-10 text-slate-600 mb-3" />
               <p className="text-xs font-medium text-white">No repositories connected yet</p>
               <p className="text-xs text-slate-500 max-w-xs mt-1 mb-4">
-                {githubHealth?.configured && currentInstallation
+                {githubHealth?.status === "CONFIGURED" && currentInstallation
                   ? "Connect an authoritative repository from your GitHub App installation to track PRs and commit traceability."
                   : "Configure your GitHub App and claim an installation to begin tracking repositories."}
               </p>
-              {githubHealth?.configured && currentInstallation ? (
+              {githubHealth?.status === "CONFIGURED" && currentInstallation ? (
                 <Button variant="glow" size="sm" onClick={handleOpenConnectModal}>
                   Connect Repository
                 </Button>

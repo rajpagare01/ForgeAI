@@ -108,6 +108,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
+    init: true
     restart: unless-stopped
     networks:
       - forgeai-network
@@ -129,9 +130,9 @@ services:
       SERVER_PORT: 8082
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-xahS7wsvcFI8NbuyGnYt3WEQRfjCmVKqMA6pe214OJDB5XLk}
-      GITHUB_APP_ID: ${GITHUB_APP_ID:-5311634}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       GITHUB_PRIVATE_KEY_PATH: ${GITHUB_PRIVATE_KEY_PATH:-/app/secrets/github-app-private-key.pem}
     volumes:
       - ./secrets:/app/secrets:ro

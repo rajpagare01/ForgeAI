@@ -190,8 +190,11 @@ class ApiClient {
     let response: Response;
     try {
       response = await fetch(url, { ...options, headers });
-    } catch (networkError) {
+    } catch (networkError: any) {
       console.warn(`Gateway fetch failed for ${url}:`, networkError);
+      if (networkError) {
+        networkError.isNetworkError = true;
+      }
       throw networkError;
     }
 
@@ -230,13 +233,18 @@ class ApiClient {
 
     if (!response.ok) {
       let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
+      let errorData: any = null;
       try {
-        const errorJson = await response.json();
-        errorMessage = errorJson.message || errorJson.error || errorMessage;
+        errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
       } catch {
         // fallback to statusText
       }
-      throw new Error(errorMessage);
+      const apiError: any = new Error(errorMessage);
+      apiError.status = response.status;
+      apiError.statusText = response.statusText;
+      apiError.data = errorData;
+      throw apiError;
     }
 
     // Check for empty body / 204
