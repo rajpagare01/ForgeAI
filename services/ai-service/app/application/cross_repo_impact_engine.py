@@ -301,7 +301,17 @@ class CrossRepositoryImpactEngine:
             pr_number, direct_count, distributed_score, combined_score, combined_level,
         )
 
+        local_level = "LOW"
+        if local_risk_score >= 75.0:
+            local_level = "CRITICAL"
+        elif local_risk_score >= 50.0:
+            local_level = "HIGH"
+        elif local_risk_score >= 25.0:
+            local_level = "MEDIUM"
+
         return DistributedRiskAssessment(
+            local_risk_score=local_risk_score,
+            local_risk_level=local_level,
             distributed_risk_score=distributed_score,
             distributed_risk_level=distributed_level,
             combined_risk_score=combined_score,

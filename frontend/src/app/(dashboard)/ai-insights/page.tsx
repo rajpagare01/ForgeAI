@@ -1704,7 +1704,9 @@ export default function AiInsightsPage() {
                                     : "text-rose-400"
                                 }`}
                               >
-                                {prAnalysisResult.merge_readiness.readiness_score.toFixed(1)}
+                                {typeof prAnalysisResult.merge_readiness.readiness_score === "number"
+                                  ? prAnalysisResult.merge_readiness.readiness_score.toFixed(1)
+                                  : "0.0"}
                               </span>
                               <span className="text-[10px] font-mono text-slate-500">/ 100.0</span>
                             </div>
@@ -1868,7 +1870,7 @@ export default function AiInsightsPage() {
                               <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
                                 <div className="text-[10px] uppercase text-slate-500">Deterministic Risk</div>
                                 <div className="text-purple-300 font-bold mt-0.5">
-                                  {prAnalysisResult.merge_readiness.evidence_summary.deterministic_risk_score.toFixed(1)} / 100
+                                  {(prAnalysisResult.merge_readiness?.evidence_summary?.deterministic_risk_score ?? 0).toFixed(1)} / 100
                                 </div>
                               </div>
                             </div>
@@ -1901,16 +1903,16 @@ export default function AiInsightsPage() {
                             <span className="text-xs uppercase text-slate-400">Final Risk:</span>
                             <span
                               className={`text-xl font-extrabold ${
-                                prAnalysisResult.unified_risk.final_risk >= 75
+                                (prAnalysisResult.unified_risk.final_risk ?? 0) >= 75
                                   ? "text-rose-400"
-                                  : prAnalysisResult.unified_risk.final_risk >= 50
+                                  : (prAnalysisResult.unified_risk.final_risk ?? 0) >= 50
                                   ? "text-amber-400"
-                                  : prAnalysisResult.unified_risk.final_risk >= 25
+                                  : (prAnalysisResult.unified_risk.final_risk ?? 0) >= 25
                                   ? "text-yellow-400"
                                   : "text-emerald-400"
                               }`}
                             >
-                              {prAnalysisResult.unified_risk.final_risk.toFixed(1)}
+                              {(prAnalysisResult.unified_risk.final_risk ?? 0).toFixed(1)}
                             </span>
                             <span className="text-[10px] text-slate-500">/ 100.0</span>
                           </div>
@@ -1938,17 +1940,17 @@ export default function AiInsightsPage() {
                           <div className="flex items-center justify-between text-[11px] font-mono">
                             <span className="text-slate-400">Local Impact (35%)</span>
                             <span className="text-slate-200 font-bold">
-                              {prAnalysisResult.unified_risk.local_risk.toFixed(1)}
+                              {(prAnalysisResult.unified_risk.local_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
                           <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                             <div
                               className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.local_risk)}%` }}
+                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.local_risk ?? 0)}%` }}
                             />
                           </div>
                           <div className="text-[10px] font-mono text-slate-500">
-                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.local ?? (prAnalysisResult.unified_risk.local_risk * 0.35)).toFixed(1)} pts
+                            Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.local ?? ((prAnalysisResult.unified_risk.local_risk ?? 0) * 0.35)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
 
@@ -1957,17 +1959,17 @@ export default function AiInsightsPage() {
                           <div className="flex items-center justify-between text-[11px] font-mono">
                             <span className="text-slate-400">Distributed (15%)</span>
                             <span className="text-slate-200 font-bold">
-                              {prAnalysisResult.unified_risk.distributed_risk.toFixed(1)}
+                              {(prAnalysisResult.unified_risk.distributed_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
                           <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                             <div
                               className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.distributed_risk * 2)}%` }}
+                              style={{ width: `${Math.min(100, (prAnalysisResult.unified_risk.distributed_risk ?? 0) * 2)}%` }}
                             />
                           </div>
                           <div className="text-[10px] font-mono text-slate-500">
-                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.distributed ?? (prAnalysisResult.unified_risk.distributed_risk * 0.15)).toFixed(1)} pts
+                            Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.distributed ?? ((prAnalysisResult.unified_risk.distributed_risk ?? 0) * 0.15)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
 
@@ -1976,17 +1978,17 @@ export default function AiInsightsPage() {
                           <div className="flex items-center justify-between text-[11px] font-mono">
                             <span className="text-slate-400">Security (35%)</span>
                             <span className="text-slate-200 font-bold">
-                              {prAnalysisResult.unified_risk.security_risk.toFixed(1)}
+                              {(prAnalysisResult.unified_risk.security_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
                           <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                             <div
                               className="bg-rose-500 h-1.5 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.security_risk)}%` }}
+                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.security_risk ?? 0)}%` }}
                             />
                           </div>
                           <div className="text-[10px] font-mono text-slate-500">
-                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.security ?? (prAnalysisResult.unified_risk.security_risk * 0.35)).toFixed(1)} pts
+                            Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.security ?? ((prAnalysisResult.unified_risk.security_risk ?? 0) * 0.35)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
 
@@ -1995,17 +1997,17 @@ export default function AiInsightsPage() {
                           <div className="flex items-center justify-between text-[11px] font-mono">
                             <span className="text-slate-400">Reliability (15%)</span>
                             <span className="text-slate-200 font-bold">
-                              {prAnalysisResult.unified_risk.reliability_risk.toFixed(1)}
+                              {(prAnalysisResult.unified_risk.reliability_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
                           <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                             <div
                               className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.reliability_risk)}%` }}
+                              style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.reliability_risk ?? 0)}%` }}
                             />
                           </div>
                           <div className="text-[10px] font-mono text-slate-500">
-                            Contrib: +{(prAnalysisResult.unified_risk.dimension_contributions?.reliability ?? (prAnalysisResult.unified_risk.reliability_risk * 0.15)).toFixed(1)} pts
+                            Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.reliability ?? ((prAnalysisResult.unified_risk.reliability_risk ?? 0) * 0.15)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
                       </div>
@@ -2206,7 +2208,7 @@ export default function AiInsightsPage() {
 
                           {/* Risk Score Pill */}
                           <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                            Risk: {prAnalysisResult.reliability_assessment.reliability_risk_score.toFixed(1)} / 100
+                            Risk: {(prAnalysisResult.reliability_assessment?.reliability_risk_score ?? 0).toFixed(1)} / 100
                           </div>
                         </div>
                       </div>
@@ -2316,7 +2318,7 @@ export default function AiInsightsPage() {
                           Deterministic Risk Factors Breakdown
                         </span>
                         <span className="text-[11px] font-mono text-slate-400">
-                          Score: {prAnalysisResult.risk_score.toFixed(1)} / 100
+                          Score: {(prAnalysisResult.risk_score ?? 0).toFixed(1)} / 100
                         </span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -2537,27 +2539,27 @@ export default function AiInsightsPage() {
                         <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
                           <div className="text-[10px] uppercase text-slate-500 font-bold">Repo-Local Risk</div>
                           <div className="text-lg font-bold text-slate-200">
-                            {prAnalysisResult.impact_metadata.distributed_impact.local_risk_score.toFixed(1)} / 100
+                            {(prAnalysisResult.impact_metadata.distributed_impact.local_risk_score ?? prAnalysisResult.risk_score ?? 0).toFixed(1)} / 100
                           </div>
                           <Badge variant="outline" className="text-[9px] text-slate-400">
-                            Level: {prAnalysisResult.impact_metadata.distributed_impact.local_risk_level}
+                            Level: {prAnalysisResult.impact_metadata.distributed_impact.local_risk_level ?? "LOW"}
                           </Badge>
                         </div>
 
                         <div className="p-3 rounded-lg border border-indigo-500/30 bg-indigo-950/20 space-y-1">
                           <div className="text-[10px] uppercase text-indigo-400 font-bold">Distributed Risk (Max 50)</div>
                           <div className="text-lg font-bold text-indigo-300">
-                            {prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_score.toFixed(1)} / 50
+                            {(prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_score ?? 0).toFixed(1)} / 50
                           </div>
                           <Badge variant="outline" className="text-[9px] text-indigo-300 border-indigo-500/40">
-                            Level: {prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_level}
+                            Level: {prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_level ?? "NONE"}
                           </Badge>
                         </div>
 
                         <div className="p-3 rounded-lg border border-purple-500/30 bg-purple-950/20 space-y-1">
                           <div className="text-[10px] uppercase text-purple-400 font-bold">Combined Multi-Repo Risk</div>
                           <div className="text-lg font-bold text-purple-200">
-                            {prAnalysisResult.impact_metadata.distributed_impact.combined_risk_score.toFixed(1)} / 100
+                            {(prAnalysisResult.impact_metadata.distributed_impact.combined_risk_score ?? 0).toFixed(1)} / 100
                           </div>
                           <div className="text-[10px] text-slate-400 font-sans">
                             Formula: <span className="font-mono text-slate-300">local + 0.4 &times; distributed</span>
@@ -3163,7 +3165,7 @@ export default function AiInsightsPage() {
                                   Prediction-to-Failure Correlation
                                 </span>
                                 <div className="text-xl font-bold font-mono text-emerald-400">
-                                  {(effectiveness.prediction_to_failure_correlation * 100).toFixed(0)}%
+                                  {((effectiveness.prediction_to_failure_correlation ?? 0) * 100).toFixed(0)}%
                                 </div>
                                 <span className="text-[10px] text-slate-500">Recommended failing tests / Total failed tests</span>
                               </div>
@@ -3174,7 +3176,7 @@ export default function AiInsightsPage() {
                                   Test Selection Efficiency
                                 </span>
                                 <div className="text-xl font-bold font-mono text-indigo-400">
-                                  {(effectiveness.test_selection_efficiency * 100).toFixed(0)}%
+                                  {((effectiveness.test_selection_efficiency ?? 0) * 100).toFixed(0)}%
                                 </div>
                                 <span className="text-[10px] text-slate-500">Suite runtime reduction efficiency</span>
                               </div>
@@ -4468,14 +4470,14 @@ export default function AiInsightsPage() {
                                   Deterministic Risk Score
                                 </span>
                                 <div className="flex items-center gap-2 font-mono">
-                                  <span className="text-slate-400 line-through">{effectiveness.before_risk_score.toFixed(1)}</span>
+                                  <span className="text-slate-400 line-through">{(effectiveness.before_risk_score ?? 0).toFixed(1)}</span>
                                   <ArrowRight className="h-3 w-3 text-slate-500" />
                                   <span className="text-base font-bold text-emerald-400">
-                                    {effectiveness.after_risk_score.toFixed(1)}
+                                    {(effectiveness.after_risk_score ?? 0).toFixed(1)}
                                   </span>
                                 </div>
                                 <span className="text-[10px] text-emerald-400 font-mono">
-                                  &minus;{effectiveness.risk_delta.toFixed(1)} pts reduced
+                                  &minus;{(effectiveness.risk_delta ?? 0).toFixed(1)} pts reduced
                                 </span>
                               </div>
 

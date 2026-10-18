@@ -531,6 +531,8 @@ class DistributedRiskAssessment(BaseModel):
       35–50 → HIGH
     ======================================================================
     """
+    local_risk_score:        float = 0.0             # repo-local baseline risk (0–100)
+    local_risk_level:        str = "LOW"             # LOW, MEDIUM, HIGH, CRITICAL
     distributed_risk_score:  float = 0.0             # raw distributed score (0–50)
     distributed_risk_level:  str = "NONE"            # NONE, LOW, MEDIUM, HIGH
     combined_risk_score:     float = 0.0             # combined with local (0–100)
