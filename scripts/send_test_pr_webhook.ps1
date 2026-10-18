@@ -3,6 +3,37 @@ param (
     [string]$Secret = $env:GITHUB_WEBHOOK_SECRET
 )
 
+if ([string]::IsNullOrWhiteSpace($Secret)) {
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $envCandidates = @(
+        (Join-Path $scriptDir "..\.env"),
+        (Join-Path (Get-Location) ".env")
+    )
+    foreach ($envPath in $envCandidates) {
+        if (Test-Path $envPath) {
+            $line = Get-Content $envPath | Where-Object { $_ -match '^\s*GITHUB_WEBHOOK_SECRET\s*=\s*(.+)$' } | Select-Object -First 1
+            if ($line) {
+                $rawVal = ($line -replace '^\s*GITHUB_WEBHOOK_SECRET\s*=\s*', '').Trim('"', "'", " ")
+                if (-not [string]::IsNullOrWhiteSpace($rawVal)) {
+                    $Secret = $rawVal
+                    break
+                }
+            }
+        }
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($Secret)) {
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $appYmlPath = Join-Path $scriptDir "..\services\source-control-service\src\main\resources\application.yml"
+    if (Test-Path $appYmlPath) {
+        $ymlLine = Get-Content $appYmlPath | Where-Object { $_ -match 'webhook-secret:\s*\$\{GITHUB_WEBHOOK_SECRET:(.+)\}' } | Select-Object -First 1
+        if ($ymlLine) {
+            $Secret = ($ymlLine -replace '.*webhook-secret:\s*\$\{GITHUB_WEBHOOK_SECRET:(.+)\}.*', '$1').Trim('"', "'", " ")
+        }
+    }
+}
+
 $deliveryId = [System.Guid]::NewGuid().ToString()
 
 $payload = @"
