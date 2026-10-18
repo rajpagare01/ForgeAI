@@ -1,8 +1,30 @@
 import json
 import logging
+from datetime import date, datetime
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 import asyncpg
+
+def _json_serial(obj):
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, UUID):
+        return str(obj)
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="json")
+    if hasattr(obj, "dict"):
+        return obj.dict()
+    return str(obj)
+
+_builtin_json_dumps = json.dumps
+
+def _safe_json_dumps(obj, *args, **kwargs):
+    if "default" not in kwargs:
+        kwargs["default"] = _json_serial
+    return _builtin_json_dumps(obj, *args, **kwargs)
+
+json.dumps = _safe_json_dumps
+
 from app.domain.models import (
     CodeChunk,
     GraphEdge,
@@ -902,9 +924,9 @@ class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
                 float(evaluation.readiness_score),
                 evaluation.confidence,
                 evaluation.policy_version,
-                json.dumps(evaluation.blocking_reasons),
-                json.dumps(evaluation.warnings),
-                json.dumps(evaluation.required_actions),
+                list(evaluation.blocking_reasons or []),
+                list(evaluation.warnings or []),
+                list(evaluation.required_actions or []),
                 json.dumps(evaluation.required_checks),
                 json.dumps(evaluation.required_tests),
                 evaluation.security_status,
@@ -1176,12 +1198,19 @@ class AsyncpgSecurityAssessmentRepository(SecurityAssessmentRepository):
     async def save_assessment(
         self,
         assessment: SecurityAssessment,
-        organization_id: UUID,
-        repository_id: UUID,
-        pr_number: int,
-        commit_sha: str,
+        organization_id: Optional[UUID] = None,
+        repository_id: Optional[UUID] = None,
+        pr_number: Optional[int] = None,
+        commit_sha: Optional[str] = None,
         analysis_id: Optional[UUID] = None,
+        **kwargs,
     ) -> SecurityAssessment:
+        org_id = organization_id or kwargs.get("org_id")
+        repo_id = repository_id or kwargs.get("repo_id")
+        pr_num = pr_number if pr_number is not None else kwargs.get("pr_number")
+        c_sha = commit_sha or kwargs.get("commit_sha")
+        a_id = analysis_id or kwargs.get("analysis_id")
+
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 assessment_query = """
@@ -1195,11 +1224,11 @@ class AsyncpgSecurityAssessmentRepository(SecurityAssessmentRepository):
                 """
                 await conn.fetchval(
                     assessment_query,
-                    organization_id,
-                    repository_id,
-                    analysis_id,
-                    pr_number,
-                    commit_sha,
+                    org_id,
+                    repo_id,
+                    a_id,
+                    pr_num,
+                    c_sha,
                     assessment.security_status,
                     assessment.evidence_status,
                     assessment.security_risk_score,
@@ -1225,11 +1254,11 @@ class AsyncpgSecurityAssessmentRepository(SecurityAssessmentRepository):
                     await conn.execute(
                         finding_query,
                         f.id,
-                        organization_id,
-                        repository_id,
-                        analysis_id,
-                        pr_number,
-                        commit_sha,
+                        org_id,
+                        repo_id,
+                        a_id,
+                        pr_num,
+                        c_sha,
                         f.category,
                         f.rule_id,
                         f.severity,
@@ -1317,12 +1346,19 @@ class AsyncpgReliabilityAssessmentRepository(ReliabilityAssessmentRepository):
     async def save_assessment(
         self,
         assessment: ReliabilityAssessment,
-        organization_id: UUID,
-        repository_id: UUID,
-        pr_number: int,
-        commit_sha: str,
+        organization_id: Optional[UUID] = None,
+        repository_id: Optional[UUID] = None,
+        pr_number: Optional[int] = None,
+        commit_sha: Optional[str] = None,
         analysis_id: Optional[UUID] = None,
+        **kwargs,
     ) -> ReliabilityAssessment:
+        org_id = organization_id or kwargs.get("org_id")
+        repo_id = repository_id or kwargs.get("repo_id")
+        pr_num = pr_number if pr_number is not None else kwargs.get("pr_number")
+        c_sha = commit_sha or kwargs.get("commit_sha")
+        a_id = analysis_id or kwargs.get("analysis_id")
+
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 assessment_query = """
@@ -1336,11 +1372,11 @@ class AsyncpgReliabilityAssessmentRepository(ReliabilityAssessmentRepository):
                 """
                 await conn.fetchval(
                     assessment_query,
-                    organization_id,
-                    repository_id,
-                    analysis_id,
-                    pr_number,
-                    commit_sha,
+                    org_id,
+                    repo_id,
+                    a_id,
+                    pr_num,
+                    c_sha,
                     assessment.reliability_status,
                     assessment.evidence_status,
                     assessment.reliability_risk_score,
@@ -1366,11 +1402,11 @@ class AsyncpgReliabilityAssessmentRepository(ReliabilityAssessmentRepository):
                     await conn.execute(
                         finding_query,
                         f.id,
-                        organization_id,
-                        repository_id,
-                        analysis_id,
-                        pr_number,
-                        commit_sha,
+                        org_id,
+                        repo_id,
+                        a_id,
+                        pr_num,
+                        c_sha,
                         f.category,
                         f.rule_id,
                         f.severity,
