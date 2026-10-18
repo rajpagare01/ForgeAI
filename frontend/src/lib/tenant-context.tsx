@@ -77,6 +77,8 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } catch (err) {
       console.warn("Failed to load organizations from gateway:", err);
+      setCurrentOrgId(FALLBACK_DEFAULT_ORG.id);
+      apiClient.setActiveOrgId(FALLBACK_DEFAULT_ORG.id);
     } finally {
       setIsLoading(false);
     }

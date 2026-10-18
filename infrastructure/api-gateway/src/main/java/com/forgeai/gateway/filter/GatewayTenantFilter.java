@@ -84,6 +84,17 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                         return forwardDownstream(exchange, chain, sanitizedRequest, userId, jwtOrgId, role, permissions);
                     }
 
+                    String path = exchange.getRequest().getURI().getPath();
+                    boolean isUserScopedRoute = path.startsWith("/api/v1/organizations") ||
+                                                path.startsWith("/api/v1/users") ||
+                                                path.startsWith("/api/v1/auth") ||
+                                                path.startsWith("/.well-known") ||
+                                                path.startsWith("/actuator");
+
+                    if (isUserScopedRoute) {
+                        return forwardDownstream(exchange, chain, sanitizedRequest, userId, null, role, permissions);
+                    }
+
                     // If JWT does not have org_id claim, but client requested a specific org context:
                     if (clientOrgId != null && !clientOrgId.isBlank()) {
                         return verifyUserBelongsToOrg(userId, clientOrgId.trim(), token)
