@@ -1,6 +1,7 @@
 package com.forgeai.identity.infrastructure.adapter.out.persistence.repository;
 
 import com.forgeai.identity.infrastructure.adapter.out.persistence.entity.OutboxEventEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
     @Query(value = """
             SELECT * FROM outbox_events
             WHERE published_at IS NULL
+              AND (status IS NULL OR status IN ('PENDING', 'RETRYING'))
+              AND (next_retry_at IS NULL OR next_retry_at <= NOW())
               AND attempt_count < :maxAttempts
             ORDER BY created_at ASC
             LIMIT :batchSize
@@ -24,4 +27,12 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
             @Param("batchSize") int batchSize,
             @Param("maxAttempts") int maxAttempts
     );
+
+    List<OutboxEventEntity> findTop100ByPublishedAtIsNullOrderByCreatedAtAsc();
+
+    long countByPublishedAtIsNull();
+
+    long countByStatus(String status);
+
+    List<OutboxEventEntity> findByStatusOrderByDeadLetterAtDesc(String status, Pageable pageable);
 }

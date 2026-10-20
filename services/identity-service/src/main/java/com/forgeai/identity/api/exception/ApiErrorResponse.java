@@ -7,5 +7,11 @@ public record ApiErrorResponse(
         int status,
         String code,
         String message,
-        String path
-) {}
+        String path,
+        String traceId,
+        String correlationId
+) {
+    public ApiErrorResponse(Instant timestamp, int status, String code, String message, String path) {
+        this(timestamp, status, code, message, path, null, null);
+    }
+}

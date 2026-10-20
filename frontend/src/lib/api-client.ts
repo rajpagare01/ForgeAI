@@ -80,14 +80,7 @@ class ApiClient {
 
   public getActiveOrgId(): string | null {
     if (typeof window === "undefined") return null;
-    const stored = localStorage.getItem("forgeai_org_id");
-    // Clear legacy dummy/invalid test org ids that break tenant authorization
-    if (stored === "00000000-0000-0000-0000-000000000001" || stored === "org-forgeai-core" || !stored) {
-      const defaultOrgId = "cc28c8a3-2224-4bad-9ab2-ea36ede52577";
-      localStorage.setItem("forgeai_org_id", defaultOrgId);
-      return defaultOrgId;
-    }
-    return stored;
+    return localStorage.getItem("forgeai_org_id");
   }
 
   public setActiveOrgId(orgId: string): void {

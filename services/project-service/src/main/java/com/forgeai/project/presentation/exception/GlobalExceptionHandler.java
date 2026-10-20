@@ -86,6 +86,14 @@ public class GlobalExceptionHandler {
         body.put("error", status.getReasonPhrase());
         body.put("message", message);
         body.put("timestamp", Instant.now().toString());
+        String traceId = org.slf4j.MDC.get("traceId");
+        if (traceId != null && !traceId.isBlank()) {
+            body.put("traceId", traceId);
+        }
+        String correlationId = org.slf4j.MDC.get("correlationId");
+        if (correlationId != null && !correlationId.isBlank()) {
+            body.put("correlationId", correlationId);
+        }
         return ResponseEntity.status(status).body(body);
     }
 }

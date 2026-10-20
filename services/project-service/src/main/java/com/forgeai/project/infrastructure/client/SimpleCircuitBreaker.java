@@ -6,26 +6,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
+import java.util.function.Consumer;
 
 /**
  * SimpleCircuitBreaker
  * <p>
- * A lightweight, synchronous circuit breaker compatible with the existing java.net.http.HttpClient
- * architecture. Prevents cascading failures when a downstream service is unavailable.
- * <p>
- * States:
- * <ul>
- *   <li>CLOSED: Normal operation. Failures are counted.</li>
- *   <li>OPEN: After {@code failureThreshold} consecutive failures, the circuit opens and all
- *       calls are rejected immediately (fast-fail) with an empty fallback, preventing unbounded
- *       hammering of an unavailable service.</li>
- *   <li>HALF_OPEN: After {@code resetTimeout} elapses, the next call is tried as a probe.
- *       Success closes the circuit; failure re-opens it and resets the timeout.</li>
- * </ul>
- * <p>
- * This is not a general-purpose library — it is intentionally minimal and maintainable
- * within a single JAR with no additional infrastructure dependencies.
+ * A lightweight, synchronous circuit breaker compatible with java.net.http.HttpClient.
+ * Prevents cascading failures when downstream services are unavailable.
  */
 @Slf4j
 public class SimpleCircuitBreaker {
@@ -40,10 +27,20 @@ public class SimpleCircuitBreaker {
     private final AtomicReference<State> state = new AtomicReference<>(State.CLOSED);
     private volatile Instant openedAt = null;
 
+    private Consumer<String> onOpenListener;
+    private Consumer<String> onFastFailListener;
+    private Consumer<State> onStateChangeListener;
+
     public SimpleCircuitBreaker(String serviceName, int failureThreshold, Duration resetTimeout) {
         this.serviceName = serviceName;
         this.failureThreshold = failureThreshold;
         this.resetTimeout = resetTimeout;
+    }
+
+    public void setListeners(Consumer<String> onOpen, Consumer<String> onFastFail, Consumer<State> onStateChange) {
+        this.onOpenListener = onOpen;
+        this.onFastFailListener = onFastFail;
+        this.onStateChangeListener = onStateChange;
     }
 
     @FunctionalInterface
@@ -51,20 +48,14 @@ public class SimpleCircuitBreaker {
         T get() throws Exception;
     }
 
-    /**
-     * Execute a downstream call through the circuit breaker.
-     * If the circuit is OPEN, the fallback is returned immediately without invoking the supplier.
-     *
-     * @param <T>      return type
-     * @param call     the actual downstream call (may throw checked exceptions)
-     * @param fallback the value to return when the circuit is open or a failure occurs
-     * @return the result of the call, or the fallback
-     */
     public <T> T execute(CheckedSupplier<T> call, T fallback) {
         State current = currentState();
 
         if (current == State.OPEN) {
             log.warn("[CircuitBreaker:{}] Circuit OPEN — fast-failing request to protect downstream", serviceName);
+            if (onFastFailListener != null) {
+                try { onFastFailListener.accept(serviceName); } catch (Exception ignored) {}
+            }
             return fallback;
         }
 
@@ -78,10 +69,6 @@ public class SimpleCircuitBreaker {
         }
     }
 
-    /**
-     * Returns true if the circuit is currently open (downstream unavailable).
-     * Callers can use this to distinguish "no data available" from "genuinely empty results".
-     */
     public boolean isOpen() {
         return currentState() == State.OPEN;
     }
@@ -92,6 +79,9 @@ public class SimpleCircuitBreaker {
             if (Duration.between(openedAt, Instant.now()).compareTo(resetTimeout) >= 0) {
                 if (state.compareAndSet(State.OPEN, State.HALF_OPEN)) {
                     log.info("[CircuitBreaker:{}] Circuit transitioning to HALF_OPEN (probe next request)", serviceName);
+                    if (onStateChangeListener != null) {
+                        try { onStateChangeListener.accept(State.HALF_OPEN); } catch (Exception ignored) {}
+                    }
                 }
                 return state.get();
             }
@@ -105,6 +95,9 @@ public class SimpleCircuitBreaker {
             consecutiveFailures.set(0);
             state.set(State.CLOSED);
             openedAt = null;
+            if (onStateChangeListener != null) {
+                try { onStateChangeListener.accept(State.CLOSED); } catch (Exception ignored) {}
+            }
         }
     }
 
@@ -117,11 +110,29 @@ public class SimpleCircuitBreaker {
                 openedAt = Instant.now();
                 log.error("[CircuitBreaker:{}] Circuit OPENED after {} consecutive failures. Will retry in {}",
                         serviceName, failures, resetTimeout);
+                if (onOpenListener != null) {
+                    try { onOpenListener.accept(serviceName); } catch (Exception ignored) {}
+                }
+                if (onStateChangeListener != null) {
+                    try { onStateChangeListener.accept(State.OPEN); } catch (Exception ignored) {}
+                }
             }
         }
     }
 
     public String getServiceName() {
         return serviceName;
+    }
+
+    public int getConsecutiveFailures() {
+        return consecutiveFailures.get();
+    }
+
+    public Instant getOpenedAt() {
+        return openedAt;
+    }
+
+    public Duration getResetTimeout() {
+        return resetTimeout;
     }
 }

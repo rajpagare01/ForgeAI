@@ -22,7 +22,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class OrganizationService {
 
     private final OrganizationRepository organizationRepository;
@@ -31,6 +30,34 @@ public class OrganizationService {
     private final UserRepository userRepository;
     private final SecurityEventService securityEventService;
     private final OutboxService outboxService;
+    private final AuditService auditService;
+
+    public OrganizationService(OrganizationRepository organizationRepository,
+                               OrganizationMembershipRepository membershipRepository,
+                               RoleRepository roleRepository,
+                               UserRepository userRepository,
+                               SecurityEventService securityEventService,
+                               OutboxService outboxService) {
+        this(organizationRepository, membershipRepository, roleRepository, userRepository,
+                securityEventService, outboxService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public OrganizationService(OrganizationRepository organizationRepository,
+                               OrganizationMembershipRepository membershipRepository,
+                               RoleRepository roleRepository,
+                               UserRepository userRepository,
+                               SecurityEventService securityEventService,
+                               OutboxService outboxService,
+                               @org.springframework.beans.factory.annotation.Autowired(required = false) AuditService auditService) {
+        this.organizationRepository = organizationRepository;
+        this.membershipRepository = membershipRepository;
+        this.roleRepository = roleRepository;
+        this.userRepository = userRepository;
+        this.securityEventService = securityEventService;
+        this.outboxService = outboxService;
+        this.auditService = auditService;
+    }
 
     @Transactional
     public Organization createOrganization(String name, String slug, String description, UUID creatorId) {
@@ -63,6 +90,19 @@ public class OrganizationService {
         membershipRepository.save(membership);
 
         securityEventService.recordEvent(creatorId, savedOrg.getId(), "ORGANIZATION_CREATED", null, null, "{\"message\": \"Organization created\"}");
+
+        if (auditService != null) {
+            auditService.recordEvent(
+                    savedOrg.getId(),
+                    creatorId != null ? creatorId.toString() : null,
+                    "organization.created",
+                    "ORGANIZATION",
+                    savedOrg.getId().toString(),
+                    "CREATE",
+                    "SUCCESS",
+                    Map.of("slug", savedOrg.getSlug().value(), "name", savedOrg.getName())
+            );
+        }
 
         if (outboxService != null) {
             outboxService.publish(OrganizationCreatedEvent.builder()
@@ -245,6 +285,19 @@ public class OrganizationService {
         OrganizationMembership saved = membershipRepository.save(membership);
 
         securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_ROLE_CHANGED", null, null, "{\"targetUserId\": \"" + targetUserId + "\", \"newRole\": \"" + newRoleName + "\"}");
+
+        if (auditService != null) {
+            auditService.recordEvent(
+                    organizationId,
+                    currentUserId != null ? currentUserId.toString() : null,
+                    "organization.member_role_changed",
+                    "MEMBERSHIP",
+                    targetUserId.toString(),
+                    "UPDATE_ROLE",
+                    "SUCCESS",
+                    Map.of("targetUserId", targetUserId.toString(), "newRole", newRoleName)
+            );
+        }
 
         if (outboxService != null) {
             outboxService.publish(MemberRoleChangedEvent.builder()

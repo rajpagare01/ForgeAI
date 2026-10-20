@@ -1,6 +1,7 @@
 package com.forgeai.testing.infrastructure.persistence.repository;
 
 import com.forgeai.testing.infrastructure.persistence.entity.OutboxEventEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +14,8 @@ public interface SpringDataOutboxEventRepository extends JpaRepository<OutboxEve
     @Query(value = """
         SELECT * FROM outbox_events 
         WHERE published_at IS NULL 
+          AND (status IS NULL OR status IN ('PENDING', 'RETRYING'))
+          AND (next_retry_at IS NULL OR next_retry_at <= NOW())
         ORDER BY created_at ASC 
         LIMIT :batchSize 
         FOR UPDATE SKIP LOCKED
@@ -20,4 +23,10 @@ public interface SpringDataOutboxEventRepository extends JpaRepository<OutboxEve
     List<OutboxEventEntity> findUnpublishedEventsForProcessing(@Param("batchSize") int batchSize);
 
     List<OutboxEventEntity> findTop100ByPublishedAtIsNullOrderByCreatedAtAsc();
+
+    long countByPublishedAtIsNull();
+
+    long countByStatus(String status);
+
+    List<OutboxEventEntity> findByStatusOrderByDeadLetterAtDesc(String status, Pageable pageable);
 }

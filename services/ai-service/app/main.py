@@ -65,12 +65,47 @@ app.include_router(ai_router.router)
 
 
 
+from fastapi.responses import PlainTextResponse
+from app.core.metrics import ai_metrics
+
 @app.get("/health", tags=["Health"])
 @app.get("/healthz", tags=["Health"])
 @app.get("/api/v1/ai/health", tags=["Health"])
 async def health_check():
+    db_status = "UP"
+    if db_pool._pool is not None:
+        try:
+            async with db_pool._pool.acquire() as conn:
+                res = await conn.fetchval("SELECT 1")
+                if res != 1:
+                    db_status = "DOWN"
+        except Exception as e:
+            logger.warning(f"Database health check failed: {e}")
+            db_status = "DOWN"
+
+    has_gemini = bool(settings.GEMINI_API_KEY)
+    has_groq = bool(settings.GROQ_API_KEY)
+
+    provider_status = "UP" if has_gemini else ("DEGRADED" if has_groq else "UNCONFIGURED")
+    overall_status = "UP" if db_status == "UP" else "DOWN"
+
     return {
-        "status": "UP",
+        "status": overall_status,
         "service": "ai-service",
         "version": settings.VERSION,
+        "dependencies": {
+            "database": {"status": db_status},
+            "gemini": {"status": "CONFIGURED" if has_gemini else "UNCONFIGURED"},
+            "groq": {"status": "CONFIGURED" if has_groq else "UNCONFIGURED"},
+            "provider": {"status": provider_status}
+        }
     }
+
+@app.get("/metrics", response_class=PlainTextResponse, tags=["Observability"])
+async def get_metrics():
+    return ai_metrics.to_prometheus_format()
+
+@app.get("/api/v1/ai/metrics", tags=["Observability"])
+async def get_metrics_json():
+    return ai_metrics.get_stats()
+

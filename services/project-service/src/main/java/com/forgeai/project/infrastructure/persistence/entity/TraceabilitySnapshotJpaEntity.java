@@ -34,6 +34,12 @@ public class TraceabilitySnapshotJpaEntity {
     @Column(name = "repository_id", updatable = false)
     private UUID repositoryId;
 
+    @Column(name = "created_by", length = 64, updatable = false)
+    private String createdBy;
+
+    @Column(name = "schema_version", nullable = false, length = 32, updatable = false)
+    private String schemaVersion = "1.0";
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "snapshot_data", nullable = false, columnDefinition = "jsonb", updatable = false)
     private String snapshotData;
@@ -45,6 +51,7 @@ public class TraceabilitySnapshotJpaEntity {
 
     public TraceabilitySnapshotJpaEntity(UUID id, UUID organizationId, UUID projectId, String snapshotName,
                                         Integer prNumber, String commitSha, UUID repositoryId,
+                                        String createdBy, String schemaVersion,
                                         String snapshotData, Instant createdAt) {
         this.id = id;
         this.organizationId = organizationId;
@@ -53,6 +60,8 @@ public class TraceabilitySnapshotJpaEntity {
         this.prNumber = prNumber;
         this.commitSha = commitSha;
         this.repositoryId = repositoryId;
+        this.createdBy = createdBy;
+        this.schemaVersion = schemaVersion != null ? schemaVersion : "1.0";
         this.snapshotData = snapshotData;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
     }
@@ -82,6 +91,12 @@ public class TraceabilitySnapshotJpaEntity {
     public UUID getRepositoryId() { return repositoryId; }
     public void setRepositoryId(UUID repositoryId) { this.repositoryId = repositoryId; }
 
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+
+    public String getSchemaVersion() { return schemaVersion; }
+    public void setSchemaVersion(String schemaVersion) { this.schemaVersion = schemaVersion; }
+
     public String getSnapshotData() { return snapshotData; }
     public void setSnapshotData(String snapshotData) { this.snapshotData = snapshotData; }
 
@@ -96,6 +111,8 @@ public class TraceabilitySnapshotJpaEntity {
         private Integer prNumber;
         private String commitSha;
         private UUID repositoryId;
+        private String createdBy;
+        private String schemaVersion = "1.0";
         private String snapshotData;
         private Instant createdAt = Instant.now();
 
@@ -106,11 +123,13 @@ public class TraceabilitySnapshotJpaEntity {
         public Builder prNumber(Integer prNumber) { this.prNumber = prNumber; return this; }
         public Builder commitSha(String commitSha) { this.commitSha = commitSha; return this; }
         public Builder repositoryId(UUID repositoryId) { this.repositoryId = repositoryId; return this; }
+        public Builder createdBy(String createdBy) { this.createdBy = createdBy; return this; }
+        public Builder schemaVersion(String schemaVersion) { this.schemaVersion = schemaVersion; return this; }
         public Builder snapshotData(String snapshotData) { this.snapshotData = snapshotData; return this; }
         public Builder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
 
         public TraceabilitySnapshotJpaEntity build() {
-            return new TraceabilitySnapshotJpaEntity(id, organizationId, projectId, snapshotName, prNumber, commitSha, repositoryId, snapshotData, createdAt);
+            return new TraceabilitySnapshotJpaEntity(id, organizationId, projectId, snapshotName, prNumber, commitSha, repositoryId, createdBy, schemaVersion, snapshotData, createdAt);
         }
     }
 }

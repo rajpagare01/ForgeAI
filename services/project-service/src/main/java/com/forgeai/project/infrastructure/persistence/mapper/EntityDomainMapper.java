@@ -238,6 +238,8 @@ public final class EntityDomainMapper {
                 .prNumber(entity.getPrNumber())
                 .commitSha(entity.getCommitSha())
                 .repositoryId(entity.getRepositoryId())
+                .createdBy(entity.getCreatedBy())
+                .schemaVersion(entity.getSchemaVersion())
                 .snapshotData(entity.getSnapshotData())
                 .createdAt(entity.getCreatedAt())
                 .build();
@@ -253,6 +255,8 @@ public final class EntityDomainMapper {
                 .prNumber(domain.getPrNumber())
                 .commitSha(domain.getCommitSha())
                 .repositoryId(domain.getRepositoryId())
+                .createdBy(domain.getCreatedBy())
+                .schemaVersion(domain.getSchemaVersion() != null ? domain.getSchemaVersion() : "1.0")
                 .snapshotData(domain.getSnapshotData())
                 .createdAt(domain.getCreatedAt())
                 .build();

@@ -32,9 +32,19 @@ import java.util.UUID;
  * installation ↔ repository mapping in Source Control and is never taken from raw
  * GitHub webhook JSON.
  */
+import com.forgeai.testing.infrastructure.logging.StructuredLogger;
+import com.forgeai.testing.infrastructure.metrics.TestingMetrics;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class WorkflowRunIngestionService {
 
     /** Ordered lifecycle states. Higher index = newer state. */
@@ -42,6 +52,21 @@ public class WorkflowRunIngestionService {
             java.util.List.of("queued", "in_progress", "completed");
 
     private final TestRunRepository testRunRepository;
+    private final TestingMetrics testingMetrics;
+    private final StructuredLogger structuredLogger;
+
+    public WorkflowRunIngestionService(TestRunRepository testRunRepository) {
+        this(testRunRepository, null, null);
+    }
+
+    @Autowired
+    public WorkflowRunIngestionService(TestRunRepository testRunRepository,
+                                       @Autowired(required = false) TestingMetrics testingMetrics,
+                                       @Autowired(required = false) StructuredLogger structuredLogger) {
+        this.testRunRepository = testRunRepository;
+        this.testingMetrics = testingMetrics;
+        this.structuredLogger = structuredLogger;
+    }
 
     /**
      * Upsert a TestRun from a {@code workflow_run} delivery.
@@ -59,6 +84,10 @@ public class WorkflowRunIngestionService {
         }
         if (request.getWorkflowRunId() == null || request.getWorkflowRunId() == 0L) {
             throw new IllegalArgumentException("workflowRunId must be a non-zero GitHub workflow_run id");
+        }
+
+        if (testingMetrics != null) {
+            testingMetrics.recordWorkflowRunReceived();
         }
 
         Optional<TestRun> existingOpt = testRunRepository.findByRepositoryIdAndWorkflowRunId(
@@ -104,6 +133,28 @@ public class WorkflowRunIngestionService {
             log.info("Created TestRun for workflow_run: id={}, orgId={}, repoId={}, workflowRunId={}, status={}, conclusion={}",
                     saved.getId(), request.getOrganizationId(), request.getRepositoryId(),
                     request.getWorkflowRunId(), request.getStatus(), request.getConclusion());
+
+            if (domainStatus == TestRunStatus.PASSED) {
+                if (testingMetrics != null) testingMetrics.recordWorkflowRunCompleted();
+                if (structuredLogger != null) {
+                    structuredLogger.info("testing.workflow.completed", Map.of(
+                            "workflowRunId", request.getWorkflowRunId(),
+                            "repositoryId", String.valueOf(request.getRepositoryId()),
+                            "conclusion", String.valueOf(request.getConclusion())
+                    ));
+                }
+            } else if (domainStatus == TestRunStatus.FAILED) {
+                if (testingMetrics != null) testingMetrics.recordWorkflowRunFailed();
+                if (structuredLogger != null) {
+                    structuredLogger.logEvent("WARN", "testing.workflow.failed", "workflow_run", "FAILURE", null, null,
+                            "Workflow run failed: " + request.getWorkflowRunId(), Map.of(
+                                    "workflowRunId", request.getWorkflowRunId(),
+                                    "repositoryId", String.valueOf(request.getRepositoryId()),
+                                    "conclusion", String.valueOf(request.getConclusion())
+                            ));
+                }
+            }
+
             return saved;
 
         } else {
@@ -114,6 +165,17 @@ public class WorkflowRunIngestionService {
 
             // Newer-state-wins: don't regress from completed → in_progress/queued
             if (!isNewerOrEqual(currentGithubStatus, incomingStatus)) {
+                if (testingMetrics != null) {
+                    testingMetrics.recordWorkflowRunRejectedStale();
+                }
+                if (structuredLogger != null) {
+                    structuredLogger.warn("testing.workflow.rejected_stale", Map.of(
+                            "workflowRunId", request.getWorkflowRunId(),
+                            "currentStatus", String.valueOf(currentGithubStatus),
+                            "incomingStatus", String.valueOf(incomingStatus),
+                            "repositoryId", String.valueOf(request.getRepositoryId())
+                    ));
+                }
                 log.info("Skipping stale workflow_run event: workflowRunId={}, currentStatus={}, incomingStatus={} (stale, would regress state)",
                         request.getWorkflowRunId(), currentGithubStatus, incomingStatus);
                 return existing;
@@ -135,13 +197,36 @@ public class WorkflowRunIngestionService {
             }
             // Sync domain status
             String effectiveConclusion = request.getConclusion() != null ? request.getConclusion() : existing.getConclusion();
-            existing.setStatus(mapGithubStatusToDomain(incomingStatus, effectiveConclusion));
+            TestRunStatus domainStatus = mapGithubStatusToDomain(incomingStatus, effectiveConclusion);
+            existing.setStatus(domainStatus);
             existing.setUpdatedAt(now);
 
             TestRun updated = testRunRepository.save(existing);
             log.info("Reconciled TestRun for workflow_run: id={}, orgId={}, workflowRunId={}, previousStatus={}, newStatus={}, conclusion={}",
                     updated.getId(), request.getOrganizationId(), request.getWorkflowRunId(),
                     currentGithubStatus, incomingStatus, updated.getConclusion());
+
+            if (domainStatus == TestRunStatus.PASSED) {
+                if (testingMetrics != null) testingMetrics.recordWorkflowRunCompleted();
+                if (structuredLogger != null) {
+                    structuredLogger.info("testing.workflow.completed", Map.of(
+                            "workflowRunId", request.getWorkflowRunId(),
+                            "repositoryId", String.valueOf(request.getRepositoryId()),
+                            "conclusion", String.valueOf(request.getConclusion())
+                    ));
+                }
+            } else if (domainStatus == TestRunStatus.FAILED) {
+                if (testingMetrics != null) testingMetrics.recordWorkflowRunFailed();
+                if (structuredLogger != null) {
+                    structuredLogger.logEvent("WARN", "testing.workflow.failed", "workflow_run", "FAILURE", null, null,
+                            "Workflow run failed: " + request.getWorkflowRunId(), Map.of(
+                                    "workflowRunId", request.getWorkflowRunId(),
+                                    "repositoryId", String.valueOf(request.getRepositoryId()),
+                                    "conclusion", String.valueOf(request.getConclusion())
+                            ));
+                }
+            }
+
             return updated;
         }
     }

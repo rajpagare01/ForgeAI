@@ -12,6 +12,7 @@ import {
   Layers,
   Cpu,
   Terminal,
+  Activity,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -40,6 +41,11 @@ const navigationItems = [
     name: "AI Insights & Blast Radius",
     href: "/ai-insights",
     icon: Sparkles,
+  },
+  {
+    name: "Operations & Governance",
+    href: "/operations",
+    icon: Activity,
   },
 ];
 

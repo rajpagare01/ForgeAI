@@ -29,29 +29,27 @@ public class TraceCorrelationFilter implements GlobalFilter, Ordered {
         String incomingTraceparent = request.getHeaders().getFirst(HEADER_TRACEPARENT);
         String incomingCorrelationId = request.getHeaders().getFirst(HEADER_CORRELATION_ID);
 
+        String correlationId = (incomingCorrelationId != null && !incomingCorrelationId.isBlank())
+                ? incomingCorrelationId.trim()
+                : UUID.randomUUID().toString();
+
+        boolean isValidW3c = incomingTraceparent != null
+                && incomingTraceparent.matches("^00-([0-9a-fA-F]{32})-([0-9a-fA-F]{16})-([0-9a-fA-F]{2})$")
+                && !incomingTraceparent.contains("00000000000000000000000000000000");
+
         String traceId;
         String spanId = generateRandomHex(16);
         String traceparent;
 
-        if (incomingTraceparent != null && incomingTraceparent.matches("^00-[0-9a-fA-F]{32}-[0-9a-fA-F]{16}-[0-9a-fA-F]{2}$")) {
-            // Valid W3C traceparent format: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+        if (isValidW3c) {
             String[] parts = incomingTraceparent.split("-");
-            traceId = parts[1];
-            traceparent = String.format("00-%s-%s-01", traceId, spanId);
-        } else if (incomingCorrelationId != null && !incomingCorrelationId.isBlank()) {
-            // Strip any hyphens or format to 32-hex
-            String clean = incomingCorrelationId.replace("-", "");
-            traceId = clean.length() == 32 ? clean : String.format("%032x", UUID.randomUUID().hashCode() & 0xFFFFFFFFL);
+            traceId = parts[1].toLowerCase();
             traceparent = String.format("00-%s-%s-01", traceId, spanId);
         } else {
-            // Generate clean W3C 32-hex traceId
-            traceId = generateRandomHex(32);
+            String clean = correlationId.replace("-", "").toLowerCase();
+            traceId = clean.length() == 32 ? clean : generateRandomHex(32);
             traceparent = String.format("00-%s-%s-01", traceId, spanId);
         }
-
-        String correlationId = (incomingCorrelationId != null && !incomingCorrelationId.isBlank())
-                ? incomingCorrelationId
-                : traceId;
 
         // Downstream request mutation
         ServerHttpRequest mutatedRequest = request.mutate()
@@ -59,7 +57,7 @@ public class TraceCorrelationFilter implements GlobalFilter, Ordered {
                 .header(HEADER_TRACEPARENT, traceparent)
                 .build();
 
-        // Mutate response header to return X-Correlation-Id and traceparent
+        // Mutate response headers to return X-Correlation-Id and traceparent
         ServerHttpResponse response = exchange.getResponse();
         response.getHeaders().set(HEADER_CORRELATION_ID, correlationId);
         response.getHeaders().set(HEADER_TRACEPARENT, traceparent);
@@ -67,7 +65,10 @@ public class TraceCorrelationFilter implements GlobalFilter, Ordered {
         log.debug("Trace context bound at API Gateway: traceId={}, spanId={}, correlationId={}",
                 traceId, spanId, correlationId);
 
-        return chain.filter(exchange.mutate().request(mutatedRequest).build());
+        return chain.filter(exchange.mutate().request(mutatedRequest).build())
+                .contextWrite(ctx -> ctx.put("traceId", traceId)
+                        .put("spanId", spanId)
+                        .put("correlationId", correlationId));
     }
 
     private String generateRandomHex(int length) {

@@ -1,0 +1,169 @@
+package com.forgeai.sourcecontrol.presentation.controller;
+
+import com.forgeai.sourcecontrol.application.service.AuditService;
+import com.forgeai.sourcecontrol.infrastructure.metrics.SourceControlMetrics;
+import com.forgeai.sourcecontrol.infrastructure.persistence.entity.AuditEventEntity;
+import com.forgeai.sourcecontrol.infrastructure.persistence.entity.OutboxEventEntity;
+import com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataOutboxEventRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/operations")
+@RequiredArgsConstructor
+public class SourceControlOperationsController {
+
+    private final SpringDataOutboxEventRepository outboxEventRepository;
+    private final SourceControlMetrics metrics;
+    private final AuditService auditService;
+
+    @GetMapping("/outbox/stats")
+    public ResponseEntity<Map<String, Object>> getOutboxStats() {
+        Map<String, Object> stats = new HashMap<>();
+        long pending = outboxEventRepository.countByStatus("PENDING");
+        long retrying = outboxEventRepository.countByStatus("RETRYING");
+        long deadLetter = outboxEventRepository.countByStatus("DEAD_LETTER");
+        long totalUnpublished = outboxEventRepository.countByPublishedAtIsNull();
+
+        stats.put("pending", pending);
+        stats.put("retrying", retrying);
+        stats.put("deadLetter", deadLetter);
+        stats.put("totalUnpublished", totalUnpublished);
+        stats.put("rateLimitRemaining", metrics.getRateLimitRemaining());
+
+        return ResponseEntity.ok(stats);
+    }
+
+    @GetMapping("/github/stats")
+    public ResponseEntity<Map<String, Object>> getGitHubStats() {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("activeInstallations", metrics.getActiveInstallations());
+        stats.put("quarantinedInstallations", metrics.getQuarantinedInstallations());
+        stats.put("suspendedInstallations", metrics.getSuspendedInstallations());
+        stats.put("rateLimitRemaining", metrics.getRateLimitRemaining());
+        stats.put("rateLimitReset", metrics.getRateLimitReset());
+        return ResponseEntity.ok(stats);
+    }
+
+    @GetMapping("/outbox/dead-letter")
+    public ResponseEntity<List<OutboxEventEntity>> getDeadLetterEvents(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        int pageSize = Math.min(size, 50);
+        List<OutboxEventEntity> deadLetters = outboxEventRepository.findByStatusOrderByDeadLetterAtDesc(
+                "DEAD_LETTER", PageRequest.of(page, pageSize));
+        return ResponseEntity.ok(deadLetters);
+    }
+
+    @PostMapping("/outbox/events/{id}/replay")
+    public ResponseEntity<Map<String, Object>> replayOutboxEvent(
+            @PathVariable UUID id,
+            @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
+            @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+
+        String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
+        if (rawOrg == null || rawOrg.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "error", "Tenant context (X-Organization-Id) is required for operational replay"));
+        }
+        UUID organizationId;
+        try {
+            organizationId = UUID.fromString(rawOrg.trim());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "error", "Invalid organization UUID"));
+        }
+
+        OutboxEventEntity entity = outboxEventRepository.findById(id).orElse(null);
+        if (entity == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", "Outbox event not found with id: " + id));
+        }
+
+        // Validate state
+        if (!"DEAD_LETTER".equalsIgnoreCase(entity.getStatus())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "error", "Event is not in DEAD_LETTER state (current: " + entity.getStatus() + ")"));
+        }
+
+        // Multi-tenant check: if payload contains an organization_id, verify it matches caller's org
+        String payload = entity.getPayload();
+        if (payload != null && (payload.contains("organizationId") || payload.contains("organization_id"))) {
+            if (!payload.contains(organizationId.toString())) {
+                log.warn("Unauthorized replay attempt: caller org {} does not match event payload {}", organizationId, id);
+                auditService.recordEvent(
+                        organizationId,
+                        userId != null ? userId : "operator",
+                        "OUTBOX_REPLAY_DENIED",
+                        "OUTBOX_EVENT",
+                        id.toString(),
+                        "REPLAY",
+                        "DENIED",
+                        Map.of("reason", "Cross-tenant access attempted")
+                );
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                        "error", "Forbidden: outbox event does not belong to your organization"));
+            }
+        }
+
+        // Safe replay reset
+        entity.setStatus("PENDING");
+        entity.setAttemptCount(0);
+        entity.setNextRetryAt(Instant.now());
+        entity.setDeadLetterAt(null);
+        entity.setLastError(null);
+        outboxEventRepository.save(entity);
+
+        // Record audit event for compliance
+        AuditEventEntity auditEvent = auditService.recordEvent(
+                organizationId,
+                userId != null ? userId : "operator",
+                "OUTBOX_REPLAY_REQUESTED",
+                "OUTBOX_EVENT",
+                id.toString(),
+                "REPLAY",
+                "SUCCESS",
+                Map.of("previousStatus", "DEAD_LETTER", "resetTo", "PENDING")
+        );
+
+        return ResponseEntity.ok(Map.of(
+                "status", "REPLAY_SCHEDULED",
+                "eventId", entity.getId(),
+                "auditEventId", auditEvent.getId(),
+                "message", "Outbox event successfully reset to PENDING and scheduled for immediate processing"
+        ));
+    }
+
+    @GetMapping("/audit-events")
+    public ResponseEntity<List<AuditEventEntity>> getRecentAuditEvents(
+            @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
+            @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestParam(defaultValue = "50") int limit) {
+
+        String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
+        if (rawOrg == null || rawOrg.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        UUID organizationId;
+        try {
+            organizationId = UUID.fromString(rawOrg.trim());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        List<AuditEventEntity> events = auditService.getRecentEventsForTenant(organizationId, limit);
+        return ResponseEntity.ok(events);
+    }
+}

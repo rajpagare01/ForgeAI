@@ -45,11 +45,30 @@ public class AiServiceClient {
     public AiServiceClient(
             @Value("${services.ai.url:http://localhost:8084}") String baseUrl,
             ObjectMapper objectMapper) {
+        this(baseUrl, objectMapper, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AiServiceClient(
+            @Value("${services.ai.url:http://localhost:8084}") String baseUrl,
+            ObjectMapper objectMapper,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) CircuitBreakerRegistry registry,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.forgeai.project.infrastructure.metrics.ProjectMetrics metrics) {
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(4))
                 .build();
+        if (registry != null) {
+            registry.register(circuitBreaker);
+        }
+        if (metrics != null) {
+            circuitBreaker.setListeners(
+                    metrics::recordCircuitBreakerOpen,
+                    metrics::recordCircuitBreakerFastFail,
+                    state -> metrics.updateCircuitBreakerState("ai-service", state == SimpleCircuitBreaker.State.OPEN ? 2 : state == SimpleCircuitBreaker.State.HALF_OPEN ? 1 : 0)
+            );
+        }
     }
 
     /**
@@ -110,15 +129,26 @@ public class AiServiceClient {
 
     private HttpRequest buildRequest(String path, UUID organizationId) throws Exception {
         String traceId = MDC.get("traceId");
+        String correlationId = MDC.get("correlationId");
+        if (correlationId == null || correlationId.isBlank()) {
+            correlationId = (traceId != null && !traceId.isBlank()) ? traceId : UUID.randomUUID().toString();
+        }
+        if (traceId == null || traceId.isBlank()) {
+            String clean = correlationId.replace("-", "").toLowerCase();
+            traceId = clean.length() >= 32 ? clean.substring(0, 32) : String.format("%32s", clean).replace(' ', '0');
+        }
+        String spanId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String traceparent = String.format("00-%s-%s-01", traceId, spanId);
+
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
                 .header("Accept", "application/json")
                 .header("X-Org-Id", organizationId.toString())
+                .header("X-Organization-Id", organizationId.toString())
+                .header("X-Correlation-Id", correlationId)
+                .header("traceparent", traceparent)
                 .timeout(Duration.ofSeconds(5))
                 .GET();
-        if (traceId != null && !traceId.isBlank()) {
-            builder.header("X-Correlation-Id", traceId);
-        }
         return builder.build();
     }
 }

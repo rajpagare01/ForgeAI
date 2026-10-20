@@ -2,6 +2,8 @@ package com.forgeai.sourcecontrol.presentation.controller;
 
 import com.forgeai.sourcecontrol.application.service.WebhookIngestionResult;
 import com.forgeai.sourcecontrol.application.service.WebhookIngestionService;
+import com.forgeai.sourcecontrol.infrastructure.logging.StructuredLogger;
+import com.forgeai.sourcecontrol.infrastructure.metrics.SourceControlMetrics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -17,6 +19,8 @@ import java.util.Map;
 public class GitHubWebhookController {
 
     private final WebhookIngestionService webhookIngestionService;
+    private final SourceControlMetrics metrics;
+    private final StructuredLogger structuredLogger;
 
     @PostMapping("/github")
     public ResponseEntity<Map<String, Object>> handleWebhook(
@@ -25,7 +29,11 @@ public class GitHubWebhookController {
             @RequestHeader(value = "X-Hub-Signature-256", required = false) String signatureHeader,
             @RequestBody byte[] payloadBytes) {
 
-        log.info("Received GitHub webhook: deliveryId={}, eventType={}", deliveryId, eventType);
+        long start = System.currentTimeMillis();
+        metrics.recordWebhookReceived(eventType);
+        structuredLogger.logEvent("INFO", "github.webhook.received", "handleWebhook", "RECEIVED",
+                null, null, "GitHub webhook received: deliveryId=" + deliveryId + ", event=" + eventType,
+                Map.of("deliveryId", deliveryId, "eventType", eventType));
 
         try {
             WebhookIngestionResult result = webhookIngestionService.ingestWebhook(
@@ -35,12 +43,25 @@ public class GitHubWebhookController {
                     payloadBytes
             );
 
+            long latency = System.currentTimeMillis() - start;
+            if (result.isIdempotentHit()) {
+                metrics.recordWebhookDuplicate();
+                structuredLogger.logEvent("INFO", "github.webhook.accepted", "handleWebhook", "IDEMPOTENT_IGNORED",
+                        latency, null, "Webhook duplicate ignored for delivery " + deliveryId,
+                        Map.of("deliveryId", deliveryId, "eventType", eventType, "idempotentHit", true));
+            } else {
+                structuredLogger.logEvent("INFO", "github.webhook.accepted", "handleWebhook", "SUCCESS",
+                        latency, null, "Webhook accepted for delivery " + deliveryId,
+                        Map.of("deliveryId", deliveryId, "eventType", eventType, "idempotentHit", false));
+            }
+
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                     "status", result.getStatus(),
                     "deliveryId", result.getDeliveryId(),
                     "idempotentHit", result.isIdempotentHit()
             ));
         } catch (Exception e) {
+            long latency = System.currentTimeMillis() - start;
             Throwable root = e;
             boolean isConstraintViolation = false;
             while (root != null) {
@@ -55,13 +76,23 @@ public class GitHubWebhookController {
             }
 
             if (isConstraintViolation) {
-                log.info("Concurrent duplicate delivery {} detected via database constraint; returning idempotent 202", deliveryId);
+                metrics.recordWebhookDuplicate();
+                structuredLogger.logEvent("INFO", "github.webhook.accepted", "handleWebhook", "IDEMPOTENT_IGNORED",
+                        latency, null, "Concurrent duplicate delivery detected for " + deliveryId,
+                        Map.of("deliveryId", deliveryId, "eventType", eventType, "idempotentHit", true));
                 return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                         "status", "IDEMPOTENT_IGNORED",
                         "deliveryId", deliveryId,
                         "idempotentHit", true
                 ));
             }
+
+            String reason = e.getClass().getSimpleName();
+            metrics.recordWebhookRejected(reason);
+            structuredLogger.logEvent("ERROR", "github.webhook.rejected", "handleWebhook", "REJECTED",
+                    latency, reason, "Webhook rejected: " + e.getMessage(),
+                    Map.of("deliveryId", deliveryId, "eventType", eventType, "reason", reason));
+
             if (e instanceof RuntimeException) {
                 throw (RuntimeException) e;
             }

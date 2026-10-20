@@ -12,6 +12,8 @@ public class TraceabilitySnapshot {
     private Integer prNumber;
     private String commitSha;
     private UUID repositoryId;
+    private String createdBy;
+    private String schemaVersion;
     private String snapshotData;
     private Instant createdAt;
 
@@ -19,6 +21,7 @@ public class TraceabilitySnapshot {
 
     public TraceabilitySnapshot(UUID id, UUID organizationId, UUID projectId, String snapshotName,
                                 Integer prNumber, String commitSha, UUID repositoryId,
+                                String createdBy, String schemaVersion,
                                 String snapshotData, Instant createdAt) {
         this.id = id;
         this.organizationId = organizationId;
@@ -27,6 +30,8 @@ public class TraceabilitySnapshot {
         this.prNumber = prNumber;
         this.commitSha = commitSha;
         this.repositoryId = repositoryId;
+        this.createdBy = createdBy;
+        this.schemaVersion = schemaVersion != null ? schemaVersion : "1.0";
         this.snapshotData = snapshotData;
         this.createdAt = createdAt;
     }
@@ -56,6 +61,12 @@ public class TraceabilitySnapshot {
     public UUID getRepositoryId() { return repositoryId; }
     public void setRepositoryId(UUID repositoryId) { this.repositoryId = repositoryId; }
 
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+
+    public String getSchemaVersion() { return schemaVersion; }
+    public void setSchemaVersion(String schemaVersion) { this.schemaVersion = schemaVersion; }
+
     public String getSnapshotData() { return snapshotData; }
     public void setSnapshotData(String snapshotData) { this.snapshotData = snapshotData; }
 
@@ -70,6 +81,8 @@ public class TraceabilitySnapshot {
         private Integer prNumber;
         private String commitSha;
         private UUID repositoryId;
+        private String createdBy;
+        private String schemaVersion = "1.0";
         private String snapshotData;
         private Instant createdAt;
 
@@ -80,11 +93,13 @@ public class TraceabilitySnapshot {
         public Builder prNumber(Integer prNumber) { this.prNumber = prNumber; return this; }
         public Builder commitSha(String commitSha) { this.commitSha = commitSha; return this; }
         public Builder repositoryId(UUID repositoryId) { this.repositoryId = repositoryId; return this; }
+        public Builder createdBy(String createdBy) { this.createdBy = createdBy; return this; }
+        public Builder schemaVersion(String schemaVersion) { this.schemaVersion = schemaVersion; return this; }
         public Builder snapshotData(String snapshotData) { this.snapshotData = snapshotData; return this; }
         public Builder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
 
         public TraceabilitySnapshot build() {
-            return new TraceabilitySnapshot(id, organizationId, projectId, snapshotName, prNumber, commitSha, repositoryId, snapshotData, createdAt);
+            return new TraceabilitySnapshot(id, organizationId, projectId, snapshotName, prNumber, commitSha, repositoryId, createdBy, schemaVersion, snapshotData, createdAt);
         }
     }
 }

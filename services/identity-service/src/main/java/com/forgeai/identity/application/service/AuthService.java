@@ -30,7 +30,6 @@ import java.util.Base64;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class AuthService implements AuthenticationUseCase {
 
     private final UserService userService;
@@ -41,6 +40,43 @@ public class AuthService implements AuthenticationUseCase {
     private final SecurityEventService securityEventService;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenRotationService tokenRotationService;
+    private final com.forgeai.identity.infrastructure.metrics.IdentityMetrics identityMetrics;
+    private final com.forgeai.identity.infrastructure.logging.StructuredLogger structuredLogger;
+
+    public AuthService(UserService userService,
+                       UserRepository userRepository,
+                       PasswordHasher passwordHasher,
+                       TokenProvider tokenProvider,
+                       SessionService sessionService,
+                       SecurityEventService securityEventService,
+                       RefreshTokenRepository refreshTokenRepository,
+                       TokenRotationService tokenRotationService) {
+        this(userService, userRepository, passwordHasher, tokenProvider, sessionService,
+                securityEventService, refreshTokenRepository, tokenRotationService, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthService(UserService userService,
+                       UserRepository userRepository,
+                       PasswordHasher passwordHasher,
+                       TokenProvider tokenProvider,
+                       SessionService sessionService,
+                       SecurityEventService securityEventService,
+                       RefreshTokenRepository refreshTokenRepository,
+                       TokenRotationService tokenRotationService,
+                       @org.springframework.beans.factory.annotation.Autowired(required = false) com.forgeai.identity.infrastructure.metrics.IdentityMetrics identityMetrics,
+                       @org.springframework.beans.factory.annotation.Autowired(required = false) com.forgeai.identity.infrastructure.logging.StructuredLogger structuredLogger) {
+        this.userService = userService;
+        this.userRepository = userRepository;
+        this.passwordHasher = passwordHasher;
+        this.tokenProvider = tokenProvider;
+        this.sessionService = sessionService;
+        this.securityEventService = securityEventService;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.tokenRotationService = tokenRotationService;
+        this.identityMetrics = identityMetrics;
+        this.structuredLogger = structuredLogger;
+    }
 
     @Override
     @Transactional
@@ -73,6 +109,14 @@ public class AuthService implements AuthenticationUseCase {
         }
 
         if (user == null || !passwordHasher.matches(password, user.getPasswordHash())) {
+            if (identityMetrics != null) {
+                identityMetrics.recordLoginFailure();
+            }
+            if (structuredLogger != null) {
+                structuredLogger.warn("security.authentication.login_failure", java.util.Map.of(
+                        "identifier", identifier != null ? identifier.replaceAll("(?<=.{2}).(?=.*@)", "*") : "unknown"
+                ));
+            }
             if (user != null) {
                 int newCount = user.getFailedLoginCount() + 1;
                 user.setFailedLoginCount(newCount);
@@ -123,6 +167,16 @@ public class AuthService implements AuthenticationUseCase {
         refreshTokenRepository.save(refreshToken);
 
         securityEventService.recordEvent(user.getId(), null, "LOGIN_SUCCESS", ipAddress, userAgent, "{}");
+
+        if (identityMetrics != null) {
+            identityMetrics.recordLoginSuccess();
+        }
+        if (structuredLogger != null) {
+            structuredLogger.info("security.authentication.login_success", java.util.Map.of(
+                    "userId", user.getId().toString(),
+                    "username", user.getUsername().value()
+            ));
+        }
 
         String token = tokenProvider.generateToken(user.getId());
         return new LoginResponse(

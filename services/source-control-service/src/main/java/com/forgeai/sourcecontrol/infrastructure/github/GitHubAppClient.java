@@ -46,13 +46,25 @@ public class GitHubAppClient {
     private final GitHubAppConfig config;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final com.forgeai.sourcecontrol.infrastructure.metrics.SourceControlMetrics metrics;
+    private final com.forgeai.sourcecontrol.infrastructure.logging.StructuredLogger structuredLogger;
 
     /** Cache: installationId → {token, expiresAt} */
     private final ConcurrentHashMap<Long, InstallationToken> tokenCache = new ConcurrentHashMap<>();
 
     public GitHubAppClient(GitHubAppConfig config, ObjectMapper objectMapper) {
+        this(config, objectMapper, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public GitHubAppClient(GitHubAppConfig config,
+                           ObjectMapper objectMapper,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false) com.forgeai.sourcecontrol.infrastructure.metrics.SourceControlMetrics metrics,
+                           @org.springframework.beans.factory.annotation.Autowired(required = false) com.forgeai.sourcecontrol.infrastructure.logging.StructuredLogger structuredLogger) {
         this.config = config;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
+        this.structuredLogger = structuredLogger;
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
@@ -483,26 +495,104 @@ public class GitHubAppClient {
     }
 
     private HttpResponse<String> executeRaw(HttpRequest request, String operation) {
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 401 || response.statusCode() == 403) {
-                throw new GitHubAccessDeniedException(
-                        "GitHub API access denied (HTTP " + response.statusCode() + ") for: " + operation +
-                        ". Check GITHUB_APP_ID and GITHUB_PRIVATE_KEY. Response: " + response.body());
+        String category = categorizeEndpoint(request.uri().getPath());
+        long start = System.currentTimeMillis();
+        int attempt = 0;
+        int maxAttempts = 2; // Controlled backoff for safe GET
+
+        while (true) {
+            attempt++;
+            try {
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                long latency = System.currentTimeMillis() - start;
+                int status = response.statusCode();
+
+                Integer remaining = response.headers().firstValue("x-ratelimit-remaining")
+                        .map(s -> { try { return Integer.parseInt(s); } catch (Exception e) { return null; } })
+                        .orElse(null);
+                Long reset = response.headers().firstValue("x-ratelimit-reset")
+                        .map(s -> { try { return Long.parseLong(s); } catch (Exception e) { return null; } })
+                        .orElse(null);
+                Long retryAfter = response.headers().firstValue("retry-after")
+                        .map(s -> { try { return Long.parseLong(s); } catch (Exception e) { return null; } })
+                        .orElse(null);
+
+                if (metrics != null) {
+                    metrics.recordGitHubApiRequest(category, request.method(), status, latency);
+                    if (remaining != null && reset != null) {
+                        metrics.updateRateLimit(remaining, reset);
+                    }
+                }
+
+                if (structuredLogger != null) {
+                    Map<String, Object> details = new HashMap<>();
+                    details.put("endpointCategory", category);
+                    details.put("method", request.method());
+                    details.put("status", status);
+                    if (remaining != null) details.put("rateLimitRemaining", remaining);
+                    if (reset != null) details.put("rateLimitReset", reset);
+                    structuredLogger.logEvent(
+                            status >= 400 ? "WARN" : "DEBUG",
+                            "github.api.call",
+                            operation,
+                            status < 400 ? "SUCCESS" : "FAILURE",
+                            latency,
+                            status >= 400 ? "Http" + status : null,
+                            "GitHub API " + request.method() + " " + category + " returned " + status,
+                            details
+                    );
+                }
+
+                if (status == 429) {
+                    long waitSeconds = retryAfter != null ? retryAfter : 2L;
+                    if (attempt < maxAttempts && "GET".equalsIgnoreCase(request.method())) {
+                        log.warn("GitHub rate limited (429) on GET {}. Backing off for {}s before retry...", operation, waitSeconds);
+                        try {
+                            Thread.sleep(Math.min(waitSeconds, 5L) * 1000L);
+                            continue;
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                    throw new GitHubRateLimitException(
+                            "GitHub API rate limit exceeded (HTTP 429) for: " + operation +
+                                    ". Remaining: " + remaining + ", Reset: " + reset + ", Retry-After: " + waitSeconds,
+                            waitSeconds, remaining, reset);
+                }
+
+                if (status == 401 || status == 403) {
+                    tokenCache.clear();
+                    throw new GitHubAccessDeniedException(
+                            "GitHub API access denied (HTTP " + status + ") for: " + operation +
+                                    ". Check GITHUB_APP_ID and GITHUB_PRIVATE_KEY. Response: " + response.body());
+                }
+                if (status == 404) {
+                    throw new GitHubAccessDeniedException(
+                            "GitHub resource not found (HTTP 404) for: " + operation + ". Response: " + response.body());
+                }
+                if (status >= 400) {
+                    throw new GitHubApiException(
+                            "GitHub API error HTTP " + status + " for: " + operation + ". Body: " + response.body());
+                }
+                return response;
+            } catch (IOException | InterruptedException e) {
+                Thread.currentThread().interrupt();
+                if (metrics != null) {
+                    metrics.recordGitHubApiRequest(category, request.method(), 500, System.currentTimeMillis() - start);
+                }
+                throw new GitHubApiException("GitHub API call failed for: " + operation + " (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")", e);
             }
-            if (response.statusCode() == 404) {
-                throw new GitHubAccessDeniedException(
-                        "GitHub resource not found (HTTP 404) for: " + operation + ". Response: " + response.body());
-            }
-            if (response.statusCode() >= 400) {
-                throw new GitHubApiException(
-                        "GitHub API error HTTP " + response.statusCode() + " for: " + operation + ". Body: " + response.body());
-            }
-            return response;
-        } catch (IOException | InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new GitHubApiException("GitHub API call failed for: " + operation + " (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")", e);
         }
+    }
+
+    private String categorizeEndpoint(String path) {
+        if (path == null) return "general";
+        if (path.contains("/access_tokens")) return "installation_token";
+        if (path.contains("/pulls")) return "pull_requests";
+        if (path.contains("/commits")) return "commits";
+        if (path.contains("/actions/runs")) return "workflow_runs";
+        if (path.contains("/repositories") || path.contains("/repos")) return "repositories";
+        return "general";
     }
 
     private String nextPageUrl(HttpResponse<?> response) {

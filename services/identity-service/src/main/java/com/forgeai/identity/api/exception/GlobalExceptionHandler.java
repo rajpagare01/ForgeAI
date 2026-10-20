@@ -55,7 +55,9 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiErrorResponse> buildErrorResponse(HttpStatus status, String code, String message, WebRequest request) {
         String path = ((ServletWebRequest) request).getRequest().getRequestURI();
-        ApiErrorResponse error = new ApiErrorResponse(Instant.now(), status.value(), code, message, path);
+        String traceId = org.slf4j.MDC.get("traceId");
+        String correlationId = org.slf4j.MDC.get("correlationId");
+        ApiErrorResponse error = new ApiErrorResponse(Instant.now(), status.value(), code, message, path, traceId, correlationId);
         return new ResponseEntity<>(error, status);
     }
 }

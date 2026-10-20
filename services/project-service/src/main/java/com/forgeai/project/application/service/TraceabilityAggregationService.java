@@ -46,6 +46,15 @@ public class TraceabilityAggregationService {
     private final AiServiceClient aiServiceClient;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AuditService auditService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.project.infrastructure.metrics.ProjectMetrics projectMetrics;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.project.infrastructure.logging.StructuredLogger structuredLogger;
+
     /**
      * Request-scoped cache container to eliminate N+1 duplicate downstream HTTP queries.
      */
@@ -670,7 +679,16 @@ public class TraceabilityAggregationService {
             }
         }
 
+        if (projectMetrics != null) {
+            projectMetrics.recordTraceabilitySync();
+        }
         log.info("Traceability sync completed for project {}: {} new links registered", projectId, createdCount);
+        if (structuredLogger != null) {
+            structuredLogger.info("traceability.sync.completed", Map.of(
+                    "projectId", projectId.toString(),
+                    "syncedLinks", createdCount
+            ));
+        }
         return createdCount;
     }
 
@@ -697,13 +715,42 @@ public class TraceabilityAggregationService {
                 .createdAt(Instant.now())
                 .build();
 
-        return traceabilityLinkRepository.save(link);
+        TraceabilityLink saved = traceabilityLinkRepository.save(link);
+        if (auditService != null) {
+            UUID actor = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+            String actorStr = actor != null ? actor.toString() : "system";
+            auditService.recordEvent(
+                    organizationId,
+                    actorStr,
+                    "TRACEABILITY_LINK_CREATED",
+                    "TRACEABILITY_LINK",
+                    saved.getId().toString(),
+                    "CREATE",
+                    "SUCCESS",
+                    Map.of("sourceType", request.sourceType(), "targetType", request.targetType(), "projectId", projectId.toString())
+            );
+        }
+        return saved;
     }
 
     @Transactional
     public void deleteLink(UUID organizationId, UUID linkId) {
         validateTenant(organizationId);
         traceabilityLinkRepository.deleteById(organizationId, linkId);
+        if (auditService != null) {
+            UUID actor = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+            String actorStr = actor != null ? actor.toString() : "system";
+            auditService.recordEvent(
+                    organizationId,
+                    actorStr,
+                    "TRACEABILITY_LINK_DELETED",
+                    "TRACEABILITY_LINK",
+                    linkId.toString(),
+                    "DELETE",
+                    "SUCCESS",
+                    null
+            );
+        }
     }
 
     @Transactional
@@ -769,6 +816,8 @@ public class TraceabilityAggregationService {
             dataJson = "{}";
         }
 
+        UUID actor = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+        String actorStr = actor != null ? actor.toString() : "system";
         TraceabilitySnapshot snapshot = TraceabilitySnapshot.builder()
                 .id(UUID.randomUUID())
                 .organizationId(organizationId)
@@ -777,11 +826,33 @@ public class TraceabilityAggregationService {
                 .prNumber(prNumber)
                 .commitSha(commitSha)
                 .repositoryId(repositoryId)
+                .createdBy(actorStr)
+                .schemaVersion("1.0")
                 .snapshotData(dataJson)
                 .createdAt(Instant.now())
                 .build();
 
-        return traceabilitySnapshotRepository.save(snapshot);
+        TraceabilitySnapshot saved = traceabilitySnapshotRepository.save(snapshot);
+        if (auditService != null) {
+            auditService.recordEvent(
+                    organizationId,
+                    actorStr,
+                    "TRACEABILITY_SNAPSHOT_CREATED",
+                    "TRACEABILITY_SNAPSHOT",
+                    saved.getId().toString(),
+                    "CREATE",
+                    "SUCCESS",
+                    Map.of("snapshotName", name, "projectId", projectId.toString())
+            );
+        }
+        if (structuredLogger != null) {
+            structuredLogger.info("traceability.snapshot.created", Map.of(
+                    "snapshotId", saved.getId().toString(),
+                    "projectId", projectId.toString(),
+                    "snapshotName", name
+            ));
+        }
+        return saved;
     }
 
     @Transactional(readOnly = true)

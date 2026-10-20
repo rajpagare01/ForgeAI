@@ -3,9 +3,6 @@ package com.forgeai.testing.infrastructure.persistence.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -33,12 +30,14 @@ public class OutboxEventEntity {
     @Column(name = "event_type", nullable = false, length = 64)
     private String eventType;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
+    @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
     private String payload;
 
     @Column(name = "trace_id", length = 64)
     private String traceId;
+
+    @Column(name = "correlation_id", length = 64)
+    private String correlationId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -50,6 +49,20 @@ public class OutboxEventEntity {
     @Builder.Default
     private Integer attemptCount = 0;
 
+    @Column(name = "max_attempts", nullable = false)
+    @Builder.Default
+    private Integer maxAttempts = 5;
+
+    @Column(name = "status", nullable = false, length = 32)
+    @Builder.Default
+    private String status = "PENDING";
+
+    @Column(name = "next_retry_at")
+    private Instant nextRetryAt;
+
+    @Column(name = "dead_letter_at")
+    private Instant deadLetterAt;
+
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
@@ -57,5 +70,7 @@ public class OutboxEventEntity {
     public void prePersist() {
         if (createdAt == null) createdAt = Instant.now();
         if (attemptCount == null) attemptCount = 0;
+        if (maxAttempts == null) maxAttempts = 5;
+        if (status == null) status = "PENDING";
     }
 }

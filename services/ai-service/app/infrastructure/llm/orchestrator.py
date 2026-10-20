@@ -47,14 +47,24 @@ class FailoverLLMOrchestrator(LLMProvider):
             )
         )
 
+        from app.core.metrics import ai_metrics
+        import time
+
+        start_time = time.time()
+        gemini_failed = False
+
         # 1. Attempt Primary Provider: Gemini
         try:
             response = await self.primary_provider.generate_text(
                 prompt=prompt,
                 system_instruction=system_instruction,
             )
+            elapsed_ms = (time.time() - start_time) * 1000.0
+            ai_metrics.record_analysis(success=True, latency_ms=elapsed_ms, fallback_used=False, provider_failed=False)
             return response
         except ProviderUnavailableException as gemini_err:
+            gemini_failed = True
+            ai_metrics.record_analysis(success=False, latency_ms=0, fallback_used=False, provider_failed=True)
             logger.warning(
                 "Gemini primary provider unavailable (%s); initiating failover to Groq fallback.",
                 str(gemini_err),
@@ -66,21 +76,26 @@ class FailoverLLMOrchestrator(LLMProvider):
                 prompt=prompt,
                 system_instruction=system_instruction,
             )
+            elapsed_ms = (time.time() - start_time) * 1000.0
+            ai_metrics.record_analysis(success=True, latency_ms=elapsed_ms, fallback_used=True, provider_failed=False)
             logger.info(
                 "Groq fallback provider succeeded for prompt (fallback_used=True)."
             )
             return response
         except ProviderUnavailableException as groq_err:
+            ai_metrics.record_analysis(success=False, latency_ms=0, fallback_used=True, provider_failed=True)
             logger.warning(
                 "Groq fallback provider also unavailable (%s).",
                 str(groq_err),
             )
 
         # 3. Both Providers Unavailable
+        elapsed_ms = (time.time() - start_time) * 1000.0
         if is_test_mode:
             logger.info(
                 "[TEST_FALLBACK] Providing explicit development test response because all providers are unavailable in test/dev mode."
             )
+            ai_metrics.record_analysis(success=True, latency_ms=elapsed_ms, fallback_used=True, provider_failed=True)
             return ProviderResponse(
                 text=(
                     "### Impact Analysis & Architectural Summary (Test Fallback)\n"
@@ -97,6 +112,7 @@ class FailoverLLMOrchestrator(LLMProvider):
         logger.error(
             "AI generation failed: All configured providers (Gemini primary, Groq fallback) are unavailable in production."
         )
+        ai_metrics.record_analysis(success=False, latency_ms=elapsed_ms, fallback_used=True, provider_failed=True)
         raise AIUnavailableException(
             "All configured AI providers (Gemini primary, Groq fallback) are currently unavailable."
         )
