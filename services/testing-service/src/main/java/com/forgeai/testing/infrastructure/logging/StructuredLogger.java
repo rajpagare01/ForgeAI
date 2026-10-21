@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 public class StructuredLogger {
 
     private static final Pattern SECRET_PATTERN = Pattern.compile(
-            "(bearer\\s+[\\w\\-._]+|token[=:]\\s*[\\w\\-._]+|key[=:]\\s*[\\w\\-._]+|password[=:]\\s*[^,\\s]+)",
+            "(-----BEGIN[^\r\n]+-----[\\s\\S]*?-----END[^\r\n]+-----|bearer\\s+[\\w\\-._]+|token[=:]\\s*[\\w\\-._]+|key[=:]\\s*(?!-----)[\\w\\-._]+|password[=:]\\s*[^,\\s]+)",
             Pattern.CASE_INSENSITIVE
     );
 

@@ -123,4 +123,39 @@ public class OutboxDeadLetterAndReplayTest {
         assertThat(entity.getLastError()).isNull();
         assertThat(entity.getNextRetryAt()).isNotNull();
     }
+
+    @Test
+    @DisplayName("Outbox event with unsupported event type fails and increments retry attempts")
+    void testUnsupportedEventTypeThrowsAndRetries() throws Exception {
+        SpringDataOutboxEventRepository repo = Mockito.mock(SpringDataOutboxEventRepository.class);
+        EventPublisher publisher = Mockito.mock(EventPublisher.class);
+        SourceControlMetrics metrics = Mockito.mock(SourceControlMetrics.class);
+        StructuredLogger logger = Mockito.mock(StructuredLogger.class);
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        OutboxPublisherRelay relay = new OutboxPublisherRelay(
+                repo, publisher, objectMapper, metrics, logger
+        );
+
+        OutboxEventEntity entity = OutboxEventEntity.builder()
+                .id(UUID.randomUUID())
+                .eventType("UNSUPPORTED_POISON_PILL_EVENT")
+                .aggregateType("REPOSITORY")
+                .aggregateId("repo-999")
+                .payload("{\"test\": 123}")
+                .attemptCount(0)
+                .maxAttempts(3)
+                .status("PENDING")
+                .build();
+
+        when(repo.findUnpublishedEventsForProcessing(anyInt())).thenReturn(List.of(entity));
+
+        relay.processOutboxBatch();
+
+        assertThat(entity.getAttemptCount()).isEqualTo(1);
+        assertThat(entity.getStatus()).isEqualTo("RETRYING");
+        assertThat(entity.getLastError()).contains("Unsupported or unmapped outbox event type");
+        verify(metrics).recordOutboxRetry();
+        verify(repo).save(entity);
+    }
 }

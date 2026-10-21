@@ -204,11 +204,10 @@ public class OutboxPublisherRelay {
             default -> null;
         };
 
-        if (domainEvent != null) {
-            EventEnvelope<DomainEvent> envelope = EventEnvelope.from(domainEvent, entity.getTraceId());
-            eventPublisher.publish(envelope);
-        } else {
-            log.warn("Unknown event type encountered in outbox: {}", eventType);
+        if (domainEvent == null) {
+            throw new IllegalArgumentException("Unsupported or unmapped outbox event type: " + eventType);
         }
+        EventEnvelope<DomainEvent> envelope = EventEnvelope.from(domainEvent, entity.getTraceId());
+        eventPublisher.publish(envelope);
     }
 }

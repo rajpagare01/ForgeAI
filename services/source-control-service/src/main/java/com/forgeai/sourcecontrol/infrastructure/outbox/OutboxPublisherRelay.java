@@ -122,6 +122,7 @@ public class OutboxPublisherRelay {
                 if (attempts >= maxAttempts) {
                     entity.setStatus("DEAD_LETTER");
                     entity.setDeadLetterAt(Instant.now());
+                    entity.setNextRetryAt(null);
                     outboxEventRepository.save(entity);
 
                     log.error("Outbox event id={} exceeded max attempts ({}/{}). Transitioned to DEAD_LETTER: {}",
@@ -181,16 +182,16 @@ public class OutboxPublisherRelay {
             default -> null;
         };
 
-        if (domainEvent != null) {
-            EventEnvelope<DomainEvent> envelope = EventEnvelope.from(
-                    domainEvent,
-                    entity.getTraceId(),
-                    entity.getAggregateType(),
-                    entity.getAggregateId()
-            );
-            eventPublisher.publish(envelope);
-        } else {
-            log.warn("Unknown event type encountered in outbox: {}", eventType);
+        if (domainEvent == null) {
+            throw new IllegalArgumentException("Unsupported or unmapped outbox event type: " + eventType);
         }
+
+        EventEnvelope<DomainEvent> envelope = EventEnvelope.from(
+                domainEvent,
+                entity.getTraceId(),
+                entity.getAggregateType(),
+                entity.getAggregateId()
+        );
+        eventPublisher.publish(envelope);
     }
 }

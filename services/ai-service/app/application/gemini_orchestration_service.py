@@ -52,6 +52,7 @@ from app.infrastructure.llm.gemini_client import GeminiClient
 from app.infrastructure.client.source_control_client import SourceControlClient
 from app.infrastructure.client.testing_service_client import TestingServiceClient
 from app.infrastructure.parser.tree_sitter_parser import TreeSitterParser
+from app.core.logging import mask_sensitive_data
 
 logger = logging.getLogger(__name__)
 
@@ -946,6 +947,15 @@ If no defects or risks are detected, provide positive validation findings with s
             "advisory_mode": True,
         }
 
+        # Redact any sensitive environment tokens, passwords, or keys from the output summary
+        sanitized_summary = mask_sensitive_data(resp.text)
+        sanitized_summary = re.sub(
+            r"\b(GEMINI_API_KEY|GROQ_API_KEY|POSTGRES_PASSWORD|JWT_SECRET|GITHUB_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET)\b",
+            "[REDACTED]",
+            sanitized_summary,
+            flags=re.IGNORECASE,
+        )
+
         analysis = Analysis(
             organization_id=organization_id,
             entity_type="PR",
@@ -953,7 +963,7 @@ If no defects or risks are detected, provide positive validation findings with s
             provider=resp.provider,
             model_version=resp.model,
             prompt_version=self.prompt_version,
-            summary=resp.text,
+            summary=sanitized_summary,
             risk_level=unified_risk.final_risk_level,
             risk_score=unified_risk.final_risk,
             confidence=risk_assessment.confidence,

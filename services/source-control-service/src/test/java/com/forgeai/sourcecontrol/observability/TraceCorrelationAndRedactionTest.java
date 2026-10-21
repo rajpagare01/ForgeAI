@@ -26,6 +26,18 @@ public class TraceCorrelationAndRedactionTest {
         String redacted3 = StructuredLogger.maskSecrets(sensitiveMessage3);
         assertThat(redacted3).doesNotContain("AIzaSyD-1234567890abcdefg");
         assertThat(redacted3).contains("[REDACTED]");
+
+        String sensitiveMessage4 = "Loaded key: -----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC6...\n-----END PRIVATE KEY-----";
+        String redacted4 = StructuredLogger.maskSecrets(sensitiveMessage4);
+        assertThat(redacted4).doesNotContain("MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC6");
+        assertThat(redacted4).contains("[REDACTED]");
+
+        String sensitiveMessage5 = "token=fake-test-token and password=fake-password and Bearer TESTTOKEN123456";
+        String redacted5 = StructuredLogger.maskSecrets(sensitiveMessage5);
+        assertThat(redacted5).doesNotContain("fake-test-token");
+        assertThat(redacted5).doesNotContain("fake-password");
+        assertThat(redacted5).doesNotContain("TESTTOKEN123456");
+        assertThat(redacted5).contains("[REDACTED]");
     }
 
     @Test
