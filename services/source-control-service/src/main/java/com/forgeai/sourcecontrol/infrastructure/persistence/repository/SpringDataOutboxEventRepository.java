@@ -38,5 +38,10 @@ public interface SpringDataOutboxEventRepository extends JpaRepository<OutboxEve
 
     long countByStatus(String status);
 
+    long countByOrganizationIdAndStatus(UUID organizationId, String status);
+
     List<OutboxEventEntity> findByStatusOrderByDeadLetterAtDesc(String status, Pageable pageable);
+
+    List<OutboxEventEntity> findByOrganizationIdAndStatusOrderByDeadLetterAtDesc(
+            UUID organizationId, String status, Pageable pageable);
 }

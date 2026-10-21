@@ -10,7 +10,9 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "outbox_events", indexes = {
-        @Index(name = "idx_sc_outbox_unprocessed", columnList = "created_at")
+        @Index(name = "idx_sc_outbox_unprocessed", columnList = "created_at"),
+        @Index(name = "idx_sc_outbox_org_status_dead_letter", columnList = "organization_id, status, dead_letter_at"),
+        @Index(name = "idx_sc_outbox_org_status", columnList = "organization_id, status")
 })
 @Getter
 @Setter
@@ -22,6 +24,9 @@ public class OutboxEventEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    @Column(name = "organization_id")
+    private UUID organizationId;
 
     @Column(name = "aggregate_type", nullable = false, length = 64)
     private String aggregateType;

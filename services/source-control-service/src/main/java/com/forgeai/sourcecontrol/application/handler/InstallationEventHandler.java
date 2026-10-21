@@ -17,14 +17,34 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.forgeai.sourcecontrol.infrastructure.metrics.InstallationTelemetryReconciler;
+import org.springframework.beans.factory.annotation.Autowired;
+
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class InstallationEventHandler {
 
     private final GitHubInstallationRepository installationRepository;
     private final RepositoryRepository repositoryRepository;
     private final OutboxService outboxService;
+    private final InstallationTelemetryReconciler telemetryReconciler;
+
+    public InstallationEventHandler(GitHubInstallationRepository installationRepository,
+                                  RepositoryRepository repositoryRepository,
+                                  OutboxService outboxService) {
+        this(installationRepository, repositoryRepository, outboxService, null);
+    }
+
+    @Autowired
+    public InstallationEventHandler(GitHubInstallationRepository installationRepository,
+                                  RepositoryRepository repositoryRepository,
+                                  OutboxService outboxService,
+                                  @Autowired(required = false) InstallationTelemetryReconciler telemetryReconciler) {
+        this.installationRepository = installationRepository;
+        this.repositoryRepository = repositoryRepository;
+        this.outboxService = outboxService;
+        this.telemetryReconciler = telemetryReconciler;
+    }
 
     @Transactional
     public void handle(JsonNode rootNode, String deliveryId) {
@@ -52,6 +72,7 @@ public class InstallationEventHandler {
                 installation.setStatus(InstallationStatus.ACTIVE);
             }
             installation = installationRepository.save(installation);
+            if (telemetryReconciler != null) telemetryReconciler.reconcile();
         } else {
             UUID orgId = null;
             if (rootNode.hasNonNull("organization_id")) {
@@ -76,6 +97,7 @@ public class InstallationEventHandler {
                         .updatedAt(Instant.now())
                         .build();
                 installationRepository.save(installation);
+                if (telemetryReconciler != null) telemetryReconciler.reconcile();
                 return; // Do not process attached repositories for quarantined installation
             }
 
@@ -89,6 +111,7 @@ public class InstallationEventHandler {
                     .updatedAt(Instant.now())
                     .build();
             installation = installationRepository.save(installation);
+            if (telemetryReconciler != null) telemetryReconciler.reconcile();
         }
 
         // Handle repositories attached

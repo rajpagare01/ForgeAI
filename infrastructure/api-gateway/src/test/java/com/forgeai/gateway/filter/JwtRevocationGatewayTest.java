@@ -132,4 +132,33 @@ class JwtRevocationGatewayTest {
 
         verify(filterChain).filter(exchange);
     }
+
+    @Test
+    @DisplayName("Fail-closed: If Redis is partitioned during privileged route, request is rejected with 503 Service Unavailable")
+    void redisErrorFailsClosedOnPrivilegedRoutes() {
+        String token = "valid-active-token";
+        String sessionId = "sess-error-privileged";
+
+        Jwt jwt = new Jwt(
+                token,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                Map.of("alg", "RS256"),
+                Map.of("sub", "user-admin", "session_id", sessionId)
+        );
+
+        when(jwtDecoder.decode(token)).thenReturn(Mono.just(jwt));
+        when(redisOperations.hasKey("blacklist:session:" + sessionId))
+                .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
+
+        MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/operations/outbox/events/11111111-1111-1111-1111-111111111111/replay")
+                .header("Authorization", "Bearer " + token)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    }
 }

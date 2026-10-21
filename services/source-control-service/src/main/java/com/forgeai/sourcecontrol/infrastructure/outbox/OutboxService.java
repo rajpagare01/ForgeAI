@@ -48,6 +48,7 @@ public class OutboxService {
             String payloadJson = objectMapper.writeValueAsString(envelope);
 
             OutboxEventEntity entity = OutboxEventEntity.builder()
+                    .organizationId(event.getOrganizationId())
                     .aggregateType(aggregateType)
                     .aggregateId(aggregateId)
                     .eventType(event.getEventType())

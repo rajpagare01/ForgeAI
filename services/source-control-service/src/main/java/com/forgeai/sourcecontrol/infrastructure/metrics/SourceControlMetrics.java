@@ -153,6 +153,28 @@ public class SourceControlMetrics {
         outboxDeadLetterCounter.increment();
     }
 
+    public static final java.util.UUID QUARANTINE_ORG_ID = java.util.UUID.fromString("00000000-0000-0000-0000-000000000000");
+
+    public void reconcileInstallations(java.util.List<com.forgeai.sourcecontrol.domain.model.GitHubInstallation> installations) {
+        int active = 0;
+        int quarantined = 0;
+        int suspended = 0;
+
+        if (installations != null) {
+            for (com.forgeai.sourcecontrol.domain.model.GitHubInstallation inst : installations) {
+                if (QUARANTINE_ORG_ID.equals(inst.getOrganizationId())) {
+                    quarantined++;
+                } else if (inst.getStatus() == com.forgeai.sourcecontrol.domain.model.InstallationStatus.ACTIVE) {
+                    active++;
+                } else if (inst.getStatus() == com.forgeai.sourcecontrol.domain.model.InstallationStatus.SUSPENDED) {
+                    suspended++;
+                }
+            }
+        }
+
+        updateInstallationCounts(active, quarantined, suspended);
+    }
+
     public void updateInstallationCounts(int active, int quarantined, int suspended) {
         activeInstallationsGauge.set(active);
         quarantinedInstallationsGauge.set(quarantined);

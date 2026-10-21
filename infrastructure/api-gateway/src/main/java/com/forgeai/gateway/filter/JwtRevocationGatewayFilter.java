@@ -65,6 +65,13 @@ public class JwtRevocationGatewayFilter implements GlobalFilter, Ordered {
                                 return chain.filter(exchange);
                             })
                             .onErrorResume(e -> {
+                                String path = exchange.getRequest().getURI().getPath();
+                                boolean isPrivileged = path.startsWith("/api/v1/operations") || path.startsWith("/api/v1/admin");
+                                if (isPrivileged) {
+                                    log.error("Redis unreachable during revocation check on privileged route {}, failing closed: {}", path, e.getMessage());
+                                    exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+                                    return exchange.getResponse().setComplete();
+                                }
                                 // Fail-open for user traffic if Redis partitions/fails
                                 log.error("Redis unreachable during revocation check, failing open: {}", e.getMessage());
                                 return chain.filter(exchange);

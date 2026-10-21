@@ -47,6 +47,9 @@ public class RepositoryApplicationService {
     private final GitHubAppConfig gitHubAppConfig;
     private final com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient aiServiceClient;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.sourcecontrol.infrastructure.metrics.InstallationTelemetryReconciler telemetryReconciler;
+
     public RepositoryApplicationService(
             RepositoryRepository repositoryRepository,
             GitHubInstallationRepository installationRepository,
@@ -392,6 +395,7 @@ public class RepositoryApplicationService {
             inst.setStatus(InstallationStatus.ACTIVE);
             inst.setUpdatedAt(Instant.now());
             GitHubInstallation saved = installationRepository.save(inst);
+            if (telemetryReconciler != null) telemetryReconciler.reconcile();
             log.info("[GitHub] Installation {} claimed by orgId={}", installationId, organizationId);
             return saved;
         } else {
@@ -406,6 +410,7 @@ public class RepositoryApplicationService {
                     .updatedAt(Instant.now())
                     .build();
             GitHubInstallation saved = installationRepository.save(inst);
+            if (telemetryReconciler != null) telemetryReconciler.reconcile();
             log.info("[GitHub] New installation {} registered and claimed by orgId={}", installationId, organizationId);
             return saved;
         }
