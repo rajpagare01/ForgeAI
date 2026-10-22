@@ -33,21 +33,30 @@ public class TaskApplicationService {
 
     @Transactional
     public Task createTask(UUID organizationId, UUID projectId, UUID reporterId, CreateTaskCommand command) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
-        }
         if (reporterId == null) {
             throw new IllegalArgumentException("Reporter ID must be provided via tenant context");
         }
 
-        // 1. Validate project belongs to organization
-        Project project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        // 1. Validate project
+        Project project;
+        if (organizationId != null) {
+            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        } else {
+            project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        }
 
         // 2. Validate requirement if supplied and ensure it belongs to the SAME project
         if (command.requirementId() != null) {
-            Requirement req = requirementRepository.findByIdAndOrganizationId(command.requirementId(), organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + command.requirementId() + " in org=" + organizationId));
+            Requirement req;
+            if (organizationId != null) {
+                req = requirementRepository.findByIdAndOrganizationId(command.requirementId(), organizationId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + command.requirementId() + " in org=" + organizationId));
+            } else {
+                req = requirementRepository.findById(command.requirementId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + command.requirementId()));
+            }
             if (!req.getProjectId().equals(projectId)) {
                 throw new IllegalArgumentException("Requirement " + command.requirementId() + " belongs to project " + req.getProjectId() + ", not " + projectId);
             }
@@ -65,9 +74,10 @@ public class TaskApplicationService {
 
         Instant now = Instant.now();
         TaskPriority priority = command.priority() != null ? command.priority() : TaskPriority.MEDIUM;
+        UUID effectiveOrgId = project.getOrganizationId();
         Task task = Task.builder()
                 .projectId(project.getId())
-                .organizationId(organizationId)
+                .organizationId(effectiveOrgId)
                 .requirementId(command.requirementId())
                 .taskKey(command.taskKey().toUpperCase())
                 .title(command.title())
@@ -87,7 +97,7 @@ public class TaskApplicationService {
         TaskCreatedEvent event = TaskCreatedEvent.builder()
                 .taskId(saved.getId())
                 .projectId(saved.getProjectId())
-                .organizationId(saved.getOrganizationId())
+                .organizationId(effectiveOrgId != null ? effectiveOrgId : UUID.fromString("00000000-0000-0000-0000-000000000000"))
                 .taskKey(saved.getTaskKey())
                 .title(saved.getTitle())
                 .status(saved.getStatus())
@@ -104,12 +114,14 @@ public class TaskApplicationService {
 
     @Transactional
     public Task updateTaskStatus(UUID organizationId, UUID taskId, UpdateTaskStatusCommand command) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        Task task;
+        if (organizationId != null) {
+            task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+        } else {
+            task = taskRepository.findById(taskId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
         }
-
-        Task task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
 
         if (command.version() != null && !command.version().equals(task.getVersion())) {
             throw new jakarta.persistence.OptimisticLockException(
@@ -133,7 +145,7 @@ public class TaskApplicationService {
         TaskStatusChangedEvent event = TaskStatusChangedEvent.builder()
                 .taskId(updated.getId())
                 .projectId(updated.getProjectId())
-                .organizationId(updated.getOrganizationId())
+                .organizationId(updated.getOrganizationId() != null ? updated.getOrganizationId() : UUID.fromString("00000000-0000-0000-0000-000000000000"))
                 .taskKey(updated.getTaskKey())
                 .oldStatus(currentStatus)
                 .newStatus(targetStatus)
@@ -147,20 +159,23 @@ public class TaskApplicationService {
 
     @Transactional
     public CodeLink linkCodeArtifact(UUID organizationId, UUID taskId, LinkCodeArtifactCommand command) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        Task task;
+        if (organizationId != null) {
+            task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+        } else {
+            task = taskRepository.findById(taskId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
         }
-
-        Task task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
 
         if (codeLinkRepository.existsByTaskIdAndLinkTypeAndExternalRef(taskId, command.linkType(), command.externalRef())) {
             throw new DuplicateResourceException("Code link for task " + taskId + " with ref " + command.externalRef() + " already exists");
         }
 
         Instant now = Instant.now();
+        UUID effectiveOrgId = task.getOrganizationId();
         CodeLink codeLink = CodeLink.builder()
-                .organizationId(organizationId)
+                .organizationId(effectiveOrgId)
                 .taskId(task.getId())
                 .linkType(command.linkType())
                 .externalRef(command.externalRef())
@@ -174,7 +189,7 @@ public class TaskApplicationService {
         // Outbox event
         CodeLinkedEvent event = CodeLinkedEvent.builder()
                 .codeLinkId(saved.getId())
-                .organizationId(organizationId)
+                .organizationId(effectiveOrgId != null ? effectiveOrgId : UUID.fromString("00000000-0000-0000-0000-000000000000"))
                 .taskId(task.getId())
                 .linkType(saved.getLinkType())
                 .externalRef(saved.getExternalRef())
@@ -189,28 +204,50 @@ public class TaskApplicationService {
 
     @Transactional(readOnly = true)
     public Task getTaskById(UUID organizationId, UUID taskId) {
-        return taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+        if (organizationId != null) {
+            return taskRepository.findByIdAndOrganizationId(taskId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+        }
+        return taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
     }
 
     @Transactional(readOnly = true)
     public List<Task> listTasks(UUID organizationId, UUID projectId, TaskStatus status) {
-        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        if (organizationId != null) {
+            projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+
+            if (status != null) {
+                return taskRepository.findAllByOrganizationIdAndProjectIdAndStatus(organizationId, projectId, status);
+            }
+            return taskRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
+        }
+
+        projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
 
         if (status != null) {
-            return taskRepository.findAllByOrganizationIdAndProjectIdAndStatus(organizationId, projectId, status);
+            return taskRepository.findAllByProjectIdAndStatus(projectId, status);
         }
-        return taskRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
+        return taskRepository.findAllByProjectId(projectId);
     }
 
     @Transactional(readOnly = true)
     public List<CodeLink> getCodeLinksForTask(UUID organizationId, UUID taskId) {
-        taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+        if (organizationId != null) {
+            taskRepository.findByIdAndOrganizationId(taskId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
 
-        return codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, taskId);
+            return codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, taskId);
+        }
+
+        taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+
+        return codeLinkRepository.findAllByTaskId(taskId);
     }
+
 
     private void validateAssignee(UUID assigneeId) {
         UserDirectory user = userDirectoryRepository.findById(assigneeId)

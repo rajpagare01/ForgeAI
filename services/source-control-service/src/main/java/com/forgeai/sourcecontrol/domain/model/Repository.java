@@ -15,7 +15,10 @@ import java.util.UUID;
 public class Repository {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
+    private String scope;
     private Long githubRepoId;
+
     private Long installationId;
     private String name;
     private String fullName;

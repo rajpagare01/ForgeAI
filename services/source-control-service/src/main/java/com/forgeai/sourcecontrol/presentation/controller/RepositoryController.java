@@ -28,15 +28,18 @@ public class RepositoryController {
     private final RepositoryApplicationService repositoryApplicationService;
 
     @GetMapping
-    public ResponseEntity<List<Repository>> listRepositories() {
+    public ResponseEntity<List<Repository>> listRepositories(
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listRepositories(organizationId));
+        return ResponseEntity.ok(repositoryApplicationService.listRepositories(organizationId, workspaceId));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Repository> getRepository(@PathVariable UUID id) {
+    public ResponseEntity<Repository> getRepository(
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getRepository(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.getRepository(organizationId, workspaceId, id));
     }
 
     @GetMapping("/{id}/sync-status")
@@ -89,23 +92,24 @@ public class RepositoryController {
     }
 
     /**
-     * Lists all GitHub repositories available to this organization's GitHub App installation.
+     * Lists all GitHub repositories available to this organization or workspace's GitHub App installation.
      * All data is fetched live from GitHub — nothing is cached or fabricated.
      */
     @GetMapping("/available")
-    public ResponseEntity<List<GitHubRepositoryMetadata>> listAvailableRepositories() {
+    public ResponseEntity<List<GitHubRepositoryMetadata>> listAvailableRepositories(
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listAvailableRepositories(organizationId));
+        return ResponseEntity.ok(repositoryApplicationService.listAvailableRepositories(organizationId, workspaceId));
     }
 
     /**
-     * Connects a GitHub repository to this ForgeAI organization.
-     *
-     * <p>Only {@code fullName} ("owner/repo") is accepted from the caller.
-     * All other metadata (GitHub repo ID, default branch, visibility) is fetched
-     * authoritatively from GitHub and cannot be overridden by the client.
+     * Connects a GitHub repository to this ForgeAI organization or workspace.
      */
-    public record ConnectRepositoryRequest(String fullName) {}
+    public record ConnectRepositoryRequest(String fullName, UUID workspaceId) {
+        public ConnectRepositoryRequest(String fullName) {
+            this(fullName, null);
+        }
+    }
 
     @PostMapping("/connect")
     public ResponseEntity<Repository> connectRepository(@RequestBody ConnectRepositoryRequest request) {
@@ -113,7 +117,8 @@ public class RepositoryController {
         if (request == null || request.fullName() == null || request.fullName().isBlank()) {
             throw new IllegalArgumentException("fullName is required (format: owner/repo)");
         }
-        Repository repo = repositoryApplicationService.connectRepository(organizationId, request.fullName());
+        Repository repo = repositoryApplicationService.connectRepository(organizationId, request.workspaceId(), request.fullName());
         return ResponseEntity.ok(repo);
     }
 }
+

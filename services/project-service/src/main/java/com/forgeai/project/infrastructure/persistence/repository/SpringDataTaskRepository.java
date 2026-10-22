@@ -14,6 +14,9 @@ public interface SpringDataTaskRepository extends JpaRepository<TaskJpaEntity, U
     Optional<TaskJpaEntity> findByOrganizationIdAndTaskKey(UUID organizationId, String taskKey);
     List<TaskJpaEntity> findAllByOrganizationIdAndProjectId(UUID organizationId, UUID projectId);
     List<TaskJpaEntity> findAllByOrganizationIdAndProjectIdAndStatus(UUID organizationId, UUID projectId, TaskStatus status);
+    List<TaskJpaEntity> findAllByProjectId(UUID projectId);
+    List<TaskJpaEntity> findAllByProjectIdAndStatus(UUID projectId, TaskStatus status);
     List<TaskJpaEntity> findAllByOrganizationIdAndAssigneeId(UUID organizationId, UUID assigneeId);
     boolean existsByProjectIdAndTaskKey(UUID projectId, String taskKey);
 }
+

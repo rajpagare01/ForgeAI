@@ -11,7 +11,8 @@ import com.forgeai.identity.domain.valueobject.OrganizationSlug;
 import com.forgeai.identity.domain.event.MemberRoleChangedEvent;
 import com.forgeai.identity.domain.event.OrganizationCreatedEvent;
 import com.forgeai.identity.infrastructure.outbox.OutboxService;
-import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,8 @@ import java.util.stream.Collectors;
 @Service
 public class OrganizationService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrganizationService.class);
+
     private final OrganizationRepository organizationRepository;
     private final OrganizationMembershipRepository membershipRepository;
     private final RoleRepository roleRepository;
@@ -31,6 +34,11 @@ public class OrganizationService {
     private final SecurityEventService securityEventService;
     private final OutboxService outboxService;
     private final AuditService auditService;
+    private WorkspaceService workspaceService;
+
+    public void setWorkspaceService(WorkspaceService workspaceService) {
+        this.workspaceService = workspaceService;
+    }
 
     public OrganizationService(OrganizationRepository organizationRepository,
                                OrganizationMembershipRepository membershipRepository,
@@ -39,7 +47,18 @@ public class OrganizationService {
                                SecurityEventService securityEventService,
                                OutboxService outboxService) {
         this(organizationRepository, membershipRepository, roleRepository, userRepository,
-                securityEventService, outboxService, null);
+                securityEventService, outboxService, null, null);
+    }
+
+    public OrganizationService(OrganizationRepository organizationRepository,
+                               OrganizationMembershipRepository membershipRepository,
+                               RoleRepository roleRepository,
+                               UserRepository userRepository,
+                               SecurityEventService securityEventService,
+                               OutboxService outboxService,
+                               AuditService auditService) {
+        this(organizationRepository, membershipRepository, roleRepository, userRepository,
+                securityEventService, outboxService, auditService, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -49,7 +68,8 @@ public class OrganizationService {
                                UserRepository userRepository,
                                SecurityEventService securityEventService,
                                OutboxService outboxService,
-                               @org.springframework.beans.factory.annotation.Autowired(required = false) AuditService auditService) {
+                               @org.springframework.beans.factory.annotation.Autowired(required = false) AuditService auditService,
+                               @org.springframework.beans.factory.annotation.Autowired(required = false) WorkspaceService workspaceService) {
         this.organizationRepository = organizationRepository;
         this.membershipRepository = membershipRepository;
         this.roleRepository = roleRepository;
@@ -57,6 +77,7 @@ public class OrganizationService {
         this.securityEventService = securityEventService;
         this.outboxService = outboxService;
         this.auditService = auditService;
+        this.workspaceService = workspaceService;
     }
 
     @Transactional
@@ -110,6 +131,14 @@ public class OrganizationService {
                     .slug(savedOrg.getSlug().value())
                     .name(savedOrg.getName())
                     .build(), null);
+        }
+
+        if (workspaceService != null) {
+            try {
+                workspaceService.getOrCreateOrganizationWorkspace(savedOrg.getId(), creatorId, savedOrg.getName());
+            } catch (Exception e) {
+                log.warn("Organization workspace provisioning warning: {}", e.getMessage());
+            }
         }
 
         return savedOrg;

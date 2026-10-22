@@ -12,7 +12,9 @@ import java.util.UUID;
 @Table(name = "outbox_events", indexes = {
         @Index(name = "idx_sc_outbox_unprocessed", columnList = "created_at"),
         @Index(name = "idx_sc_outbox_org_status_dead_letter", columnList = "organization_id, status, dead_letter_at"),
-        @Index(name = "idx_sc_outbox_org_status", columnList = "organization_id, status")
+        @Index(name = "idx_sc_outbox_org_status", columnList = "organization_id, status"),
+        @Index(name = "idx_sc_outbox_ws_status", columnList = "workspace_id, status"),
+        @Index(name = "idx_sc_outbox_scope_status", columnList = "scope, status")
 })
 @Getter
 @Setter
@@ -25,8 +27,16 @@ public class OutboxEventEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "organization_id")
     private UUID organizationId;
+
+    @Column(name = "workspace_id")
+    private UUID workspaceId;
+
+    @Column(name = "scope", nullable = false, length = 32)
+    @Builder.Default
+    private String scope = "ORGANIZATION";
+
 
     @Column(name = "aggregate_type", nullable = false, length = 64)
     private String aggregateType;
@@ -80,5 +90,9 @@ public class OutboxEventEntity {
         if (attemptCount == null) attemptCount = 0;
         if (maxAttempts == null) maxAttempts = 5;
         if (status == null) status = "PENDING";
+        if (scope == null) {
+            scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
+        }
     }
 }
+

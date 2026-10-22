@@ -53,6 +53,12 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Resource has been modified concurrently by another transaction. Please retry.");
     }
 
+    @ExceptionHandler(com.forgeai.project.domain.exception.AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(com.forgeai.project.domain.exception.AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        return buildErrorResponse(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         log.warn("Illegal argument: {}", ex.getMessage());

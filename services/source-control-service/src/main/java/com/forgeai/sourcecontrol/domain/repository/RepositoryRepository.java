@@ -10,7 +10,10 @@ public interface RepositoryRepository {
     Repository save(Repository repository);
     Optional<Repository> findById(UUID id);
     Optional<Repository> findByIdAndOrganizationId(UUID id, UUID organizationId);
+    Optional<Repository> findByIdAndWorkspaceId(UUID id, UUID workspaceId);
     Optional<Repository> findByGithubRepoId(Long githubRepoId);
     List<Repository> findAllByOrganizationId(UUID organizationId);
+    List<Repository> findAllByWorkspaceId(UUID workspaceId);
     List<Repository> findAllByInstallationId(Long installationId);
 }
+

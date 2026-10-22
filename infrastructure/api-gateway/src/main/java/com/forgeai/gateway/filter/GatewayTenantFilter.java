@@ -73,6 +73,7 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                     httpHeaders.remove("X-Organization-Id");
                     httpHeaders.remove("X-User-Roles");
                     httpHeaders.remove("X-Permissions");
+                    httpHeaders.remove("X-Workspace-Id");
                 })
                 .build();
 
@@ -122,7 +123,8 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                     }
 
                     String path = exchange.getRequest().getURI().getPath();
-                    boolean isUserScopedRoute = path.startsWith("/api/v1/organizations") ||
+                    boolean isUserScopedRoute = path.startsWith("/api/v1/workspaces") ||
+                                                path.startsWith("/api/v1/organizations") ||
                                                 path.startsWith("/api/v1/users") ||
                                                 path.startsWith("/api/v1/auth") ||
                                                 path.startsWith("/.well-known") ||

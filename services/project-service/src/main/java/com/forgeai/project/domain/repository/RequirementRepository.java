@@ -8,8 +8,10 @@ import java.util.UUID;
 
 public interface RequirementRepository {
     Requirement save(Requirement requirement);
+    Optional<Requirement> findById(UUID id);
     Optional<Requirement> findByIdAndOrganizationId(UUID id, UUID organizationId);
     Optional<Requirement> findByProjectIdAndIdentifier(UUID projectId, String identifier);
+    List<Requirement> findAllByProjectId(UUID projectId);
     List<Requirement> findAllByOrganizationIdAndProjectId(UUID organizationId, UUID projectId);
     boolean existsByProjectIdAndIdentifier(UUID projectId, String identifier);
 }

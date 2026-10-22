@@ -28,6 +28,12 @@ public class CodeLinkRepositoryAdapter implements CodeLinkRepository {
     }
 
     @Override
+    public Optional<CodeLink> findById(UUID id) {
+        return springDataRepository.findById(id)
+                .map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
     public Optional<CodeLink> findByIdAndOrganizationId(UUID id, UUID organizationId) {
         return springDataRepository.findByIdAndOrganizationId(id, organizationId)
                 .map(EntityDomainMapper::toDomain);
@@ -39,6 +45,14 @@ public class CodeLinkRepositoryAdapter implements CodeLinkRepository {
                 .map(EntityDomainMapper::toDomain)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public List<CodeLink> findAllByTaskId(UUID taskId) {
+        return springDataRepository.findAllByTaskId(taskId).stream()
+                .map(EntityDomainMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
 
     @Override
     public boolean existsByTaskIdAndLinkTypeAndExternalRef(UUID taskId, CodeLinkType linkType, String externalRef) {

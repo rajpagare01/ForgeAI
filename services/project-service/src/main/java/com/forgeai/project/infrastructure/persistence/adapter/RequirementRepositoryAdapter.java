@@ -27,6 +27,11 @@ public class RequirementRepositoryAdapter implements RequirementRepository {
     }
 
     @Override
+    public Optional<Requirement> findById(UUID id) {
+        return springDataRepository.findById(id).map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
     public Optional<Requirement> findByIdAndOrganizationId(UUID id, UUID organizationId) {
         return springDataRepository.findByIdAndOrganizationId(id, organizationId)
                 .map(EntityDomainMapper::toDomain);
@@ -36,6 +41,13 @@ public class RequirementRepositoryAdapter implements RequirementRepository {
     public Optional<Requirement> findByProjectIdAndIdentifier(UUID projectId, String identifier) {
         return springDataRepository.findByProjectIdAndIdentifier(projectId, identifier)
                 .map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
+    public List<Requirement> findAllByProjectId(UUID projectId) {
+        return springDataRepository.findAllByProjectId(projectId).stream()
+                .map(EntityDomainMapper::toDomain)
+                .collect(Collectors.toList());
     }
 
     @Override

@@ -32,6 +32,8 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
                 RepositoryJpaEntity entity = existingOpt.get();
                 entity.setName(repository.getName());
                 entity.setFullName(repository.getFullName());
+                entity.setWorkspaceId(repository.getWorkspaceId());
+                entity.setScope(repository.getScope());
                 entity.setDefaultBranch(repository.getDefaultBranch());
                 entity.setIsPrivate(repository.getIsPrivate());
                 entity.setLatestObservedSha(repository.getLatestObservedSha());
@@ -59,6 +61,11 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
     }
 
     @Override
+    public Optional<Repository> findByIdAndWorkspaceId(UUID id, UUID workspaceId) {
+        return jpaRepository.findByIdAndWorkspaceId(id, workspaceId).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<Repository> findByGithubRepoId(Long githubRepoId) {
         return jpaRepository.findByGithubRepoId(githubRepoId).map(mapper::toDomain);
     }
@@ -71,9 +78,17 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
     }
 
     @Override
+    public List<Repository> findAllByWorkspaceId(UUID workspaceId) {
+        return jpaRepository.findAllByWorkspaceId(workspaceId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Repository> findAllByInstallationId(Long installationId) {
         return jpaRepository.findAllByInstallationId(installationId).stream()
                 .map(mapper::toDomain)
                 .toList();
     }
 }
+

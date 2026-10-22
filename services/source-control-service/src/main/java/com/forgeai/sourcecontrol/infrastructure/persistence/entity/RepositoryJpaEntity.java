@@ -8,7 +8,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "repositories", indexes = {
-        @Index(name = "idx_repo_org", columnList = "organization_id")
+        @Index(name = "idx_repo_org", columnList = "organization_id"),
+        @Index(name = "idx_repo_workspace", columnList = "workspace_id")
 })
 @Getter
 @Setter
@@ -21,11 +22,19 @@ public class RepositoryJpaEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "organization_id")
     private UUID organizationId;
+
+    @Column(name = "workspace_id")
+    private UUID workspaceId;
+
+    @Column(name = "scope", nullable = false, length = 32)
+    @Builder.Default
+    private String scope = "ORGANIZATION";
 
     @Column(name = "github_repo_id", nullable = false, unique = true)
     private Long githubRepoId;
+
 
     @Column(name = "installation_id", nullable = false)
     private Long installationId;
@@ -74,7 +83,14 @@ public class RepositoryJpaEntity {
         Instant now = Instant.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
+        if (scope == null) {
+            scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
+        }
+        if (workspaceId == null && organizationId != null) {
+            workspaceId = organizationId;
+        }
     }
+
 
     @PreUpdate
     public void preUpdate() {

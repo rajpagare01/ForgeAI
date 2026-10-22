@@ -10,6 +10,7 @@ import java.util.UUID;
 public interface SpringDataRequirementRepository extends JpaRepository<RequirementJpaEntity, UUID> {
     Optional<RequirementJpaEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
     Optional<RequirementJpaEntity> findByProjectIdAndIdentifier(UUID projectId, String identifier);
+    List<RequirementJpaEntity> findAllByProjectId(UUID projectId);
     List<RequirementJpaEntity> findAllByOrganizationIdAndProjectId(UUID organizationId, UUID projectId);
     boolean existsByProjectIdAndIdentifier(UUID projectId, String identifier);
 }

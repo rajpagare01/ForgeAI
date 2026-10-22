@@ -12,6 +12,8 @@ public class SourceControlEntityMapper {
         return GitHubInstallation.builder()
                 .id(entity.getId())
                 .organizationId(entity.getOrganizationId())
+                .workspaceId(entity.getWorkspaceId())
+                .scope(entity.getScope())
                 .installationId(entity.getInstallationId())
                 .accountLogin(entity.getAccountLogin())
                 .accountType(entity.getAccountType())
@@ -26,6 +28,8 @@ public class SourceControlEntityMapper {
         return GitHubInstallationJpaEntity.builder()
                 .id(domain.getId())
                 .organizationId(domain.getOrganizationId())
+                .workspaceId(domain.getWorkspaceId())
+                .scope(domain.getScope())
                 .installationId(domain.getInstallationId())
                 .accountLogin(domain.getAccountLogin())
                 .accountType(domain.getAccountType())
@@ -40,6 +44,8 @@ public class SourceControlEntityMapper {
         return Repository.builder()
                 .id(entity.getId())
                 .organizationId(entity.getOrganizationId())
+                .workspaceId(entity.getWorkspaceId())
+                .scope(entity.getScope())
                 .githubRepoId(entity.getGithubRepoId())
                 .installationId(entity.getInstallationId())
                 .name(entity.getName())
@@ -62,6 +68,8 @@ public class SourceControlEntityMapper {
         return RepositoryJpaEntity.builder()
                 .id(domain.getId())
                 .organizationId(domain.getOrganizationId())
+                .workspaceId(domain.getWorkspaceId())
+                .scope(domain.getScope())
                 .githubRepoId(domain.getGithubRepoId())
                 .installationId(domain.getInstallationId())
                 .name(domain.getName())
@@ -84,6 +92,7 @@ public class SourceControlEntityMapper {
         return PullRequest.builder()
                 .id(entity.getId())
                 .organizationId(entity.getOrganizationId())
+                .workspaceId(entity.getWorkspaceId())
                 .repositoryId(entity.getRepositoryId())
                 .githubPrId(entity.getGithubPrId())
                 .number(entity.getNumber())
@@ -103,6 +112,7 @@ public class SourceControlEntityMapper {
         return PullRequestJpaEntity.builder()
                 .id(domain.getId())
                 .organizationId(domain.getOrganizationId())
+                .workspaceId(domain.getWorkspaceId())
                 .repositoryId(domain.getRepositoryId())
                 .githubPrId(domain.getGithubPrId())
                 .number(domain.getNumber())
@@ -122,6 +132,7 @@ public class SourceControlEntityMapper {
         return Commit.builder()
                 .id(entity.getId())
                 .organizationId(entity.getOrganizationId())
+                .workspaceId(entity.getWorkspaceId())
                 .repositoryId(entity.getRepositoryId())
                 .sha(entity.getSha())
                 .message(entity.getMessage())
@@ -137,6 +148,7 @@ public class SourceControlEntityMapper {
         return CommitJpaEntity.builder()
                 .id(domain.getId())
                 .organizationId(domain.getOrganizationId())
+                .workspaceId(domain.getWorkspaceId())
                 .repositoryId(domain.getRepositoryId())
                 .sha(domain.getSha())
                 .message(domain.getMessage())
@@ -146,6 +158,7 @@ public class SourceControlEntityMapper {
                 .createdAt(domain.getCreatedAt())
                 .build();
     }
+
 
     public WebhookDelivery toDomain(WebhookDeliveryJpaEntity entity) {
         if (entity == null) return null;

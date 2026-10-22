@@ -15,7 +15,10 @@ import java.util.UUID;
 public class GitHubInstallation {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
+    private String scope;
     private Long installationId;
+
     private String accountLogin;
     private String accountType;
     private InstallationStatus status;

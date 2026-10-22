@@ -27,13 +27,14 @@ public class RequirementApplicationService {
 
     @Transactional
     public Requirement createRequirement(UUID organizationId, UUID projectId, CreateRequirementCommand command) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        Project project;
+        if (organizationId != null) {
+            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        } else {
+            project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
         }
-
-        // Validate project belongs to organization
-        Project project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
 
         if (requirementRepository.existsByProjectIdAndIdentifier(projectId, command.identifier())) {
             throw new DuplicateResourceException("Requirement with identifier '" + command.identifier() + "' already exists in project " + projectId);
@@ -42,7 +43,7 @@ public class RequirementApplicationService {
         Instant now = Instant.now();
         Requirement requirement = Requirement.builder()
                 .projectId(project.getId())
-                .organizationId(organizationId)
+                .organizationId(project.getOrganizationId())
                 .identifier(command.identifier().toUpperCase())
                 .title(command.title())
                 .description(command.description())
@@ -59,16 +60,24 @@ public class RequirementApplicationService {
 
     @Transactional(readOnly = true)
     public Requirement getRequirementById(UUID organizationId, UUID requirementId) {
-        return requirementRepository.findByIdAndOrganizationId(requirementId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId + " in org=" + organizationId));
+        if (organizationId != null) {
+            return requirementRepository.findByIdAndOrganizationId(requirementId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId + " in org=" + organizationId));
+        }
+        return requirementRepository.findById(requirementId)
+                .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId));
     }
 
     @Transactional(readOnly = true)
     public List<Requirement> listRequirements(UUID organizationId, UUID projectId) {
-        // Validate project belongs to organization
-        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        if (organizationId != null) {
+            projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+            return requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
+        }
 
-        return requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
+        projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        return requirementRepository.findAllByProjectId(projectId);
     }
 }

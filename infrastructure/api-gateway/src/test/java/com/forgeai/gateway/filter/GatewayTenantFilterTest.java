@@ -261,4 +261,78 @@ class GatewayTenantFilterTest {
         assertThat(downstreamExchange.getRequest().getHeaders().getFirst("X-User-Id")).isNull();
         assertThat(exchange.getResponse().getStatusCode()).isNull();
     }
+
+    @Test
+    @DisplayName("SEC-WS-02: Client-supplied X-Workspace-Id is stripped and never forwarded downstream")
+    void clientSuppliedWorkspaceIdIsStripped() {
+        String token = "valid.jwt.token";
+        String userId = "user-123";
+        String orgId = "org-456";
+        String spoofedWorkspaceId = "spoofed-ws-999";
+
+        Jwt jwt = new Jwt(
+                token,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                Map.of("alg", "RS256"),
+                Map.of("sub", userId, "org_id", orgId, "role", "ROLE_USER")
+        );
+
+        when(jwtDecoder.decode(token)).thenReturn(Mono.just(jwt));
+        when(filterChain.filter(any())).thenReturn(Mono.empty());
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/projects")
+                .header("Authorization", "Bearer " + token)
+                .header("X-Workspace-Id", spoofedWorkspaceId)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain))
+                .verifyComplete();
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(filterChain).filter(captor.capture());
+
+        ServerWebExchange downstreamExchange = captor.getValue();
+        assertThat(downstreamExchange.getRequest().getHeaders().getFirst("X-Workspace-Id")).isNull();
+        assertThat(downstreamExchange.getRequest().getHeaders().getFirst("X-User-Id")).isEqualTo(userId);
+    }
+
+    @Test
+    @DisplayName("UT-WS-GATEWAY: User-scoped /api/v1/workspaces route forwards downstream with userId and strips X-Workspace-Id")
+    void workspacesRouteForwardsWithoutOrgContextAndStripsWorkspaceId() {
+        String token = "valid.jwt.token";
+        String userId = "user-user-scoped";
+        String spoofedWorkspaceId = "untrusted-ws-id";
+
+        Jwt jwt = new Jwt(
+                token,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                Map.of("alg", "RS256"),
+                Map.of("sub", userId, "role", "ROLE_USER")
+        );
+
+        when(jwtDecoder.decode(token)).thenReturn(Mono.just(jwt));
+        when(filterChain.filter(any())).thenReturn(Mono.empty());
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/workspaces")
+                .header("Authorization", "Bearer " + token)
+                .header("X-Workspace-Id", spoofedWorkspaceId)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain))
+                .verifyComplete();
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(filterChain).filter(captor.capture());
+
+        ServerWebExchange downstreamExchange = captor.getValue();
+        assertThat(downstreamExchange.getRequest().getHeaders().getFirst("X-Workspace-Id")).isNull();
+        assertThat(downstreamExchange.getRequest().getHeaders().getFirst("X-User-Id")).isEqualTo(userId);
+        assertThat(downstreamExchange.getRequest().getHeaders().getFirst("X-Org-Id")).isNull();
+        assertThat(downstreamExchange.getRequest().getHeaders().getFirst("X-ForgeAI-Internal")).isEqualTo("attested");
+    }
 }
+

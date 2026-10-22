@@ -36,9 +36,19 @@ public class OutboxService {
         if (event == null) {
             throw new IllegalArgumentException("Domain event must not be null");
         }
-        if (event.getOrganizationId() == null) {
-            log.error("Outbox publication rejected: event {} has no organizationId", event.getEventType());
-            throw new IllegalArgumentException("Tenant-owned domain event " + event.getEventType() + " requires a non-null organizationId");
+        String scope = event.getScope() != null ? event.getScope() : (event.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
+        if ("ORGANIZATION".equalsIgnoreCase(scope)) {
+            if (event.getOrganizationId() == null) {
+                log.error("Outbox publication rejected: event {} has no organizationId", event.getEventType());
+                throw new IllegalArgumentException("Tenant-owned domain event " + event.getEventType() + " requires a non-null organizationId");
+            }
+        } else if ("PERSONAL".equalsIgnoreCase(scope)) {
+            if (event.getWorkspaceId() == null) {
+                log.error("Outbox publication rejected: event {} has no workspaceId", event.getEventType());
+                throw new IllegalArgumentException("Personal-scoped domain event " + event.getEventType() + " requires a non-null workspaceId");
+            }
+        } else {
+            throw new IllegalArgumentException("Invalid domain event scope: " + scope);
         }
 
         try {
@@ -56,6 +66,8 @@ public class OutboxService {
 
             OutboxEventEntity entity = OutboxEventEntity.builder()
                     .organizationId(event.getOrganizationId())
+                    .workspaceId(event.getWorkspaceId() != null ? event.getWorkspaceId() : event.getOrganizationId())
+                    .scope(scope.toUpperCase())
                     .aggregateType(aggregateType)
                     .aggregateId(aggregateId)
                     .eventType(event.getEventType())
@@ -64,6 +76,7 @@ public class OutboxService {
                     .createdAt(Instant.now())
                     .attemptCount(0)
                     .build();
+
 
             OutboxEventEntity saved = outboxEventRepository.save(entity);
             log.debug("Persisted outbox event: type={}, aggregateId={}, traceId={}",

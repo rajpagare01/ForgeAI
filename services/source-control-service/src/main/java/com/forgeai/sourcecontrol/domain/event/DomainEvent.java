@@ -7,4 +7,11 @@ public interface DomainEvent {
     String getEventType();
     Instant getTimestamp();
     UUID getOrganizationId();
+    default UUID getWorkspaceId() {
+        return null;
+    }
+    default String getScope() {
+        return getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL";
+    }
 }
+

@@ -35,8 +35,8 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.LOCKED, "ACCOUNT_LOCKED", ex.getMessage(), request);
     }
 
-    @ExceptionHandler(InvalidUserStateException.class)
-    public ResponseEntity<ApiErrorResponse> handleInvalidUserState(InvalidUserStateException ex, WebRequest request) {
+    @ExceptionHandler({InvalidUserStateException.class, AccessDeniedException.class, OrganizationAccessDeniedException.class, org.springframework.security.access.AccessDeniedException.class})
+    public ResponseEntity<ApiErrorResponse> handleForbidden(Exception ex, WebRequest request) {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "FORBIDDEN", ex.getMessage(), request);
     }
 

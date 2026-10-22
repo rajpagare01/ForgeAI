@@ -9,11 +9,15 @@ import java.util.UUID;
 
 public interface TaskRepository {
     Task save(Task task);
+    Optional<Task> findById(UUID id);
     Optional<Task> findByIdAndOrganizationId(UUID id, UUID organizationId);
     Optional<Task> findByProjectIdAndTaskKey(UUID projectId, String taskKey);
     Optional<Task> findByOrganizationIdAndTaskKey(UUID organizationId, String taskKey);
     List<Task> findAllByOrganizationIdAndProjectId(UUID organizationId, UUID projectId);
     List<Task> findAllByOrganizationIdAndProjectIdAndStatus(UUID organizationId, UUID projectId, TaskStatus status);
+    List<Task> findAllByProjectId(UUID projectId);
+    List<Task> findAllByProjectIdAndStatus(UUID projectId, TaskStatus status);
     List<Task> findAllByOrganizationIdAndAssigneeId(UUID organizationId, UUID assigneeId);
     boolean existsByProjectIdAndTaskKey(UUID projectId, String taskKey);
 }
+

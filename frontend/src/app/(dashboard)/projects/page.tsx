@@ -31,7 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 
 export default function ProjectsPage() {
-  const { currentOrg } = useTenant();
+  const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,10 +43,11 @@ export default function ProjectsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchProjects = useCallback(async () => {
+    if (!activeWorkspace?.id) return;
     setIsLoading(true);
     setError(null);
     try {
-      const data = await apiClient.get<any[]>("/api/v1/projects");
+      const data = await apiClient.get<any[]>(`/api/v1/projects?workspaceId=${activeWorkspace.id}`);
       if (Array.isArray(data)) {
         const mapped: Project[] = data.map((p) => ({
           id: p.id,
@@ -65,11 +66,11 @@ export default function ProjectsPage() {
       }
     } catch (err: any) {
       console.warn("Failed to load projects from Gateway:", err);
-      setError("Could not load projects for the active organization.");
+      setError("Could not load projects for the active workspace.");
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg.id]);
+  }, [activeWorkspace?.id]);
 
   useEffect(() => {
     fetchProjects();
@@ -77,17 +78,24 @@ export default function ProjectsPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !key) return;
+    if (!name || !key || !activeWorkspace?.id) return;
 
     setIsSubmitting(true);
     setError(null);
     try {
       const cleanKey = key.trim().toUpperCase();
-      const res = await apiClient.post<any>("/api/v1/projects", {
+      const payload: any = {
         name: name.trim(),
         key: cleanKey,
         description: description.trim() || undefined,
-      });
+        workspaceId: activeWorkspace.id,
+      };
+
+      if (!isPersonalWorkspace && currentOrg?.id) {
+        payload.organizationId = currentOrg.id;
+      }
+
+      const res = await apiClient.post<any>("/api/v1/projects", payload);
 
       const newProj: Project = {
         id: res.id,
@@ -117,6 +125,10 @@ export default function ProjectsPage() {
     }
   };
 
+  const workspaceDisplayName = isPersonalWorkspace
+    ? "Personal Workspace"
+    : currentOrg.name;
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
@@ -130,7 +142,7 @@ export default function ProjectsPage() {
           </div>
           <p className="text-xs text-slate-400 mt-1">
             Manage projects, assign sprint requirements, and audit end-to-end code delivery spines for{" "}
-            <span className="text-indigo-300 font-medium">{currentOrg.name}</span>.
+            <span className="text-indigo-300 font-medium">{workspaceDisplayName}</span>.
           </p>
         </div>
 
@@ -262,6 +274,23 @@ export default function ProjectsPage() {
         </DialogHeader>
 
         <form onSubmit={handleCreate} className="space-y-4 mt-4">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-slate-400">
+              <span className="text-slate-500 font-mono uppercase text-[10px]">Target Workspace:</span>
+              <span className="font-semibold text-white">{workspaceDisplayName}</span>
+            </div>
+            <Badge
+              variant="outline"
+              className={
+                isPersonalWorkspace
+                  ? "text-violet-400 border-violet-500/30 font-mono text-[10px]"
+                  : "text-indigo-400 border-indigo-500/30 font-mono text-[10px]"
+              }
+            >
+              {isPersonalWorkspace ? "PERSONAL" : "ORGANIZATION"}
+            </Badge>
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-1 space-y-1">
               <label className="text-xs font-medium text-slate-300">Project Key</label>

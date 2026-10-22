@@ -9,7 +9,10 @@ import java.util.UUID;
 
 public interface CodeLinkRepository {
     CodeLink save(CodeLink codeLink);
+    Optional<CodeLink> findById(UUID id);
     Optional<CodeLink> findByIdAndOrganizationId(UUID id, UUID organizationId);
     List<CodeLink> findAllByOrganizationIdAndTaskId(UUID organizationId, UUID taskId);
+    List<CodeLink> findAllByTaskId(UUID taskId);
     boolean existsByTaskIdAndLinkTypeAndExternalRef(UUID taskId, CodeLinkType linkType, String externalRef);
 }
+

@@ -47,7 +47,7 @@ import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 
 export default function RepositoriesPage() {
-  const { currentOrg, isLoading: isTenantLoading } = useTenant();
+  const { currentOrg, isLoading: isTenantLoading, activeWorkspace, isPersonalWorkspace } = useTenant();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [githubHealth, setGithubHealth] = useState<GitHubHealth | null>(null);
   const [currentInstallation, setCurrentInstallation] = useState<GitHubInstallation | null>(null);
@@ -66,8 +66,10 @@ export default function RepositoriesPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
+  const workspaceDisplayName = isPersonalWorkspace ? "Personal Workspace" : currentOrg.name;
+
   const fetchData = useCallback(async () => {
-    if (isTenantLoading || !currentOrg?.id) return;
+    if (isTenantLoading || !activeWorkspace?.id) return;
     setIsLoading(true);
     setError(null);
 
@@ -85,9 +87,9 @@ export default function RepositoriesPage() {
       });
     }
 
-    // 2. Fetch current claimed installation for this organization
+    // 2. Fetch current claimed installation for this workspace
     try {
-      const inst = await apiClient.get<GitHubInstallation>("/api/v1/installations/current");
+      const inst = await apiClient.get<GitHubInstallation>(`/api/v1/installations/current?workspaceId=${activeWorkspace.id}`);
       setCurrentInstallation(inst);
     } catch {
       // 404/503 is expected when no installation is claimed yet or not configured
@@ -96,11 +98,13 @@ export default function RepositoriesPage() {
 
     // 3. Fetch connected repositories
     try {
-      const data = await apiClient.get<any[]>("/api/v1/repositories");
+      const data = await apiClient.get<any[]>(`/api/v1/repositories?workspaceId=${activeWorkspace.id}`);
       if (Array.isArray(data)) {
         const mapped: Repository[] = data.map((r) => ({
           id: r.id,
           organizationId: r.organizationId,
+          workspaceId: r.workspaceId,
+          scope: r.scope,
           name: r.name,
           fullName: r.fullName,
           defaultBranch: r.defaultBranch || "main",
@@ -116,12 +120,12 @@ export default function RepositoriesPage() {
     } catch (err: any) {
       console.warn("Failed to load repositories from Gateway:", err);
       const status = err?.status;
-      let userFriendlyError = "Could not load repositories for the active organization.";
+      let userFriendlyError = `Could not load repositories for ${workspaceDisplayName}.`;
 
       if (status === 401 || status === 403) {
-        userFriendlyError = `Authorization error (HTTP ${status}): Access denied to repositories for this organization.`;
+        userFriendlyError = `Authorization error (HTTP ${status}): Access denied to repositories for this workspace.`;
       } else if (status === 404) {
-        userFriendlyError = "Scope error (HTTP 404): Organization or repository scope not found.";
+        userFriendlyError = "Scope error (HTTP 404): Workspace or repository scope not found.";
       } else if (status === 503) {
         userFriendlyError = "Service unavailable (HTTP 503): GitHub integration service is temporarily unavailable.";
       } else if (err?.isNetworkError || !status) {
@@ -135,13 +139,13 @@ export default function RepositoriesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg.id, isTenantLoading]);
+  }, [activeWorkspace?.id, isTenantLoading, workspaceDisplayName]);
 
   useEffect(() => {
-    if (!isTenantLoading && currentOrg?.id) {
+    if (!isTenantLoading && activeWorkspace?.id) {
       fetchData();
     }
-  }, [fetchData, isTenantLoading, currentOrg.id]);
+  }, [fetchData, isTenantLoading, activeWorkspace?.id]);
 
   // Fetch available repos when connect modal is opened and installation exists
   const handleOpenConnectModal = async () => {
@@ -149,10 +153,10 @@ export default function RepositoriesPage() {
     setSelectedFullName("");
     setError(null);
 
-    if (currentInstallation?.status === "ACTIVE") {
+    if (currentInstallation?.status === "ACTIVE" && activeWorkspace?.id) {
       setIsLoadingAvailable(true);
       try {
-        const repos = await apiClient.get<AvailableRepository[]>("/api/v1/repositories/available");
+        const repos = await apiClient.get<AvailableRepository[]>(`/api/v1/repositories/available?workspaceId=${activeWorkspace.id}`);
         setAvailableRepos(Array.isArray(repos) ? repos : []);
       } catch (e: any) {
         console.warn("Failed to fetch available repositories from GitHub:", e);
@@ -163,10 +167,10 @@ export default function RepositoriesPage() {
     }
   };
 
-  // Authoritative repository connect: sends only fullName to backend
+  // Authoritative repository connect: sends fullName and workspaceId to backend
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFullName.trim()) return;
+    if (!selectedFullName.trim() || !activeWorkspace?.id) return;
 
     setIsConnecting(true);
     setError(null);
@@ -175,11 +179,14 @@ export default function RepositoriesPage() {
     try {
       const res = await apiClient.post<any>("/api/v1/repositories/connect", {
         fullName: selectedFullName.trim(),
+        workspaceId: activeWorkspace.id,
       });
 
       const newRepo: Repository = {
         id: res.id,
         organizationId: res.organizationId,
+        workspaceId: res.workspaceId,
+        scope: res.scope,
         name: res.name,
         fullName: res.fullName,
         defaultBranch: res.defaultBranch || "main",
@@ -205,7 +212,7 @@ export default function RepositoriesPage() {
   const handleClaimInstallation = async (e: React.FormEvent) => {
     e.preventDefault();
     const instId = parseInt(claimInstallationId.trim(), 10);
-    if (isNaN(instId) || instId <= 0) {
+    if (isNaN(instId) || instId <= 0 || !activeWorkspace?.id) {
       setError("Please provide a valid numeric GitHub installation ID.");
       return;
     }
@@ -217,11 +224,12 @@ export default function RepositoriesPage() {
     try {
       const claimed = await apiClient.post<GitHubInstallation>("/api/v1/installations/claim", {
         installationId: instId,
+        workspaceId: activeWorkspace.id,
       });
       setCurrentInstallation(claimed);
       setShowClaimModal(false);
       setClaimInstallationId("");
-      setSuccess(`Successfully claimed GitHub installation #${claimed.installationId} (${claimed.accountLogin}) for this organization.`);
+      setSuccess(`Successfully claimed GitHub installation #${claimed.installationId} (${claimed.accountLogin}) for ${workspaceDisplayName}.`);
       fetchData();
     } catch (err: any) {
       console.error("Failed to claim installation:", err);
@@ -244,7 +252,7 @@ export default function RepositoriesPage() {
           </div>
           <p className="text-xs text-slate-400 mt-1">
             Authoritative GitHub App installations, cryptographic webhook verification, and commit sync tracking for{" "}
-            <span className="text-sky-300 font-medium">{currentOrg.name}</span>.
+            <span className="text-sky-300 font-medium">{workspaceDisplayName}</span>.
           </p>
         </div>
 

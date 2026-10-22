@@ -14,6 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class Project {
     private UUID id;
+    private UUID workspaceId;
     private UUID organizationId;
     private String name;
     private String key;

@@ -108,16 +108,34 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public List<Repository> listRepositories(UUID organizationId) {
+        return listRepositories(organizationId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Repository> listRepositories(UUID organizationId, UUID workspaceId) {
+        if (workspaceId != null) {
+            return repositoryRepository.findAllByWorkspaceId(workspaceId);
+        }
         requireTenant(organizationId);
         return repositoryRepository.findAllByOrganizationId(organizationId);
     }
 
     @Transactional(readOnly = true)
     public Repository getRepository(UUID organizationId, UUID repositoryId) {
+        return getRepository(organizationId, null, repositoryId);
+    }
+
+    @Transactional(readOnly = true)
+    public Repository getRepository(UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        if (workspaceId != null) {
+            return repositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
+        }
         requireTenant(organizationId);
         return repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
     }
+
 
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(UUID organizationId, UUID repositoryId) {
@@ -357,20 +375,30 @@ public class RepositoryApplicationService {
      */
     @Transactional
     public GitHubInstallation claimInstallation(UUID organizationId, Long installationId) {
-        requireTenant(organizationId);
+        return claimInstallation(organizationId, null, installationId);
+    }
+
+    @Transactional
+    public GitHubInstallation claimInstallation(UUID organizationId, UUID workspaceId, Long installationId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
         gitHubAppConfig.requireConfigured();
 
-        // Must not be already claimed by this or another real org
+        UUID targetWorkspaceId = workspaceId != null ? workspaceId : organizationId;
+        String scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
+
+        // Must not be already claimed by this or another real org / workspace
         Optional<GitHubInstallation> alreadyClaimed = installationRepository.findByInstallationId(installationId);
         if (alreadyClaimed.isPresent()) {
             GitHubInstallation existing = alreadyClaimed.get();
             if (!QUARANTINE_ORG_ID.equals(existing.getOrganizationId())) {
-                if (organizationId.equals(existing.getOrganizationId())) {
-                    // Already owned by this org — idempotent OK
+                if (organizationId != null && organizationId.equals(existing.getOrganizationId())) {
+                    return existing;
+                }
+                if (targetWorkspaceId != null && targetWorkspaceId.equals(existing.getWorkspaceId())) {
                     return existing;
                 }
                 throw new GitHubAccessDeniedException(
-                        "Installation " + installationId + " is already claimed by another organization.");
+                        "Installation " + installationId + " is already claimed by another organization or workspace.");
             }
         }
 
@@ -378,12 +406,15 @@ public class RepositoryApplicationService {
         String accountLogin = gitHubAppClient.getInstallationAccountLogin(installationId);
         log.info("[GitHub] Verified installation {} belongs to GitHub account '{}'", installationId, accountLogin);
 
-        // Check if org already owns a different installation
-        Optional<GitHubInstallation> orgInstall = installationRepository.findByOrganizationId(organizationId);
-        if (orgInstall.isPresent() && !QUARANTINE_ORG_ID.equals(orgInstall.get().getOrganizationId())) {
-            if (!installationId.equals(orgInstall.get().getInstallationId())) {
+        // Check if tenant already owns a different installation
+        Optional<GitHubInstallation> existingInstall = organizationId != null
+                ? installationRepository.findByOrganizationId(organizationId)
+                : installationRepository.findByWorkspaceId(targetWorkspaceId);
+
+        if (existingInstall.isPresent() && !QUARANTINE_ORG_ID.equals(existingInstall.get().getOrganizationId())) {
+            if (!installationId.equals(existingInstall.get().getInstallationId())) {
                 throw new GitHubAccessDeniedException(
-                        "Organization already has a claimed GitHub installation (" + orgInstall.get().getInstallationId() + "). " +
+                        "Tenant already has a claimed GitHub installation (" + existingInstall.get().getInstallationId() + "). " +
                         "Remove it before claiming a different installation.");
             }
         }
@@ -392,46 +423,49 @@ public class RepositoryApplicationService {
             // Promote quarantined record
             GitHubInstallation inst = alreadyClaimed.get();
             inst.setOrganizationId(organizationId);
+            inst.setWorkspaceId(targetWorkspaceId);
+            inst.setScope(scope);
             inst.setStatus(InstallationStatus.ACTIVE);
             inst.setUpdatedAt(Instant.now());
             GitHubInstallation saved = installationRepository.save(inst);
             if (telemetryReconciler != null) telemetryReconciler.reconcile();
-            log.info("[GitHub] Installation {} claimed by orgId={}", installationId, organizationId);
+            log.info("[GitHub] Installation {} claimed by orgId={}, wsId={}", installationId, organizationId, targetWorkspaceId);
             return saved;
         } else {
             // Installation exists on GitHub but not yet in our DB (e.g. webhook not yet received)
             GitHubInstallation inst = GitHubInstallation.builder()
                     .organizationId(organizationId)
+                    .workspaceId(targetWorkspaceId)
+                    .scope(scope)
                     .installationId(installationId)
                     .accountLogin(accountLogin)
-                    .accountType("Organization")
+                    .accountType("PERSONAL".equals(scope) ? "User" : "Organization")
                     .status(InstallationStatus.ACTIVE)
                     .createdAt(Instant.now())
                     .updatedAt(Instant.now())
                     .build();
             GitHubInstallation saved = installationRepository.save(inst);
             if (telemetryReconciler != null) telemetryReconciler.reconcile();
-            log.info("[GitHub] New installation {} registered and claimed by orgId={}", installationId, organizationId);
+            log.info("[GitHub] New installation {} registered and claimed by orgId={}, wsId={}", installationId, organizationId, targetWorkspaceId);
             return saved;
         }
     }
 
     /**
-     * Lists all GitHub repositories accessible to the installation claimed by this organization.
+     * Lists all GitHub repositories accessible to the installation claimed by this organization or workspace.
      * All data comes from GitHub — no local cache.
      */
     @Transactional(readOnly = true)
     public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId) {
-        requireTenant(organizationId);
+        return listAvailableRepositories(organizationId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
         gitHubAppConfig.requireConfigured();
 
-        GitHubInstallation installation = installationRepository.findByOrganizationId(organizationId)
-                .filter(i -> InstallationStatus.ACTIVE.equals(i.getStatus()))
-                .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No active GitHub App installation found for this organization. " +
-                        "Install the ForgeAI GitHub App and claim the installation first."));
-
+        GitHubInstallation installation = getClaimedInstallation(organizationId, workspaceId);
         return gitHubAppClient.listInstallationRepositories(installation.getInstallationId());
     }
 
@@ -440,25 +474,16 @@ public class RepositoryApplicationService {
     // -------------------------------------------------------------------------
 
     /**
-     * Connects a repository to this ForgeAI organization.
-     *
-     * <p>Security contract:
-     * <ul>
-     *   <li>GitHub App must be configured.</li>
-     *   <li>The organization must own an active, claimed installation.</li>
-     *   <li>The repository identified by {@code fullName} must be in the installation's
-     *       accessible repository list — verified live against GitHub.</li>
-     *   <li>All metadata (repo ID, owner, name, private, defaultBranch) comes from GitHub.
-     *       No caller-supplied values are accepted except {@code fullName} used as a lookup key.</li>
-     * </ul>
-     *
-     * @param organizationId authenticated organization
-     * @param fullName       "owner/repo" used to identify the repository on GitHub
-     * @return the persisted {@link Repository}
+     * Connects a repository to this ForgeAI organization or workspace.
      */
     @Transactional
     public Repository connectRepository(UUID organizationId, String fullName) {
-        requireTenant(organizationId);
+        return connectRepository(organizationId, null, fullName);
+    }
+
+    @Transactional
+    public Repository connectRepository(UUID organizationId, UUID workspaceId, String fullName) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
         gitHubAppConfig.requireConfigured();
 
         if (fullName == null || fullName.isBlank() || !fullName.contains("/")) {
@@ -466,13 +491,10 @@ public class RepositoryApplicationService {
                     "fullName must be in 'owner/repo' format, e.g. 'acme/my-service'");
         }
 
-        // Resolve the organization's claimed installation
-        GitHubInstallation installation = installationRepository.findByOrganizationId(organizationId)
-                .filter(i -> InstallationStatus.ACTIVE.equals(i.getStatus()))
-                .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No active GitHub App installation found for this organization. " +
-                        "Install the ForgeAI GitHub App and claim the installation first."));
+        UUID targetWorkspaceId = workspaceId != null ? workspaceId : organizationId;
+        String scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
+
+        GitHubInstallation installation = getClaimedInstallation(organizationId, workspaceId);
 
         // Fetch authoritative metadata from GitHub and verify access
         GitHubRepositoryMetadata ghRepo = gitHubAppClient.getVerifiedRepository(
@@ -482,24 +504,30 @@ public class RepositoryApplicationService {
         Optional<Repository> existing = repositoryRepository.findByGithubRepoId(ghRepo.id());
         if (existing.isPresent()) {
             Repository existingRepo = existing.get();
-            if (organizationId.equals(existingRepo.getOrganizationId())) {
+            boolean isOwner = (organizationId != null && organizationId.equals(existingRepo.getOrganizationId()))
+                    || (targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId()));
+            if (isOwner) {
                 existingRepo.setName(ghRepo.name());
                 existingRepo.setFullName(ghRepo.fullName());
                 existingRepo.setDefaultBranch(ghRepo.defaultBranch());
                 existingRepo.setIsPrivate(ghRepo.isPrivate());
                 existingRepo.setInstallationId(installation.getInstallationId());
+                existingRepo.setWorkspaceId(targetWorkspaceId);
+                existingRepo.setScope(scope);
                 existingRepo.setUpdatedAt(Instant.now());
                 Repository updated = repositoryRepository.save(existingRepo);
-                log.info("[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}",
-                        updated.getId(), updated.getFullName(), updated.getGithubRepoId(), organizationId);
+                log.info("[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
+                        updated.getId(), updated.getFullName(), updated.getGithubRepoId(), organizationId, targetWorkspaceId);
                 return updated;
             }
             throw new DuplicateResourceException(
-                    "Repository '" + fullName + "' (GitHub ID " + ghRepo.id() + ") is already connected to another organization.");
+                    "Repository '" + fullName + "' (GitHub ID " + ghRepo.id() + ") is already connected to another organization or workspace.");
         }
 
         Repository repo = Repository.builder()
                 .organizationId(organizationId)
+                .workspaceId(targetWorkspaceId)
+                .scope(scope)
                 .installationId(installation.getInstallationId())
                 .githubRepoId(ghRepo.id())
                 .name(ghRepo.name())
@@ -515,6 +543,7 @@ public class RepositoryApplicationService {
         RepositoryConnectedEvent event = RepositoryConnectedEvent.builder()
                 .repositoryId(saved.getId())
                 .organizationId(organizationId)
+                .workspaceId(targetWorkspaceId)
                 .githubRepoId(saved.getGithubRepoId())
                 .fullName(saved.getFullName())
                 .defaultBranch(saved.getDefaultBranch())
@@ -522,25 +551,34 @@ public class RepositoryApplicationService {
                 .build();
 
         outboxService.publish(event, "connect-" + saved.getId(), "Repository", saved.getId().toString());
-        log.info("[GitHub] Connected repository: id={}, fullName={}, githubRepoId={}, orgId={}",
-                saved.getId(), saved.getFullName(), saved.getGithubRepoId(), organizationId);
+        log.info("[GitHub] Connected repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
+                saved.getId(), saved.getFullName(), saved.getGithubRepoId(), organizationId, targetWorkspaceId);
         return saved;
     }
 
     /**
-     * Returns the active claimed installation for this organization, or throws
+     * Returns the active claimed installation for this organization or workspace, or throws
      * {@link ResourceNotFoundException} if none exists.
      */
     @Transactional(readOnly = true)
     public GitHubInstallation getClaimedInstallation(UUID organizationId) {
-        requireTenant(organizationId);
-        return installationRepository.findByOrganizationId(organizationId)
-                .filter(i -> InstallationStatus.ACTIVE.equals(i.getStatus()))
+        return getClaimedInstallation(organizationId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Optional<GitHubInstallation> opt = workspaceId != null
+                ? installationRepository.findByWorkspaceId(workspaceId)
+                : installationRepository.findByOrganizationId(organizationId);
+
+        return opt.filter(i -> InstallationStatus.ACTIVE.equals(i.getStatus()))
                 .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "No active GitHub App installation found for this organization. " +
+                        "No active GitHub App installation found for this tenant. " +
                         "Install the ForgeAI GitHub App and claim the installation first."));
     }
+
 
     // -------------------------------------------------------------------------
     // Synchronization & Reconciliation
@@ -658,4 +696,11 @@ public class RepositoryApplicationService {
             throw new IllegalArgumentException("Organization ID must be provided via tenant context");
         }
     }
+
+    private void requireTenantOrWorkspace(UUID organizationId, UUID workspaceId) {
+        if (organizationId == null && workspaceId == null) {
+            throw new IllegalArgumentException("Either organization ID or workspace ID must be provided");
+        }
+    }
 }
+

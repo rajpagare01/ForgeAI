@@ -83,10 +83,40 @@ class ApiClient {
     return localStorage.getItem("forgeai_org_id");
   }
 
-  public setActiveOrgId(orgId: string): void {
+  public setActiveOrgId(orgId: string | null): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem("forgeai_org_id", orgId);
+    if (orgId) {
+      localStorage.setItem("forgeai_org_id", orgId);
+    } else {
+      localStorage.removeItem("forgeai_org_id");
+    }
   }
+
+  public getActiveWorkspaceId(): string | null {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("forgeai_workspace_id");
+  }
+
+  public setActiveWorkspaceId(workspaceId: string | null): void {
+    if (typeof window === "undefined") return;
+    if (workspaceId) {
+      localStorage.setItem("forgeai_workspace_id", workspaceId);
+    } else {
+      localStorage.removeItem("forgeai_workspace_id");
+    }
+  }
+
+  public getActiveWorkspaceType(): "PERSONAL" | "ORGANIZATION" {
+    if (typeof window === "undefined") return "PERSONAL";
+    const val = localStorage.getItem("forgeai_workspace_type");
+    return val === "ORGANIZATION" ? "ORGANIZATION" : "PERSONAL";
+  }
+
+  public setActiveWorkspaceType(type: "PERSONAL" | "ORGANIZATION"): void {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("forgeai_workspace_type", type);
+  }
+
 
   private onTokenRefreshed(token: string) {
     this.refreshSubscribers.forEach((callback) => callback(token));
@@ -174,12 +204,13 @@ class ApiClient {
     // Do not attach X-Org-Id to user-scoped Identity routes (/api/v1/organizations, /api/v1/auth, /api/v1/users, etc.)
     const isUserScopedEndpoint =
       endpoint.startsWith("/api/v1/organizations") ||
+      endpoint.startsWith("/api/v1/workspaces") ||
       endpoint.startsWith("/api/v1/auth") ||
       endpoint.startsWith("/api/v1/users") ||
       endpoint.startsWith("/.well-known") ||
       endpoint.startsWith("/actuator");
 
-    if (!isUserScopedEndpoint) {
+    if (!isUserScopedEndpoint && this.getActiveWorkspaceType() === "ORGANIZATION") {
       const orgId = options.orgId || this.getActiveOrgId();
       const isValidUuid =
         typeof orgId === "string" &&
@@ -188,6 +219,7 @@ class ApiClient {
         headers.set("X-Org-Id", orgId as string);
       }
     }
+
 
     // 3. JWT Bearer Token Injection
     if (!options.skipAuth) {

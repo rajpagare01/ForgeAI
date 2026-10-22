@@ -15,7 +15,9 @@ import java.util.UUID;
 public class Commit {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
     private UUID repositoryId;
+
     private String sha;
     private String message;
     private String authorEmail;

@@ -9,7 +9,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "projects", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_projects_org_key", columnNames = {"organization_id", "key"})
+    @UniqueConstraint(name = "uq_projects_workspace_key", columnNames = {"workspace_id", "key"})
 })
 @Getter
 @Setter
@@ -22,7 +22,10 @@ public class ProjectJpaEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "workspace_id", nullable = false)
+    private UUID workspaceId;
+
+    @Column(name = "organization_id")
     private UUID organizationId;
 
     @Column(name = "name", nullable = false)

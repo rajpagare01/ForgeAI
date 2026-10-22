@@ -33,10 +33,37 @@ public final class EntityDomainMapper {
                 .build();
     }
 
+    public static Workspace toDomain(WorkspaceJpaEntity entity) {
+        if (entity == null) return null;
+        return Workspace.builder()
+                .id(entity.getId())
+                .type(entity.getType())
+                .ownerUserId(entity.getOwnerUserId())
+                .organizationId(entity.getOrganizationId())
+                .name(entity.getName())
+                .createdAt(entity.getCreatedAt())
+                .updatedAt(entity.getUpdatedAt())
+                .build();
+    }
+
+    public static WorkspaceJpaEntity toEntity(Workspace domain) {
+        if (domain == null) return null;
+        return WorkspaceJpaEntity.builder()
+                .id(domain.getId())
+                .type(domain.getType())
+                .ownerUserId(domain.getOwnerUserId())
+                .organizationId(domain.getOrganizationId())
+                .name(domain.getName())
+                .createdAt(domain.getCreatedAt())
+                .updatedAt(domain.getUpdatedAt())
+                .build();
+    }
+
     public static Project toDomain(ProjectJpaEntity entity) {
         if (entity == null) return null;
         return Project.builder()
                 .id(entity.getId())
+                .workspaceId(entity.getWorkspaceId())
                 .organizationId(entity.getOrganizationId())
                 .name(entity.getName())
                 .key(entity.getKey())
@@ -51,6 +78,7 @@ public final class EntityDomainMapper {
         if (domain == null) return null;
         return ProjectJpaEntity.builder()
                 .id(domain.getId())
+                .workspaceId(domain.getWorkspaceId())
                 .organizationId(domain.getOrganizationId())
                 .name(domain.getName())
                 .key(domain.getKey())

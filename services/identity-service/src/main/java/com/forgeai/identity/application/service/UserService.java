@@ -35,6 +35,13 @@ public class UserService {
     private final OutboxService outboxService;
     private final com.forgeai.identity.infrastructure.adapter.out.persistence.repository.EmailVerificationTokenRepository emailVerificationTokenRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private WorkspaceService workspaceService;
+
+    public void setWorkspaceService(WorkspaceService workspaceService) {
+        this.workspaceService = workspaceService;
+    }
+
     @Transactional
     public User createUser(String email, String username, String rawPassword, String firstName, String lastName) {
         Email emailObj = new Email(email);
@@ -85,6 +92,15 @@ public class UserService {
                     .firstName(savedUser.getFirstName())
                     .lastName(savedUser.getLastName())
                     .build(), null);
+        }
+
+        if (workspaceService != null) {
+            try {
+                workspaceService.getOrCreatePersonalWorkspace(savedUser.getId(), savedUser.getUsername().value());
+            } catch (Exception e) {
+                // Log and don't fail user creation if workspace already existed or race condition
+                org.slf4j.LoggerFactory.getLogger(UserService.class).warn("Personal workspace provisioning warning: {}", e.getMessage());
+            }
         }
 
         return savedUser;

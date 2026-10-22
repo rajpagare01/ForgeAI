@@ -27,6 +27,35 @@ public class ProjectRepositoryAdapter implements ProjectRepository {
     }
 
     @Override
+    public Optional<Project> findById(UUID id) {
+        return springDataRepository.findById(id).map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
+    public Optional<Project> findByIdAndWorkspaceId(UUID id, UUID workspaceId) {
+        return springDataRepository.findByIdAndWorkspaceId(id, workspaceId)
+                .map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
+    public Optional<Project> findByWorkspaceIdAndKey(UUID workspaceId, String key) {
+        return springDataRepository.findByWorkspaceIdAndKey(workspaceId, key)
+                .map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
+    public List<Project> findAllByWorkspaceId(UUID workspaceId) {
+        return springDataRepository.findAllByWorkspaceId(workspaceId).stream()
+                .map(EntityDomainMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean existsByWorkspaceIdAndKey(UUID workspaceId, String key) {
+        return springDataRepository.existsByWorkspaceIdAndKey(workspaceId, key);
+    }
+
+    @Override
     public Optional<Project> findByIdAndOrganizationId(UUID id, UUID organizationId) {
         return springDataRepository.findByIdAndOrganizationId(id, organizationId)
                 .map(EntityDomainMapper::toDomain);

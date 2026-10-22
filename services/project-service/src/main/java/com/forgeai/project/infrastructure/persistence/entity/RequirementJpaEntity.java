@@ -25,7 +25,7 @@ public class RequirementJpaEntity {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "organization_id")
     private UUID organizationId;
 
     @Column(name = "identifier", nullable = false, length = 32)

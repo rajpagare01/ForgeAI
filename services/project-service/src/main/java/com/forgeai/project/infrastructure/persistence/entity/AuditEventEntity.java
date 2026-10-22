@@ -23,7 +23,10 @@ public class AuditEventEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false, updatable = false)
+    @Column(name = "workspace_id", updatable = false)
+    private UUID workspaceId;
+
+    @Column(name = "organization_id", updatable = false)
     private UUID organizationId;
 
     @Column(name = "actor_user_id", length = 64, updatable = false)

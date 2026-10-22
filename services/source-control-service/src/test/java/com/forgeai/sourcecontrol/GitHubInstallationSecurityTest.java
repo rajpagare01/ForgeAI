@@ -48,6 +48,13 @@ class GitHubInstallationSecurityTest {
         }
 
         @Override
+        public Optional<GitHubInstallation> findByWorkspaceId(UUID workspaceId) {
+            return byInstallationId.values().stream()
+                    .filter(i -> workspaceId.equals(i.getWorkspaceId()))
+                    .findFirst();
+        }
+
+        @Override
         public java.util.List<GitHubInstallation> findAll() {
             return new java.util.ArrayList<>(byInstallationId.values());
         }

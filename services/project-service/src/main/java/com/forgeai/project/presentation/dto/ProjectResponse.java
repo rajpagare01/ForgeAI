@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record ProjectResponse(
         UUID id,
+        UUID workspaceId,
         UUID organizationId,
         String name,
         String key,
@@ -17,8 +18,10 @@ public record ProjectResponse(
         Instant updatedAt
 ) {
     public static ProjectResponse from(Project project) {
+        if (project == null) return null;
         return new ProjectResponse(
                 project.getId(),
+                project.getWorkspaceId(),
                 project.getOrganizationId(),
                 project.getName(),
                 project.getKey(),

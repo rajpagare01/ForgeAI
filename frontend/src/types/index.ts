@@ -18,6 +18,18 @@ export interface AuthResponse {
   user: User;
 }
 
+export type WorkspaceType = "PERSONAL" | "ORGANIZATION";
+
+export interface Workspace {
+  id: string;
+  type: WorkspaceType;
+  ownerUserId: string;
+  organizationId?: string | null;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -26,6 +38,7 @@ export interface Organization {
   avatarUrl?: string;
   projectsCount?: number;
 }
+
 
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -60,7 +73,8 @@ export interface Task {
 
 export interface Project {
   id: string;
-  organizationId: string;
+  workspaceId?: string;
+  organizationId?: string | null;
   key: string;
   name: string;
   description: string;
@@ -74,7 +88,9 @@ export interface Project {
 
 export interface Repository {
   id: string;
-  organizationId: string;
+  workspaceId?: string;
+  organizationId?: string | null;
+  scope?: "ORGANIZATION" | "PERSONAL";
   name: string;
   fullName: string; // e.g. forgeai/governance-core
   defaultBranch: string;
@@ -83,6 +99,7 @@ export interface Repository {
   openPullRequestsCount: number;
   lastSyncAt: string;
 }
+
 
 export interface PullRequest {
   id: string;

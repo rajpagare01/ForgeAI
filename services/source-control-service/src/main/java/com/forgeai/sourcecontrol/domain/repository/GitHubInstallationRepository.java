@@ -11,6 +11,8 @@ public interface GitHubInstallationRepository {
     Optional<GitHubInstallation> findByInstallationId(Long installationId);
     /** Returns the installation owned by this organization (status = ACTIVE, orgId != quarantine). */
     Optional<GitHubInstallation> findByOrganizationId(UUID organizationId);
+    Optional<GitHubInstallation> findByWorkspaceId(UUID workspaceId);
     /** Returns all installations (including quarantined) for diagnostic/admin purposes. */
     List<GitHubInstallation> findAll();
 }
+

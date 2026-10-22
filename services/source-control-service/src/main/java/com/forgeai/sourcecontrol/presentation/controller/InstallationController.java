@@ -33,27 +33,34 @@ public class InstallationController {
      *
      * <p>Request body: {@code { "installationId": 12345678 }}
      */
-    public record ClaimInstallationRequest(Long installationId) {}
+    public record ClaimInstallationRequest(Long installationId, UUID workspaceId) {
+        public ClaimInstallationRequest(Long installationId) {
+            this(installationId, null);
+        }
+    }
 
     @PostMapping("/claim")
     public ResponseEntity<GitHubInstallation> claimInstallation(
             @RequestBody ClaimInstallationRequest request) {
         UUID organizationId = TenantContext.getOrganizationId();
+        UUID workspaceId = request != null ? request.workspaceId() : null;
         if (request == null || request.installationId() == null || request.installationId() <= 0) {
             throw new IllegalArgumentException("A valid installationId is required.");
         }
         GitHubInstallation claimed = repositoryApplicationService.claimInstallation(
-                organizationId, request.installationId());
+                organizationId, workspaceId, request.installationId());
         return ResponseEntity.ok(claimed);
     }
 
     /**
-     * Returns the GitHub App installation currently claimed by this organization.
+     * Returns the GitHub App installation currently claimed by this organization or workspace.
      * Returns 404 if no installation has been claimed.
      */
     @GetMapping("/current")
-    public ResponseEntity<GitHubInstallation> getCurrentInstallation() {
+    public ResponseEntity<GitHubInstallation> getCurrentInstallation(
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getClaimedInstallation(organizationId));
+        return ResponseEntity.ok(repositoryApplicationService.getClaimedInstallation(organizationId, workspaceId));
     }
 }
+

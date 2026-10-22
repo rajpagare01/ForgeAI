@@ -15,7 +15,9 @@ import java.util.UUID;
 public class PullRequest {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
     private UUID repositoryId;
+
     private Long githubPrId;
     private Integer number;
     private String title;
