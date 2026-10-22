@@ -70,14 +70,16 @@ public class ProjectController {
             @PathVariable UUID projectId,
             @Valid @RequestBody CreateRequirementCommand command) {
         UUID orgId = TenantContext.getOrganizationId();
-        Requirement requirement = requirementApplicationService.createRequirement(orgId, projectId, command);
+        UUID userId = TenantContext.getUserId();
+        Requirement requirement = requirementApplicationService.createRequirement(orgId, projectId, userId, command);
         return ResponseEntity.status(HttpStatus.CREATED).body(RequirementResponse.from(requirement));
     }
 
     @GetMapping("/{projectId}/requirements")
     public ResponseEntity<List<RequirementResponse>> listRequirements(@PathVariable UUID projectId) {
         UUID orgId = TenantContext.getOrganizationId();
-        List<RequirementResponse> list = requirementApplicationService.listRequirements(orgId, projectId).stream()
+        UUID userId = TenantContext.getUserId();
+        List<RequirementResponse> list = requirementApplicationService.listRequirements(orgId, projectId, userId).stream()
                 .map(RequirementResponse::from)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(list);
@@ -99,7 +101,8 @@ public class ProjectController {
             @PathVariable UUID projectId,
             @RequestParam(required = false) TaskStatus status) {
         UUID orgId = TenantContext.getOrganizationId();
-        List<TaskResponse> list = taskApplicationService.listTasks(orgId, projectId, status).stream()
+        UUID userId = TenantContext.getUserId();
+        List<TaskResponse> list = taskApplicationService.listTasks(orgId, projectId, userId, status).stream()
                 .map(TaskResponse::from)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(list);

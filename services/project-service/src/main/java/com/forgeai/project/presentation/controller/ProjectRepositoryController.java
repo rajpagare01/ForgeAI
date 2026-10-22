@@ -25,17 +25,19 @@ public class ProjectRepositoryController {
 
     @GetMapping
     public ResponseEntity<List<ProjectRepositoryLinkDto>> listRepositories(@PathVariable UUID projectId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.listProjectRepositories(orgId, projectId));
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        return ResponseEntity.ok(traceabilityAggregationService.listProjectRepositories(orgId, projectId, userId));
     }
 
     @PostMapping
     public ResponseEntity<ProjectRepositoryLinkDto> linkRepository(
             @PathVariable UUID projectId,
             @Valid @RequestBody CreateProjectRepositoryLinkRequest request) {
-        UUID orgId = getRequiredOrgId();
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
         ProjectRepositoryLink link = traceabilityAggregationService.linkRepository(
-                orgId, projectId, request.repositoryId(), request.repositoryName()
+                orgId, projectId, userId, request.repositoryId(), request.repositoryName()
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ProjectRepositoryLinkDto.from(link));
     }
@@ -44,16 +46,9 @@ public class ProjectRepositoryController {
     public ResponseEntity<Void> unlinkRepository(
             @PathVariable UUID projectId,
             @PathVariable UUID repositoryId) {
-        UUID orgId = getRequiredOrgId();
-        traceabilityAggregationService.unlinkRepository(orgId, projectId, repositoryId);
-        return ResponseEntity.noContent().build();
-    }
-
-    private UUID getRequiredOrgId() {
         UUID orgId = TenantContext.getOrganizationId();
-        if (orgId == null) {
-            throw new IllegalArgumentException("Missing required X-Org-Id tenant context header");
-        }
-        return orgId;
+        UUID userId = TenantContext.getUserId();
+        traceabilityAggregationService.unlinkRepository(orgId, projectId, userId, repositoryId);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -44,51 +44,58 @@ public class RepositoryController {
 
     @GetMapping("/{id}/sync-status")
     public ResponseEntity<com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO> getRepositorySyncStatus(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getSyncStatus(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.getSyncStatus(organizationId, workspaceId, id));
     }
 
     @PostMapping("/{id}/reconcile")
     public ResponseEntity<com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO> reconcileRepository(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.reconcileRepository(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.reconcileRepository(organizationId, workspaceId, id));
     }
 
     @GetMapping("/{id}/pull-requests")
     public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.PullRequest>> listPullRequestsForRepo(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, workspaceId, id));
     }
 
     @PostMapping("/{id}/sync/pull-requests")
     public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.PullRequest>> syncPullRequests(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.syncPullRequests(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.syncPullRequests(organizationId, workspaceId, id));
     }
 
     @GetMapping("/{id}/commits")
     public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.Commit>> listCommits(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listCommits(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.listCommits(organizationId, workspaceId, id));
     }
 
     @PostMapping("/{id}/sync/commits")
     public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.Commit>> syncCommits(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.syncCommits(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.syncCommits(organizationId, workspaceId, id));
     }
 
     @GetMapping("/{id}/branches")
     public ResponseEntity<List<com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata>> listBranches(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listBranches(organizationId, id));
+        return ResponseEntity.ok(repositoryApplicationService.listBranches(organizationId, workspaceId, id));
     }
 
     /**

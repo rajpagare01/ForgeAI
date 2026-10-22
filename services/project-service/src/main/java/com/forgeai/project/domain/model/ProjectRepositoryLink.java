@@ -14,6 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class ProjectRepositoryLink {
     private UUID id;
+    private UUID workspaceId;
     private UUID organizationId;
     private UUID projectId;
     private UUID repositoryId;

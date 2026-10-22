@@ -21,7 +21,10 @@ public class ProjectRepositoryLinkJpaEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "workspace_id", nullable = false)
+    private UUID workspaceId;
+
+    @Column(name = "organization_id")
     private UUID organizationId;
 
     @Column(name = "project_id", nullable = false)

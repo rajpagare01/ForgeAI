@@ -84,6 +84,7 @@ public class PushEventHandler {
             BranchCreatedEvent branchEvent = BranchCreatedEvent.builder()
                     .repositoryId(repository.getId())
                     .organizationId(repository.getOrganizationId())
+                    .workspaceId(repository.getWorkspaceId())
                     .branchName(branchName)
                     .ref(ref)
                     .timestamp(Instant.now())
@@ -230,6 +231,7 @@ public class PushEventHandler {
 
         Commit commit = Commit.builder()
                 .organizationId(repository.getOrganizationId())
+                .workspaceId(repository.getWorkspaceId())
                 .repositoryId(repository.getId())
                 .sha(sha)
                 .message(message)
@@ -244,6 +246,7 @@ public class PushEventHandler {
         CommitCreatedEvent event = CommitCreatedEvent.builder()
                 .commitId(saved.getId())
                 .organizationId(repository.getOrganizationId())
+                .workspaceId(repository.getWorkspaceId())
                 .repositoryId(repository.getId())
                 .sha(saved.getSha())
                 .message(saved.getMessage())
@@ -264,21 +267,37 @@ public class PushEventHandler {
         }
 
         UUID orgId = null;
+        UUID wsId = null;
+        String scope = "ORGANIZATION";
         if (installationId != null && installationId > 0) {
             Optional<GitHubInstallation> instOpt = installationRepository.findByInstallationId(installationId);
-            if (instOpt.isPresent() && !UUID.fromString("00000000-0000-0000-0000-000000000000").equals(instOpt.get().getOrganizationId())) {
-                orgId = instOpt.get().getOrganizationId();
+            if (instOpt.isPresent()) {
+                GitHubInstallation inst = instOpt.get();
+                if (!UUID.fromString("00000000-0000-0000-0000-000000000000").equals(inst.getOrganizationId())) {
+                    if ("PERSONAL".equalsIgnoreCase(inst.getScope()) || (inst.getOrganizationId() == null && inst.getWorkspaceId() != null)) {
+                        wsId = inst.getWorkspaceId();
+                        orgId = null;
+                        scope = "PERSONAL";
+                    } else if (inst.getOrganizationId() != null) {
+                        orgId = inst.getOrganizationId();
+                        wsId = inst.getWorkspaceId() != null ? inst.getWorkspaceId() : orgId;
+                        scope = "ORGANIZATION";
+                    }
+                }
             }
         }
 
-        if (orgId == null) {
+        if (orgId == null && wsId == null) {
             UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
             log.warn("Push received for unmapped repository/installation {} (repo: {}). Quarantining under tenant {}.", installationId, fullName, QUARANTINE_ORG_ID);
             orgId = QUARANTINE_ORG_ID;
+            wsId = QUARANTINE_ORG_ID;
             long effectiveInstId = (installationId != null && installationId > 0) ? installationId : 0L;
             if (effectiveInstId > 0 && installationRepository.findByInstallationId(effectiveInstId).isEmpty()) {
                 GitHubInstallation inst = GitHubInstallation.builder()
                         .organizationId(QUARANTINE_ORG_ID)
+                        .workspaceId(QUARANTINE_ORG_ID)
+                        .scope("ORGANIZATION")
                         .installationId(effectiveInstId)
                         .accountLogin(fullName.contains("/") ? fullName.split("/")[0] : "quarantine")
                         .accountType("Organization")
@@ -293,6 +312,8 @@ public class PushEventHandler {
 
         Repository repo = Repository.builder()
                 .organizationId(orgId)
+                .workspaceId(wsId)
+                .scope(scope)
                 .installationId(installationId)
                 .githubRepoId(githubRepoId)
                 .name(repoName)

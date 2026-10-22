@@ -15,6 +15,7 @@ import java.util.UUID;
 public class Requirement {
     private UUID id;
     private UUID projectId;
+    private UUID workspaceId;
     private UUID organizationId;
     private String identifier; // e.g. REQ-001
     private String title;

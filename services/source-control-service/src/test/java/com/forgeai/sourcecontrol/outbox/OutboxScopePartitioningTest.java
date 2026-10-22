@@ -140,4 +140,29 @@ public class OutboxScopePartitioningTest {
 
         verify(outboxEventRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("SEC-WS-05: PERSONAL event with non-null organizationId is rejected (fails closed)")
+    void testPersonalScopeWithOrgIdRejected() {
+        UUID personalWsId = UUID.randomUUID();
+        UUID rogueOrgId = UUID.randomUUID();
+        DomainEvent rogueEvent = new DomainEvent() {
+            @Override
+            public String getEventType() { return "ROGUE_PERSONAL"; }
+            @Override
+            public Instant getTimestamp() { return Instant.now(); }
+            @Override
+            public UUID getOrganizationId() { return rogueOrgId; }
+            @Override
+            public UUID getWorkspaceId() { return personalWsId; }
+            @Override
+            public String getScope() { return "PERSONAL"; }
+        };
+
+        assertThatThrownBy(() -> outboxService.publish(rogueEvent, "trace-rogue", "REPOSITORY", "repo-rogue"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must have null organizationId");
+
+        verify(outboxEventRepository, never()).save(any());
+    }
 }

@@ -109,7 +109,9 @@ class ApiClient {
   public getActiveWorkspaceType(): "PERSONAL" | "ORGANIZATION" {
     if (typeof window === "undefined") return "PERSONAL";
     const val = localStorage.getItem("forgeai_workspace_type");
-    return val === "ORGANIZATION" ? "ORGANIZATION" : "PERSONAL";
+    if (val === "ORGANIZATION") return "ORGANIZATION";
+    if (val === "PERSONAL") return "PERSONAL";
+    return localStorage.getItem("forgeai_org_id") ? "ORGANIZATION" : "PERSONAL";
   }
 
   public setActiveWorkspaceType(type: "PERSONAL" | "ORGANIZATION"): void {
@@ -210,8 +212,8 @@ class ApiClient {
       endpoint.startsWith("/.well-known") ||
       endpoint.startsWith("/actuator");
 
-    if (!isUserScopedEndpoint && this.getActiveWorkspaceType() === "ORGANIZATION") {
-      const orgId = options.orgId || this.getActiveOrgId();
+    if (!isUserScopedEndpoint) {
+      const orgId = options.orgId || (this.getActiveWorkspaceType() === "ORGANIZATION" ? this.getActiveOrgId() : null);
       const isValidUuid =
         typeof orgId === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId);

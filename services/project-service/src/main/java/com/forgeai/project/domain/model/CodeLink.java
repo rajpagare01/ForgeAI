@@ -14,6 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CodeLink {
     private UUID id;
+    private UUID workspaceId;
     private UUID organizationId;
     private UUID taskId;
     private CodeLinkType linkType;

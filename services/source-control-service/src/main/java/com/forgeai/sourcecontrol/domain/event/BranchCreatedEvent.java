@@ -15,9 +15,15 @@ import java.util.UUID;
 public class BranchCreatedEvent implements DomainEvent {
     private UUID repositoryId;
     private UUID organizationId;
+    private UUID workspaceId;
     private String branchName;
     private String ref;
     private Instant timestamp;
+
+    @Override
+    public UUID getWorkspaceId() {
+        return workspaceId != null ? workspaceId : organizationId;
+    }
 
     @Override
     public String getEventType() {

@@ -18,6 +18,7 @@ public class TaskCreatedEvent implements DomainEvent {
 
     private UUID taskId;
     private UUID projectId;
+    private UUID workspaceId;
     private UUID organizationId;
     private String taskKey;
     private String title;

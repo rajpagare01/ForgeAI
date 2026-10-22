@@ -18,4 +18,10 @@ public interface SpringDataProjectRepositoryLinkRepository extends JpaRepository
     boolean existsByOrganizationIdAndProjectIdAndRepositoryId(UUID organizationId, UUID projectId, UUID repositoryId);
 
     void deleteByOrganizationIdAndProjectIdAndRepositoryId(UUID organizationId, UUID projectId, UUID repositoryId);
+
+    List<ProjectRepositoryLinkJpaEntity> findByProjectId(UUID projectId);
+
+    boolean existsByProjectIdAndRepositoryId(UUID projectId, UUID repositoryId);
+
+    void deleteByProjectIdAndRepositoryId(UUID projectId, UUID repositoryId);
 }

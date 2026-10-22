@@ -86,6 +86,7 @@ public class PullRequestEventHandler {
         if (isNew) {
             pullRequest = PullRequest.builder()
                     .organizationId(repository.getOrganizationId())
+                    .workspaceId(repository.getWorkspaceId())
                     .repositoryId(repository.getId())
                     .githubPrId(githubPrId)
                     .number(prNumber)
@@ -114,6 +115,7 @@ public class PullRequestEventHandler {
             PullRequestOpenedEvent event = PullRequestOpenedEvent.builder()
                     .pullRequestId(saved.getId())
                     .organizationId(saved.getOrganizationId())
+                    .workspaceId(saved.getWorkspaceId())
                     .repositoryId(saved.getRepositoryId())
                     .githubPrId(saved.getGithubPrId())
                     .number(saved.getNumber())
@@ -131,6 +133,7 @@ public class PullRequestEventHandler {
             PullRequestMergedEvent event = PullRequestMergedEvent.builder()
                     .pullRequestId(saved.getId())
                     .organizationId(saved.getOrganizationId())
+                    .workspaceId(saved.getWorkspaceId())
                     .repositoryId(saved.getRepositoryId())
                     .githubPrId(saved.getGithubPrId())
                     .number(saved.getNumber())
@@ -151,21 +154,37 @@ public class PullRequestEventHandler {
         }
 
         UUID orgId = null;
+        UUID wsId = null;
+        String scope = "ORGANIZATION";
         if (installationId != null && installationId > 0) {
             Optional<GitHubInstallation> instOpt = installationRepository.findByInstallationId(installationId);
-            if (instOpt.isPresent() && !UUID.fromString("00000000-0000-0000-0000-000000000000").equals(instOpt.get().getOrganizationId())) {
-                orgId = instOpt.get().getOrganizationId();
+            if (instOpt.isPresent()) {
+                GitHubInstallation inst = instOpt.get();
+                if (!UUID.fromString("00000000-0000-0000-0000-000000000000").equals(inst.getOrganizationId())) {
+                    if ("PERSONAL".equalsIgnoreCase(inst.getScope()) || (inst.getOrganizationId() == null && inst.getWorkspaceId() != null)) {
+                        wsId = inst.getWorkspaceId();
+                        orgId = null;
+                        scope = "PERSONAL";
+                    } else if (inst.getOrganizationId() != null) {
+                        orgId = inst.getOrganizationId();
+                        wsId = inst.getWorkspaceId() != null ? inst.getWorkspaceId() : orgId;
+                        scope = "ORGANIZATION";
+                    }
+                }
             }
         }
 
-        if (orgId == null) {
+        if (orgId == null && wsId == null) {
             UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
             log.warn("PullRequest received for unmapped repository/installation {} (repo: {}). Quarantining under tenant {}.", installationId, fullName, QUARANTINE_ORG_ID);
             orgId = QUARANTINE_ORG_ID;
+            wsId = QUARANTINE_ORG_ID;
             long effectiveInstId = (installationId != null && installationId > 0) ? installationId : 0L;
             if (effectiveInstId > 0 && installationRepository.findByInstallationId(effectiveInstId).isEmpty()) {
                 GitHubInstallation inst = GitHubInstallation.builder()
                         .organizationId(QUARANTINE_ORG_ID)
+                        .workspaceId(QUARANTINE_ORG_ID)
+                        .scope("ORGANIZATION")
                         .installationId(effectiveInstId)
                         .accountLogin(fullName.contains("/") ? fullName.split("/")[0] : "quarantine")
                         .accountType("Organization")
@@ -180,6 +199,8 @@ public class PullRequestEventHandler {
 
         Repository repo = Repository.builder()
                 .organizationId(orgId)
+                .workspaceId(wsId)
+                .scope(scope)
                 .installationId(installationId)
                 .githubRepoId(githubRepoId)
                 .name(repoName)

@@ -12,4 +12,8 @@ public interface ProjectRepositoryLinkRepository {
     List<ProjectRepositoryLink> findByProjectId(UUID organizationId, UUID projectId);
     boolean existsByProjectIdAndRepositoryId(UUID organizationId, UUID projectId, UUID repositoryId);
     void deleteByProjectIdAndRepositoryId(UUID organizationId, UUID projectId, UUID repositoryId);
+
+    List<ProjectRepositoryLink> findByProjectId(UUID projectId);
+    boolean existsByProjectIdAndRepositoryId(UUID projectId, UUID repositoryId);
+    void deleteByProjectIdAndRepositoryId(UUID projectId, UUID repositoryId);
 }

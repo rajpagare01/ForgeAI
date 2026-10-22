@@ -9,6 +9,7 @@ import java.util.UUID;
 public record RequirementResponse(
         UUID id,
         UUID projectId,
+        UUID workspaceId,
         UUID organizationId,
         String identifier,
         String title,
@@ -22,6 +23,7 @@ public record RequirementResponse(
         return new RequirementResponse(
                 requirement.getId(),
                 requirement.getProjectId(),
+                requirement.getWorkspaceId(),
                 requirement.getOrganizationId(),
                 requirement.getIdentifier(),
                 requirement.getTitle(),

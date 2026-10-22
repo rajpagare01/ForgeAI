@@ -10,6 +10,8 @@ import com.forgeai.project.domain.exception.*;
 import com.forgeai.project.domain.model.*;
 import com.forgeai.project.domain.repository.*;
 import com.forgeai.project.infrastructure.outbox.OutboxService;
+import com.forgeai.project.infrastructure.persistence.entity.WorkspaceJpaEntity;
+import com.forgeai.project.infrastructure.persistence.repository.SpringDataWorkspaceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ public class TaskApplicationService {
     private final CodeLinkRepository codeLinkRepository;
     private final UserDirectoryRepository userDirectoryRepository;
     private final OutboxService outboxService;
+    private final SpringDataWorkspaceRepository workspaceRepository;
 
     @Transactional
     public Task createTask(UUID organizationId, UUID projectId, UUID reporterId, CreateTaskCommand command) {
@@ -45,6 +48,7 @@ public class TaskApplicationService {
         } else {
             project = projectRepository.findById(projectId)
                     .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            verifyPersonalProjectOwnership(project, reporterId);
         }
 
         // 2. Validate requirement if supplied and ensure it belongs to the SAME project
@@ -77,6 +81,7 @@ public class TaskApplicationService {
         UUID effectiveOrgId = project.getOrganizationId();
         Task task = Task.builder()
                 .projectId(project.getId())
+                .workspaceId(project.getWorkspaceId())
                 .organizationId(effectiveOrgId)
                 .requirementId(command.requirementId())
                 .taskKey(command.taskKey().toUpperCase())
@@ -97,6 +102,7 @@ public class TaskApplicationService {
         TaskCreatedEvent event = TaskCreatedEvent.builder()
                 .taskId(saved.getId())
                 .projectId(saved.getProjectId())
+                .workspaceId(saved.getWorkspaceId())
                 .organizationId(effectiveOrgId != null ? effectiveOrgId : UUID.fromString("00000000-0000-0000-0000-000000000000"))
                 .taskKey(saved.getTaskKey())
                 .title(saved.getTitle())
@@ -114,6 +120,11 @@ public class TaskApplicationService {
 
     @Transactional
     public Task updateTaskStatus(UUID organizationId, UUID taskId, UpdateTaskStatusCommand command) {
+        return updateTaskStatus(organizationId, taskId, null, command);
+    }
+
+    @Transactional
+    public Task updateTaskStatus(UUID organizationId, UUID taskId, UUID userId, UpdateTaskStatusCommand command) {
         Task task;
         if (organizationId != null) {
             task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
@@ -121,6 +132,9 @@ public class TaskApplicationService {
         } else {
             task = taskRepository.findById(taskId)
                     .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+            Project project = projectRepository.findById(task.getProjectId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
+            verifyPersonalProjectOwnership(project, userId);
         }
 
         if (command.version() != null && !command.version().equals(task.getVersion())) {
@@ -145,6 +159,7 @@ public class TaskApplicationService {
         TaskStatusChangedEvent event = TaskStatusChangedEvent.builder()
                 .taskId(updated.getId())
                 .projectId(updated.getProjectId())
+                .workspaceId(updated.getWorkspaceId())
                 .organizationId(updated.getOrganizationId() != null ? updated.getOrganizationId() : UUID.fromString("00000000-0000-0000-0000-000000000000"))
                 .taskKey(updated.getTaskKey())
                 .oldStatus(currentStatus)
@@ -159,6 +174,11 @@ public class TaskApplicationService {
 
     @Transactional
     public CodeLink linkCodeArtifact(UUID organizationId, UUID taskId, LinkCodeArtifactCommand command) {
+        return linkCodeArtifact(organizationId, taskId, null, command);
+    }
+
+    @Transactional
+    public CodeLink linkCodeArtifact(UUID organizationId, UUID taskId, UUID userId, LinkCodeArtifactCommand command) {
         Task task;
         if (organizationId != null) {
             task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
@@ -166,6 +186,9 @@ public class TaskApplicationService {
         } else {
             task = taskRepository.findById(taskId)
                     .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+            Project project = projectRepository.findById(task.getProjectId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
+            verifyPersonalProjectOwnership(project, userId);
         }
 
         if (codeLinkRepository.existsByTaskIdAndLinkTypeAndExternalRef(taskId, command.linkType(), command.externalRef())) {
@@ -175,6 +198,7 @@ public class TaskApplicationService {
         Instant now = Instant.now();
         UUID effectiveOrgId = task.getOrganizationId();
         CodeLink codeLink = CodeLink.builder()
+                .workspaceId(task.getWorkspaceId())
                 .organizationId(effectiveOrgId)
                 .taskId(task.getId())
                 .linkType(command.linkType())
@@ -189,6 +213,7 @@ public class TaskApplicationService {
         // Outbox event
         CodeLinkedEvent event = CodeLinkedEvent.builder()
                 .codeLinkId(saved.getId())
+                .workspaceId(saved.getWorkspaceId())
                 .organizationId(effectiveOrgId != null ? effectiveOrgId : UUID.fromString("00000000-0000-0000-0000-000000000000"))
                 .taskId(task.getId())
                 .linkType(saved.getLinkType())
@@ -204,16 +229,30 @@ public class TaskApplicationService {
 
     @Transactional(readOnly = true)
     public Task getTaskById(UUID organizationId, UUID taskId) {
+        return getTaskById(organizationId, taskId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Task getTaskById(UUID organizationId, UUID taskId, UUID userId) {
         if (organizationId != null) {
             return taskRepository.findByIdAndOrganizationId(taskId, organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
         }
-        return taskRepository.findById(taskId)
+        Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
+        verifyPersonalProjectOwnership(project, userId);
+        return task;
     }
 
     @Transactional(readOnly = true)
     public List<Task> listTasks(UUID organizationId, UUID projectId, TaskStatus status) {
+        return listTasks(organizationId, projectId, null, status);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Task> listTasks(UUID organizationId, UUID projectId, UUID userId, TaskStatus status) {
         if (organizationId != null) {
             projectRepository.findByIdAndOrganizationId(projectId, organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
@@ -224,8 +263,9 @@ public class TaskApplicationService {
             return taskRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
         }
 
-        projectRepository.findById(projectId)
+        Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        verifyPersonalProjectOwnership(project, userId);
 
         if (status != null) {
             return taskRepository.findAllByProjectIdAndStatus(projectId, status);
@@ -235,6 +275,11 @@ public class TaskApplicationService {
 
     @Transactional(readOnly = true)
     public List<CodeLink> getCodeLinksForTask(UUID organizationId, UUID taskId) {
+        return getCodeLinksForTask(organizationId, taskId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CodeLink> getCodeLinksForTask(UUID organizationId, UUID taskId, UUID userId) {
         if (organizationId != null) {
             taskRepository.findByIdAndOrganizationId(taskId, organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
@@ -242,12 +287,24 @@ public class TaskApplicationService {
             return codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, taskId);
         }
 
-        taskRepository.findById(taskId)
+        Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
+        verifyPersonalProjectOwnership(project, userId);
 
         return codeLinkRepository.findAllByTaskId(taskId);
     }
 
+    private void verifyPersonalProjectOwnership(Project project, UUID userId) {
+        if (project.getOrganizationId() == null) {
+            WorkspaceJpaEntity ws = workspaceRepository.findById(project.getWorkspaceId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: id=" + project.getWorkspaceId()));
+            if (userId == null || !userId.equals(ws.getOwnerUserId())) {
+                throw new AccessDeniedException("Access denied to personal project: " + project.getId());
+            }
+        }
+    }
 
     private void validateAssignee(UUID assigneeId) {
         UserDirectory user = userDirectoryRepository.findById(assigneeId)

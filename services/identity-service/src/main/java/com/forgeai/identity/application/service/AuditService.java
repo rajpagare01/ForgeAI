@@ -18,11 +18,15 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuditService {
 
     private final SpringDataAuditEventRepository auditEventRepository;
     private final StructuredLogger structuredLogger;
+
+    public AuditService(SpringDataAuditEventRepository auditEventRepository, StructuredLogger structuredLogger) {
+        this.auditEventRepository = auditEventRepository;
+        this.structuredLogger = structuredLogger;
+    }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AuditEventEntity recordEvent(UUID organizationId,
@@ -33,8 +37,21 @@ public class AuditService {
                                         String action,
                                         String outcome,
                                         Map<String, Object> metadata) {
-        if (organizationId == null) {
-            log.warn("Attempted to record audit event without organizationId: eventType={}", eventType);
+        return recordEvent(organizationId, organizationId, actorUserId, eventType, entityType, entityId, action, outcome, metadata);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public AuditEventEntity recordEvent(UUID organizationId,
+                                        UUID workspaceId,
+                                        String actorUserId,
+                                        String eventType,
+                                        String entityType,
+                                        String entityId,
+                                        String action,
+                                        String outcome,
+                                        Map<String, Object> metadata) {
+        if (organizationId == null && workspaceId == null) {
+            log.warn("Attempted to record audit event without organizationId or workspaceId: eventType={}", eventType);
             return null;
         }
 
@@ -43,6 +60,7 @@ public class AuditService {
 
         AuditEventEntity entity = AuditEventEntity.builder()
                 .organizationId(organizationId)
+                .workspaceId(workspaceId != null ? workspaceId : organizationId)
                 .actorUserId(actorUserId)
                 .eventType(eventType)
                 .entityType(entityType)
@@ -75,5 +93,12 @@ public class AuditService {
         int effectiveLimit = Math.min(Math.max(limit, 1), 100);
         return auditEventRepository.findByOrganizationIdOrderByCreatedAtDesc(
                 organizationId, PageRequest.of(0, effectiveLimit));
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuditEventEntity> getRecentEventsForWorkspace(UUID workspaceId, int limit) {
+        int effectiveLimit = Math.min(Math.max(limit, 1), 100);
+        return auditEventRepository.findByWorkspaceIdOrderByCreatedAtDesc(
+                workspaceId, PageRequest.of(0, effectiveLimit));
     }
 }

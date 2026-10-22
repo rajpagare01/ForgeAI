@@ -15,6 +15,7 @@ import java.util.UUID;
 public class CommitCreatedEvent implements DomainEvent {
     private UUID commitId;
     private UUID organizationId;
+    private UUID workspaceId;
     private UUID repositoryId;
     private String sha;
     private String message;
@@ -22,6 +23,11 @@ public class CommitCreatedEvent implements DomainEvent {
     private String authorName;
     private Instant committedAt;
     private Instant timestamp;
+
+    @Override
+    public UUID getWorkspaceId() {
+        return workspaceId != null ? workspaceId : organizationId;
+    }
 
     @Override
     public String getEventType() {

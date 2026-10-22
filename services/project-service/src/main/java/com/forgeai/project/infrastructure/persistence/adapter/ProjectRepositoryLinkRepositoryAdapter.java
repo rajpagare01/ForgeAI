@@ -48,4 +48,21 @@ public class ProjectRepositoryLinkRepositoryAdapter implements ProjectRepository
     public void deleteByProjectIdAndRepositoryId(UUID organizationId, UUID projectId, UUID repositoryId) {
         springDataRepository.deleteByOrganizationIdAndProjectIdAndRepositoryId(organizationId, projectId, repositoryId);
     }
+
+    @Override
+    public List<ProjectRepositoryLink> findByProjectId(UUID projectId) {
+        return springDataRepository.findByProjectId(projectId).stream()
+                .map(EntityDomainMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public boolean existsByProjectIdAndRepositoryId(UUID projectId, UUID repositoryId) {
+        return springDataRepository.existsByProjectIdAndRepositoryId(projectId, repositoryId);
+    }
+
+    @Override
+    public void deleteByProjectIdAndRepositoryId(UUID projectId, UUID repositoryId) {
+        springDataRepository.deleteByProjectIdAndRepositoryId(projectId, repositoryId);
+    }
 }

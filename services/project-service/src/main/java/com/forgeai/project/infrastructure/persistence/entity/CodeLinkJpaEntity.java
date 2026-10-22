@@ -22,6 +22,9 @@ public class CodeLinkJpaEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "workspace_id", nullable = false)
+    private UUID workspaceId;
+
     @Column(name = "organization_id")
     private UUID organizationId;
 

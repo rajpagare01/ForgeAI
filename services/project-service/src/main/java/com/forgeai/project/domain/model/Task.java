@@ -15,6 +15,7 @@ import java.util.UUID;
 public class Task {
     private UUID id;
     private UUID projectId;
+    private UUID workspaceId;
     private UUID organizationId;
     private UUID requirementId;
     private String taskKey; // e.g. TASK-101

@@ -26,6 +26,9 @@ public class TaskJpaEntity {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
+    @Column(name = "workspace_id", nullable = false)
+    private UUID workspaceId;
+
     @Column(name = "organization_id")
     private UUID organizationId;
 

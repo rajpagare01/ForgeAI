@@ -16,6 +16,7 @@ import java.util.UUID;
 public class CodeLinkedEvent implements DomainEvent {
 
     private UUID codeLinkId;
+    private UUID workspaceId;
     private UUID organizationId;
     private UUID taskId;
     private CodeLinkType linkType;

@@ -15,6 +15,7 @@ import java.util.UUID;
 public class PullRequestOpenedEvent implements DomainEvent {
     private UUID pullRequestId;
     private UUID organizationId;
+    private UUID workspaceId;
     private UUID repositoryId;
     private Long githubPrId;
     private Integer number;
@@ -24,6 +25,11 @@ public class PullRequestOpenedEvent implements DomainEvent {
     private String targetBranch;
     private String authorGithubId;
     private Instant timestamp;
+
+    @Override
+    public UUID getWorkspaceId() {
+        return workspaceId != null ? workspaceId : organizationId;
+    }
 
     @Override
     public String getEventType() {

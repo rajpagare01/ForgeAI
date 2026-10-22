@@ -29,8 +29,9 @@ public class TaskController {
 
     @GetMapping("/{taskId}")
     public ResponseEntity<TaskResponse> getTask(@PathVariable UUID taskId) {
-        UUID orgId = getRequiredOrgId();
-        Task task = taskApplicationService.getTaskById(orgId, taskId);
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        Task task = taskApplicationService.getTaskById(orgId, taskId, userId);
         return ResponseEntity.ok(TaskResponse.from(task));
     }
 
@@ -38,8 +39,9 @@ public class TaskController {
     public ResponseEntity<TaskResponse> updateStatus(
             @PathVariable UUID taskId,
             @Valid @RequestBody UpdateTaskStatusCommand command) {
-        UUID orgId = getRequiredOrgId();
-        Task task = taskApplicationService.updateTaskStatus(orgId, taskId, command);
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        Task task = taskApplicationService.updateTaskStatus(orgId, taskId, userId, command);
         return ResponseEntity.ok(TaskResponse.from(task));
     }
 
@@ -47,25 +49,19 @@ public class TaskController {
     public ResponseEntity<CodeLinkResponse> linkCodeArtifact(
             @PathVariable UUID taskId,
             @Valid @RequestBody LinkCodeArtifactCommand command) {
-        UUID orgId = getRequiredOrgId();
-        CodeLink link = taskApplicationService.linkCodeArtifact(orgId, taskId, command);
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        CodeLink link = taskApplicationService.linkCodeArtifact(orgId, taskId, userId, command);
         return ResponseEntity.status(HttpStatus.CREATED).body(CodeLinkResponse.from(link));
     }
 
     @GetMapping("/{taskId}/links")
     public ResponseEntity<List<CodeLinkResponse>> getCodeLinks(@PathVariable UUID taskId) {
-        UUID orgId = getRequiredOrgId();
-        List<CodeLinkResponse> list = taskApplicationService.getCodeLinksForTask(orgId, taskId).stream()
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        List<CodeLinkResponse> list = taskApplicationService.getCodeLinksForTask(orgId, taskId, userId).stream()
                 .map(CodeLinkResponse::from)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(list);
-    }
-
-    private UUID getRequiredOrgId() {
-        UUID orgId = TenantContext.getOrganizationId();
-        if (orgId == null) {
-            throw new IllegalArgumentException("Missing required X-Org-Id tenant context header");
-        }
-        return orgId;
     }
 }

@@ -53,19 +53,27 @@ public class ProjectApplicationService {
         UUID targetWorkspaceId = command.workspaceId() != null ? command.workspaceId() : workspaceId;
         WorkspaceJpaEntity workspace = resolveWorkspace(targetWorkspaceId, organizationId, callerUserId);
 
-        // Authorization check on resolved workspace
+        // Authorization and consistency check on resolved workspace
         UUID effectiveOrgId = null;
         if ("PERSONAL".equalsIgnoreCase(workspace.getType())) {
+            if (organizationId != null) {
+                log.warn("Personal workspace {} cannot be used with organization context {}", workspace.getId(), organizationId);
+                throw new IllegalArgumentException("Personal workspace cannot be associated with an organization context");
+            }
             if (callerUserId == null || !callerUserId.equals(workspace.getOwnerUserId())) {
                 log.warn("Access denied: User {} is not the owner of personal workspace {}", callerUserId, workspace.getId());
                 throw new AccessDeniedException("Access denied: You do not own this personal workspace");
             }
             effectiveOrgId = null;
         } else if ("ORGANIZATION".equalsIgnoreCase(workspace.getType())) {
+            if (organizationId == null) {
+                log.warn("Organization workspace {} requires organization context", workspace.getId());
+                throw new IllegalArgumentException("Organization workspace requires organization context");
+            }
             effectiveOrgId = workspace.getOrganizationId();
-            if (organizationId != null && !organizationId.equals(effectiveOrgId)) {
+            if (!organizationId.equals(effectiveOrgId)) {
                 log.warn("Access denied: Organization context mismatch {} vs workspace org {}", organizationId, effectiveOrgId);
-                throw new AccessDeniedException("Access denied: Organization mismatch for workspace " + workspace.getId());
+                throw new IllegalArgumentException("Organization mismatch for workspace " + workspace.getId());
             }
         }
 

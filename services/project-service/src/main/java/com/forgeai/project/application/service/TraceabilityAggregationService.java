@@ -1,6 +1,7 @@
 package com.forgeai.project.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.forgeai.project.domain.exception.AccessDeniedException;
 import com.forgeai.project.domain.exception.DuplicateResourceException;
 import com.forgeai.project.domain.exception.ResourceNotFoundException;
 import com.forgeai.project.domain.model.*;
@@ -9,6 +10,8 @@ import com.forgeai.project.infrastructure.client.AiServiceClient;
 import com.forgeai.project.infrastructure.client.SourceControlClient;
 import com.forgeai.project.infrastructure.client.TestingServiceClient;
 import com.forgeai.project.infrastructure.client.dto.*;
+import com.forgeai.project.infrastructure.persistence.entity.WorkspaceJpaEntity;
+import com.forgeai.project.infrastructure.persistence.repository.SpringDataWorkspaceRepository;
 import com.forgeai.project.presentation.dto.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +43,7 @@ public class TraceabilityAggregationService {
     private final ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
     private final TraceabilityLinkRepository traceabilityLinkRepository;
     private final TraceabilitySnapshotRepository traceabilitySnapshotRepository;
+    private final SpringDataWorkspaceRepository workspaceRepository;
 
     private final SourceControlClient sourceControlClient;
     private final TestingServiceClient testingServiceClient;
@@ -755,28 +759,42 @@ public class TraceabilityAggregationService {
 
     @Transactional
     public ProjectRepositoryLink linkRepository(UUID organizationId, UUID projectId, UUID repositoryId, String repositoryName) {
-        validateTenant(organizationId);
-        // 1. Verify project exists under the tenant organization
-        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        return linkRepository(organizationId, projectId, null, repositoryId, repositoryName);
+    }
+
+    @Transactional
+    public ProjectRepositoryLink linkRepository(UUID organizationId, UUID projectId, UUID userId, UUID repositoryId, String repositoryName) {
+        Project project;
+        if (organizationId != null) {
+            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        } else {
+            project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            verifyPersonalProjectOwnership(project, userId);
+        }
 
         // 2. Prevent duplicate repository bindings
-        if (projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(organizationId, projectId, repositoryId)) {
+        boolean alreadyLinked = organizationId != null
+                ? projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(organizationId, projectId, repositoryId)
+                : projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(projectId, repositoryId);
+        if (alreadyLinked) {
             throw new DuplicateResourceException("Repository " + repositoryId + " is already linked to project " + projectId);
         }
 
-        // 3. Strict fail-closed authorization: repository must exist in Source Control under the same organization
+        // 3. Strict fail-closed authorization: repository must exist in Source Control under the same organization or workspace
         RemoteRepositoryDto repoDto = sourceControlClient.getRepository(organizationId, repositoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("Repository not found or not authorized for organization: id=" + repositoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("Repository not found or not authorized for organization/workspace: id=" + repositoryId));
 
-        // 4. Never trust caller-provided repositoryName as authorization proof; use authoritative metadata
+        // 4. Never trust caller-provided repositoryName as authoritative proof; use authoritative metadata
         String authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
                 ? repoDto.getFullName()
                 : (repoDto.getName() != null ? repoDto.getName() : "repository-" + repositoryId.toString().substring(0, 8));
 
         ProjectRepositoryLink link = ProjectRepositoryLink.builder()
                 .id(UUID.randomUUID())
-                .organizationId(organizationId)
+                .workspaceId(project.getWorkspaceId())
+                .organizationId(project.getOrganizationId())
                 .projectId(projectId)
                 .repositoryId(repositoryId)
                 .repositoryName(authoritativeName)
@@ -788,16 +806,54 @@ public class TraceabilityAggregationService {
 
     @Transactional
     public void unlinkRepository(UUID organizationId, UUID projectId, UUID repositoryId) {
-        validateTenant(organizationId);
-        projectRepositoryLinkRepository.deleteByProjectIdAndRepositoryId(organizationId, projectId, repositoryId);
+        unlinkRepository(organizationId, projectId, null, repositoryId);
+    }
+
+    @Transactional
+    public void unlinkRepository(UUID organizationId, UUID projectId, UUID userId, UUID repositoryId) {
+        if (organizationId != null) {
+            projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+            projectRepositoryLinkRepository.deleteByProjectIdAndRepositoryId(organizationId, projectId, repositoryId);
+        } else {
+            Project project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            verifyPersonalProjectOwnership(project, userId);
+            projectRepositoryLinkRepository.deleteByProjectIdAndRepositoryId(projectId, repositoryId);
+        }
     }
 
     @Transactional(readOnly = true)
     public List<ProjectRepositoryLinkDto> listProjectRepositories(UUID organizationId, UUID projectId) {
-        validateTenant(organizationId);
-        return projectRepositoryLinkRepository.findByProjectId(organizationId, projectId).stream()
+        return listProjectRepositories(organizationId, projectId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectRepositoryLinkDto> listProjectRepositories(UUID organizationId, UUID projectId, UUID userId) {
+        if (organizationId != null) {
+            projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+            return projectRepositoryLinkRepository.findByProjectId(organizationId, projectId).stream()
+                    .map(ProjectRepositoryLinkDto::from)
+                    .collect(Collectors.toList());
+        }
+
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        verifyPersonalProjectOwnership(project, userId);
+        return projectRepositoryLinkRepository.findByProjectId(projectId).stream()
                 .map(ProjectRepositoryLinkDto::from)
                 .collect(Collectors.toList());
+    }
+
+    private void verifyPersonalProjectOwnership(Project project, UUID userId) {
+        if (project.getOrganizationId() == null) {
+            WorkspaceJpaEntity ws = workspaceRepository.findById(project.getWorkspaceId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: id=" + project.getWorkspaceId()));
+            if (userId == null || !userId.equals(ws.getOwnerUserId())) {
+                throw new AccessDeniedException("Access denied to personal project: " + project.getId());
+            }
+        }
     }
 
     @Transactional

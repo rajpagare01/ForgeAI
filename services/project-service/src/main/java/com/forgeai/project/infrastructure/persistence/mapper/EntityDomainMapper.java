@@ -94,6 +94,7 @@ public final class EntityDomainMapper {
         return Requirement.builder()
                 .id(entity.getId())
                 .projectId(entity.getProjectId())
+                .workspaceId(entity.getWorkspaceId())
                 .organizationId(entity.getOrganizationId())
                 .identifier(entity.getIdentifier())
                 .title(entity.getTitle())
@@ -110,6 +111,7 @@ public final class EntityDomainMapper {
         return RequirementJpaEntity.builder()
                 .id(domain.getId())
                 .projectId(domain.getProjectId())
+                .workspaceId(domain.getWorkspaceId())
                 .organizationId(domain.getOrganizationId())
                 .identifier(domain.getIdentifier())
                 .title(domain.getTitle())
@@ -126,6 +128,7 @@ public final class EntityDomainMapper {
         return Task.builder()
                 .id(entity.getId())
                 .projectId(entity.getProjectId())
+                .workspaceId(entity.getWorkspaceId())
                 .organizationId(entity.getOrganizationId())
                 .requirementId(entity.getRequirementId())
                 .taskKey(entity.getTaskKey())
@@ -146,6 +149,7 @@ public final class EntityDomainMapper {
         return TaskJpaEntity.builder()
                 .id(domain.getId())
                 .projectId(domain.getProjectId())
+                .workspaceId(domain.getWorkspaceId())
                 .organizationId(domain.getOrganizationId())
                 .requirementId(domain.getRequirementId())
                 .taskKey(domain.getTaskKey())
@@ -165,6 +169,7 @@ public final class EntityDomainMapper {
         if (entity == null) return null;
         return CodeLink.builder()
                 .id(entity.getId())
+                .workspaceId(entity.getWorkspaceId())
                 .organizationId(entity.getOrganizationId())
                 .taskId(entity.getTaskId())
                 .linkType(entity.getLinkType())
@@ -179,6 +184,7 @@ public final class EntityDomainMapper {
         if (domain == null) return null;
         return CodeLinkJpaEntity.builder()
                 .id(domain.getId())
+                .workspaceId(domain.getWorkspaceId())
                 .organizationId(domain.getOrganizationId())
                 .taskId(domain.getTaskId())
                 .linkType(domain.getLinkType())
@@ -236,6 +242,7 @@ public final class EntityDomainMapper {
         if (entity == null) return null;
         return ProjectRepositoryLink.builder()
                 .id(entity.getId())
+                .workspaceId(entity.getWorkspaceId())
                 .organizationId(entity.getOrganizationId())
                 .projectId(entity.getProjectId())
                 .repositoryId(entity.getRepositoryId())
@@ -248,6 +255,7 @@ public final class EntityDomainMapper {
         if (domain == null) return null;
         return ProjectRepositoryLinkJpaEntity.builder()
                 .id(domain.getId())
+                .workspaceId(domain.getWorkspaceId())
                 .organizationId(domain.getOrganizationId())
                 .projectId(domain.getProjectId())
                 .repositoryId(domain.getRepositoryId())

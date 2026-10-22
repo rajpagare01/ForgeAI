@@ -17,6 +17,7 @@ public class TaskStatusChangedEvent implements DomainEvent {
 
     private UUID taskId;
     private UUID projectId;
+    private UUID workspaceId;
     private UUID organizationId;
     private String taskKey;
     private TaskStatus oldStatus;

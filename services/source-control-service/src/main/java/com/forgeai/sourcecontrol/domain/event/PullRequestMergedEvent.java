@@ -15,6 +15,7 @@ import java.util.UUID;
 public class PullRequestMergedEvent implements DomainEvent {
     private UUID pullRequestId;
     private UUID organizationId;
+    private UUID workspaceId;
     private UUID repositoryId;
     private Long githubPrId;
     private Integer number;
@@ -22,6 +23,11 @@ public class PullRequestMergedEvent implements DomainEvent {
     private String mergedBy;
     private Instant mergedAt;
     private Instant timestamp;
+
+    @Override
+    public UUID getWorkspaceId() {
+        return workspaceId != null ? workspaceId : organizationId;
+    }
 
     @Override
     public String getEventType() {

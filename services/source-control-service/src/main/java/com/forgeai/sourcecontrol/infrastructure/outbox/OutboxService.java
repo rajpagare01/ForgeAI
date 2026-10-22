@@ -47,6 +47,10 @@ public class OutboxService {
                 log.error("Outbox publication rejected: event {} has no workspaceId", event.getEventType());
                 throw new IllegalArgumentException("Personal-scoped domain event " + event.getEventType() + " requires a non-null workspaceId");
             }
+            if (event.getOrganizationId() != null) {
+                log.error("Outbox publication rejected: personal event {} must not have organizationId", event.getEventType());
+                throw new IllegalArgumentException("Personal-scoped domain event " + event.getEventType() + " must have null organizationId");
+            }
         } else {
             throw new IllegalArgumentException("Invalid domain event scope: " + scope);
         }

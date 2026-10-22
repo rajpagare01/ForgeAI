@@ -15,6 +15,8 @@ public interface SpringDataAuditEventRepository extends JpaRepository<AuditEvent
 
     List<AuditEventEntity> findByOrganizationIdAndEntityTypeOrderByCreatedAtDesc(UUID organizationId, String entityType, Pageable pageable);
 
+    List<AuditEventEntity> findByWorkspaceIdOrderByCreatedAtDesc(UUID workspaceId, Pageable pageable);
+
     @Override
     default void delete(AuditEventEntity entity) {
         throw new UnsupportedOperationException("Audit events are immutable records and cannot be deleted");

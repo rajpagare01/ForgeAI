@@ -98,10 +98,22 @@ public class RepositoryApplicationService {
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
             UUID organizationId, UUID repositoryId) {
-        requireTenant(organizationId);
+        return listPullRequests(organizationId, null, repositoryId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
+            UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
         if (repositoryId != null) {
-            getRepository(organizationId, repositoryId);
+            getRepository(organizationId, workspaceId, repositoryId);
             return pullRequestRepository.findAllByRepositoryId(repositoryId);
+        }
+        if (workspaceId != null) {
+            List<Repository> repos = repositoryRepository.findAllByWorkspaceId(workspaceId);
+            return repos.stream()
+                    .flatMap(r -> pullRequestRepository.findAllByRepositoryId(r.getId()).stream())
+                    .toList();
         }
         return pullRequestRepository.findAllByOrganizationId(organizationId);
     }
@@ -136,26 +148,43 @@ public class RepositoryApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
     }
 
-
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(UUID organizationId, UUID repositoryId) {
-        requireTenant(organizationId);
-        getRepository(organizationId, repositoryId);
+        return listCommits(organizationId, null, repositoryId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(
+            UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        getRepository(organizationId, workspaceId, repositoryId);
         return commitRepository.findAllByRepositoryId(repositoryId);
     }
 
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata> listBranches(
             UUID organizationId, UUID repositoryId) {
-        requireTenant(organizationId);
-        Repository repo = getRepository(organizationId, repositoryId);
+        return listBranches(organizationId, null, repositoryId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata> listBranches(
+            UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
         return gitHubAppClient.listBranches(repo.getInstallationId(), repo.getFullName());
     }
 
     @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.Commit> syncCommits(UUID organizationId, UUID repositoryId) {
-        requireTenant(organizationId);
-        Repository repo = getRepository(organizationId, repositoryId);
+        return syncCommits(organizationId, null, repositoryId);
+    }
+
+    @Transactional
+    public List<com.forgeai.sourcecontrol.domain.model.Commit> syncCommits(
+            UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
         List<com.forgeai.sourcecontrol.infrastructure.github.GitHubCommitMetadata> ghCommits =
                 gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), 30);
 
@@ -172,7 +201,8 @@ public class RepositoryApplicationService {
                 savedList.add(commitRepository.save(c));
             } else {
                 com.forgeai.sourcecontrol.domain.model.Commit c = com.forgeai.sourcecontrol.domain.model.Commit.builder()
-                        .organizationId(organizationId)
+                        .organizationId(repo.getOrganizationId())
+                        .workspaceId(repo.getWorkspaceId())
                         .repositoryId(repo.getId())
                         .sha(ghCommit.sha())
                         .message(ghCommit.message())
@@ -190,8 +220,14 @@ public class RepositoryApplicationService {
 
     @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> syncPullRequests(UUID organizationId, UUID repositoryId) {
-        requireTenant(organizationId);
-        Repository repo = getRepository(organizationId, repositoryId);
+        return syncPullRequests(organizationId, null, repositoryId);
+    }
+
+    @Transactional
+    public List<com.forgeai.sourcecontrol.domain.model.PullRequest> syncPullRequests(
+            UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
         List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestMetadata> ghPrs =
                 gitHubAppClient.listPullRequests(repo.getInstallationId(), repo.getFullName());
 
@@ -215,7 +251,8 @@ public class RepositoryApplicationService {
                 savedList.add(pullRequestRepository.save(pr));
             } else {
                 var pr = com.forgeai.sourcecontrol.domain.model.PullRequest.builder()
-                        .organizationId(organizationId)
+                        .organizationId(repo.getOrganizationId())
+                        .workspaceId(repo.getWorkspaceId())
                         .repositoryId(repo.getId())
                         .githubPrId(ghPr.githubPrId())
                         .number(ghPr.number())
@@ -238,8 +275,14 @@ public class RepositoryApplicationService {
     @Transactional
     public com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet getPullRequestChanges(
             UUID organizationId, UUID repositoryId, int prNumber) {
-        requireTenant(organizationId);
-        Repository repo = getRepository(organizationId, repositoryId);
+        return getPullRequestChanges(organizationId, null, repositoryId, prNumber);
+    }
+
+    @Transactional
+    public com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet getPullRequestChanges(
+            UUID organizationId, UUID workspaceId, UUID repositoryId, int prNumber) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
 
         if (gitHubAppConfig.isConfigured()) {
             try {
@@ -504,16 +547,18 @@ public class RepositoryApplicationService {
         Optional<Repository> existing = repositoryRepository.findByGithubRepoId(ghRepo.id());
         if (existing.isPresent()) {
             Repository existingRepo = existing.get();
-            boolean isOwner = (organizationId != null && organizationId.equals(existingRepo.getOrganizationId()))
-                    || (targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId()));
+            boolean isOwner = false;
+            if ("ORGANIZATION".equalsIgnoreCase(existingRepo.getScope())) {
+                isOwner = organizationId != null && organizationId.equals(existingRepo.getOrganizationId());
+            } else if ("PERSONAL".equalsIgnoreCase(existingRepo.getScope())) {
+                isOwner = organizationId == null && targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId());
+            }
             if (isOwner) {
                 existingRepo.setName(ghRepo.name());
                 existingRepo.setFullName(ghRepo.fullName());
                 existingRepo.setDefaultBranch(ghRepo.defaultBranch());
                 existingRepo.setIsPrivate(ghRepo.isPrivate());
                 existingRepo.setInstallationId(installation.getInstallationId());
-                existingRepo.setWorkspaceId(targetWorkspaceId);
-                existingRepo.setScope(scope);
                 existingRepo.setUpdatedAt(Instant.now());
                 Repository updated = repositoryRepository.save(existingRepo);
                 log.info("[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
@@ -586,8 +631,14 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO getSyncStatus(UUID organizationId, UUID repositoryId) {
-        requireTenant(organizationId);
-        Repository repo = getRepository(organizationId, repositoryId);
+        return getSyncStatus(organizationId, null, repositoryId);
+    }
+
+    @Transactional(readOnly = true)
+    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO getSyncStatus(
+            UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
 
         com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus status = repo.getSyncStatus();
         if (status == null) {
@@ -617,8 +668,14 @@ public class RepositoryApplicationService {
 
     @Transactional
     public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(UUID organizationId, UUID repositoryId) {
-        requireTenant(organizationId);
-        Repository repo = getRepository(organizationId, repositoryId);
+        return reconcileRepository(organizationId, null, repositoryId);
+    }
+
+    @Transactional
+    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(
+            UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
 
         String currentHead = null;
         if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0) {
@@ -656,7 +713,7 @@ public class RepositoryApplicationService {
                 boolean syncSuccess = true;
                 if (aiServiceClient != null) {
                     syncSuccess = aiServiceClient.syncPush(
-                            organizationId,
+                            repo.getOrganizationId() != null ? repo.getOrganizationId() : repo.getWorkspaceId(),
                             repo.getId(),
                             currentHead,
                             "refs/heads/" + repo.getDefaultBranch(),
@@ -684,7 +741,7 @@ public class RepositoryApplicationService {
         }
 
         repositoryRepository.save(repo);
-        return getSyncStatus(organizationId, repositoryId);
+        return getSyncStatus(organizationId, workspaceId, repositoryId);
     }
 
     // -------------------------------------------------------------------------
