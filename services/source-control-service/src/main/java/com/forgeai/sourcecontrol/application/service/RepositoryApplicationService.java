@@ -104,18 +104,19 @@ public class RepositoryApplicationService {
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
-        requireTenantOrWorkspace(organizationId, workspaceId);
+        UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         if (repositoryId != null) {
-            getRepository(organizationId, workspaceId, repositoryId);
+            getRepository(organizationId, effectiveWsId, repositoryId);
             return pullRequestRepository.findAllByRepositoryId(repositoryId);
         }
-        if (workspaceId != null) {
-            List<Repository> repos = repositoryRepository.findAllByWorkspaceId(workspaceId);
-            return repos.stream()
-                    .flatMap(r -> pullRequestRepository.findAllByRepositoryId(r.getId()).stream())
-                    .toList();
+        if (organizationId != null) {
+            return pullRequestRepository.findAllByOrganizationId(organizationId);
         }
-        return pullRequestRepository.findAllByOrganizationId(organizationId);
+        List<Repository> repos = repositoryRepository.findAllByWorkspaceId(effectiveWsId);
+        return repos.stream()
+                .filter(r -> r.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(r.getScope()))
+                .flatMap(r -> pullRequestRepository.findAllByRepositoryId(r.getId()).stream())
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -125,11 +126,13 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public List<Repository> listRepositories(UUID organizationId, UUID workspaceId) {
-        if (workspaceId != null) {
-            return repositoryRepository.findAllByWorkspaceId(workspaceId);
+        UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        if (organizationId != null) {
+            return repositoryRepository.findAllByOrganizationId(organizationId);
         }
-        requireTenant(organizationId);
-        return repositoryRepository.findAllByOrganizationId(organizationId);
+        return repositoryRepository.findAllByWorkspaceId(effectiveWsId).stream()
+                .filter(r -> r.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(r.getScope()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -139,13 +142,17 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public Repository getRepository(UUID organizationId, UUID workspaceId, UUID repositoryId) {
-        if (workspaceId != null) {
-            return repositoryRepository.findByIdAndWorkspaceId(repositoryId, workspaceId)
+        UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        if (organizationId != null) {
+            return repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
         }
-        requireTenant(organizationId);
-        return repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
+        Repository repo = repositoryRepository.findByIdAndWorkspaceId(repositoryId, effectiveWsId)
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
+        if (repo.getOrganizationId() != null || !"PERSONAL".equalsIgnoreCase(repo.getScope())) {
+            throw new ResourceNotFoundException("Repository not found: " + repositoryId);
+        }
+        return repo;
     }
 
     @Transactional(readOnly = true)
@@ -321,7 +328,8 @@ public class RepositoryApplicationService {
                     pullRequestRepository.save(pr);
                 } else {
                     var pr = com.forgeai.sourcecontrol.domain.model.PullRequest.builder()
-                            .organizationId(organizationId)
+                            .organizationId(repo.getOrganizationId())
+                            .workspaceId(repo.getWorkspaceId())
                             .repositoryId(repo.getId())
                             .githubPrId(detail.githubPrId())
                             .number(detail.number())
@@ -389,8 +397,13 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public PullRequest getPullRequest(UUID organizationId, UUID repositoryId, int prNumber) {
-        requireTenant(organizationId);
-        Repository repo = getRepository(organizationId, repositoryId);
+        return getPullRequest(organizationId, null, repositoryId, prNumber);
+    }
+
+    @Transactional(readOnly = true)
+    public PullRequest getPullRequest(UUID organizationId, UUID workspaceId, UUID repositoryId, int prNumber) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
         return pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), prNumber)
                 .orElseThrow(() -> new ResourceNotFoundException("Pull request #" + prNumber + " not found for repository " + repositoryId));
     }
@@ -612,10 +625,14 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId) {
-        requireTenantOrWorkspace(organizationId, workspaceId);
-        Optional<GitHubInstallation> opt = workspaceId != null
-                ? installationRepository.findByWorkspaceId(workspaceId)
-                : installationRepository.findByOrganizationId(organizationId);
+        UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        Optional<GitHubInstallation> opt;
+        if (organizationId != null) {
+            opt = installationRepository.findByOrganizationId(organizationId);
+        } else {
+            opt = installationRepository.findByWorkspaceId(effectiveWsId)
+                    .filter(i -> i.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(i.getScope()));
+        }
 
         return opt.filter(i -> InstallationStatus.ACTIVE.equals(i.getStatus()))
                 .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
@@ -754,10 +771,19 @@ public class RepositoryApplicationService {
         }
     }
 
-    private void requireTenantOrWorkspace(UUID organizationId, UUID workspaceId) {
+    private UUID resolveEffectiveWorkspaceId(UUID organizationId, UUID workspaceId) {
         if (organizationId == null && workspaceId == null) {
             throw new IllegalArgumentException("Either organization ID or workspace ID must be provided");
         }
+        if (organizationId != null && workspaceId != null && !organizationId.equals(workspaceId)) {
+            throw new IllegalArgumentException(
+                    "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+        }
+        return workspaceId != null ? workspaceId : organizationId;
+    }
+
+    private void requireTenantOrWorkspace(UUID organizationId, UUID workspaceId) {
+        resolveEffectiveWorkspaceId(organizationId, workspaceId);
     }
 }
 

@@ -20,24 +20,28 @@ public class PullRequestController {
     private final RepositoryApplicationService repositoryApplicationService;
 
     @GetMapping
-    public ResponseEntity<List<PullRequest>> listPullRequests(@RequestParam(required = false) UUID repositoryId) {
+    public ResponseEntity<List<PullRequest>> listPullRequests(
+            @RequestParam(required = false) UUID repositoryId,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, repositoryId));
+        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, workspaceId, repositoryId));
     }
 
     @GetMapping("/{number}")
     public ResponseEntity<PullRequest> getPullRequest(
             @PathVariable int number,
-            @RequestParam UUID repositoryId) {
+            @RequestParam UUID repositoryId,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getPullRequest(organizationId, repositoryId, number));
+        return ResponseEntity.ok(repositoryApplicationService.getPullRequest(organizationId, workspaceId, repositoryId, number));
     }
 
     @GetMapping("/{number}/changes")
     public ResponseEntity<com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet> getPullRequestChanges(
             @PathVariable int number,
-            @RequestParam UUID repositoryId) {
+            @RequestParam UUID repositoryId,
+            @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getPullRequestChanges(organizationId, repositoryId, number));
+        return ResponseEntity.ok(repositoryApplicationService.getPullRequestChanges(organizationId, workspaceId, repositoryId, number));
     }
 }

@@ -196,6 +196,9 @@ All test suites were executed cleanly:
 | **E2E-WS-09** | `source-control-service` | Scope-swapping repository hijacking attack prevention | **PASSED** |
 | **E2E-WS-10** | `source-control-service` | Pull request partitioning to personal workspace without quarantine | **PASSED** |
 | **E2E-WS-12** | `identity-service` | Concurrent personal workspace provisioning idempotency | **PASSED** |
+| **E2E-WS-14** | `source-control-service` | Cross-tenant workspace bypass attempt rejected across all operations | **PASSED** |
+| **E2E-WS-15** | `source-control-service` | Personal workspace caller cannot access organization repositories | **PASSED** |
+| **E2E-WS-16** | `source-control-service` | Personal workspace pull request and changeset retrieval | **PASSED** |
 | **DB-CHECK-01** | `project-service` | Database check constraint prevents null `workspace_id` | **PASSED** |
 | **GATEWAY-01** | `api-gateway` | Gateway header spoofing defense & token extraction | **PASSED** (19/19) |
 | **OUTBOX-01** | `source-control-service` | Outbox event scope validation & fail-closed security | **PASSED** (5/5) |
@@ -222,6 +225,15 @@ All test suites were executed cleanly:
 5. **Frontend Header Attachment Backward Compatibility (`api-client.ts`)**:
    - *Issue*: `getActiveWorkspaceType()` defaulted to `"PERSONAL"`, breaking existing organization context in standalone tests where `forgeai_org_id` was set without `forgeai_workspace_type`.
    - *Resolution*: Updated `getActiveWorkspaceType()` to intelligently deduce `"ORGANIZATION"` when `forgeai_org_id` exists in localStorage, ensuring seamless backwards compatibility while preserving strict header omission for personal workspaces.
+6. **Cross-Tenant Workspace-Bypass Defense (`RepositoryApplicationService`)**:
+   - *Issue*: `getRepository`, `listRepositories`, `listPullRequests`, and `getClaimedInstallation` previously accepted caller-supplied `workspaceId` parameters without validating that `workspaceId == organizationId` for organization contexts. An attacker with a valid JWT for Organization A could pass `?workspaceId=OrgB` or `?workspaceId=PersonalWsOfVictim` to query or operate on repositories belonging to other tenants.
+   - *Resolution*: Implemented `resolveEffectiveWorkspaceId(organizationId, workspaceId)`: fails closed with `IllegalArgumentException` whenever `organizationId != null && workspaceId != null && !organizationId.equals(workspaceId)`. For personal requests (`organizationId == null`), queries are strictly partitioned to `workspaceId` where `organizationId IS NULL` and `scope == 'PERSONAL'`.
+7. **PullRequestController Workspace Context & Changeset Invariant**:
+   - *Issue*: `PullRequestController` endpoints (`/api/v1/pull-requests`, `/{number}`, `/{number}/changes`) only inspected `TenantContext.getOrganizationId()`, failing closed on personal workspace requests where `organizationId` is null, and `getPullRequestChanges` constructed records without setting `workspaceId`.
+   - *Resolution*: Added `@RequestParam(required = false) UUID workspaceId` across `PullRequestController` endpoints, added `getPullRequest(organizationId, workspaceId, repositoryId, prNumber)` overload, and ensured new pull requests inherit `repo.getWorkspaceId()`.
+8. **Push Event AI Sync Partitioning (`PushEventHandler`, `AiServiceClient`, `ai-service`)**:
+   - *Issue*: `PushEventHandler` passed `repository.getOrganizationId()` (which is null for personal repositories) to `AiServiceClient.syncPush`, causing personal pushes to be skipped and failing AI service tenant validation.
+   - *Resolution*: Updated to pass `repository.getOrganizationId() != null ? repository.getOrganizationId() : repository.getWorkspaceId()`. Enhanced `AiServiceClient` to propagate both `X-Org-Id` and `X-Workspace-Id`, and updated `ai-service` dependencies to accept `X-Workspace-Id` and support `workspace_id` across domain models (`CodeChunk`, `GraphEdge`, `Analysis`, `IndexJob`).
 
 ---
 

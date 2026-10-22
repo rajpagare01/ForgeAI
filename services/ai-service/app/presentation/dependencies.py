@@ -13,21 +13,21 @@ ai_rate_limiter = RedisAiRateLimiter()
 
 def get_tenant_org_id(request: Request) -> UUID:
     """
-    Extracts mandatory X-Org-Id header from request.
+    Extracts mandatory X-Org-Id or X-Workspace-Id header from request.
     Raises HTTP 400 Bad Request if missing or invalid UUID.
     """
-    header_val = request.headers.get(settings.ORG_HEADER_NAME)
+    header_val = request.headers.get(settings.ORG_HEADER_NAME) or request.headers.get("X-Workspace-Id")
     if not header_val:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing mandatory tenant header '{settings.ORG_HEADER_NAME}'",
+            detail=f"Missing mandatory tenant header '{settings.ORG_HEADER_NAME}' or 'X-Workspace-Id'",
         )
     try:
         return UUID(header_val)
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid UUID format in tenant header '{settings.ORG_HEADER_NAME}': {header_val}",
+            detail=f"Invalid UUID format in tenant header: {header_val}",
         )
 
 

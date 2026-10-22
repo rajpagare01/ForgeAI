@@ -61,6 +61,7 @@ public class AiServiceClient {
                     .timeout(Duration.ofSeconds(60))
                     .header("Content-Type", "application/json")
                     .header("X-Org-Id", organizationId.toString())
+                    .header("X-Workspace-Id", organizationId.toString())
                     .header("X-ForgeAI-Internal", "attested")
                     .header("X-Trace-Id", UUID.randomUUID().toString())
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody))

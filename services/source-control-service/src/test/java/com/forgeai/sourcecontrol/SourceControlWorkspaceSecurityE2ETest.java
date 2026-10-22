@@ -8,6 +8,7 @@ import com.forgeai.sourcecontrol.domain.event.CommitCreatedEvent;
 import com.forgeai.sourcecontrol.domain.event.PullRequestOpenedEvent;
 import com.forgeai.sourcecontrol.domain.event.RepositoryConnectedEvent;
 import com.forgeai.sourcecontrol.domain.exception.DuplicateResourceException;
+import com.forgeai.sourcecontrol.domain.exception.ResourceNotFoundException;
 import com.forgeai.sourcecontrol.domain.model.*;
 import com.forgeai.sourcecontrol.domain.repository.CommitRepository;
 import com.forgeai.sourcecontrol.domain.repository.GitHubInstallationRepository;
@@ -398,6 +399,139 @@ public class SourceControlWorkspaceSecurityE2ETest {
         assertThat(prEvent.getScope()).isEqualTo("PERSONAL");
         assertThat(prEvent.getWorkspaceId()).isEqualTo(personalWsId);
         assertThat(prEvent.getOrganizationId()).isNull();
+    }
+
+    @Test
+    @DisplayName("E2E-WS-14: Cross-Tenant Workspace Bypass Attempt is Strictly Rejected Across Service Operations")
+    void testCrossTenantWorkspaceBypassRejected() {
+        UUID orgA = UUID.randomUUID();
+        UUID orgB = UUID.randomUUID();
+        UUID repoId = UUID.randomUUID();
+
+        // Attempting to bypass org boundaries by specifying a different workspaceId
+        assertThatThrownBy(() -> repositoryApplicationService.getRepository(orgA, orgB, repoId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.listRepositories(orgA, orgB))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.getClaimedInstallation(orgA, orgB))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.listPullRequests(orgA, orgB, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.getPullRequest(orgA, orgB, repoId, 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.listCommits(orgA, orgB, repoId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.listBranches(orgA, orgB, repoId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.syncCommits(orgA, orgB, repoId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.syncPullRequests(orgA, orgB, repoId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.getSyncStatus(orgA, orgB, repoId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+
+        assertThatThrownBy(() -> repositoryApplicationService.reconcileRepository(orgA, orgB, repoId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("does not match workspace context");
+    }
+
+    @Test
+    @DisplayName("E2E-WS-15: Personal Workspace Caller Cannot Access Organization Repositories")
+    void testPersonalWorkspaceCannotAccessOrganizationRepo() {
+        UUID orgId = UUID.randomUUID();
+        UUID orgRepoId = UUID.randomUUID();
+
+        Repository orgRepo = Repository.builder()
+                .id(orgRepoId)
+                .scope("ORGANIZATION")
+                .organizationId(orgId)
+                .workspaceId(orgId)
+                .githubRepoId(999888L)
+                .fullName("corp/internal-tool")
+                .defaultBranch("main")
+                .build();
+
+        when(repositoryRepository.findByIdAndWorkspaceId(orgRepoId, orgId)).thenReturn(Optional.of(orgRepo));
+
+        // Personal caller (organizationId == null) attempting to access org repo via workspaceId -> REJECTED
+        assertThatThrownBy(() -> repositoryApplicationService.getRepository(null, orgId, orgRepoId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("E2E-WS-16: Personal Workspace Pull Request and Changeset Retrieval Succeeds")
+    void testPersonalWorkspacePullRequestAndChangesetRetrieval() {
+        UUID personalWsId = UUID.randomUUID();
+        UUID repoId = UUID.randomUUID();
+        UUID prId = UUID.randomUUID();
+
+        Repository personalRepo = Repository.builder()
+                .id(repoId)
+                .scope("PERSONAL")
+                .organizationId(null)
+                .workspaceId(personalWsId)
+                .githubRepoId(112233L)
+                .fullName("alice/my-repo")
+                .defaultBranch("main")
+                .build();
+
+        PullRequest pr = PullRequest.builder()
+                .id(prId)
+                .repositoryId(repoId)
+                .organizationId(null)
+                .workspaceId(personalWsId)
+                .number(7)
+                .title("Add workspace support")
+                .sourceBranch("feat/ws")
+                .targetBranch("main")
+                .status(PullRequestStatus.OPEN)
+                .build();
+
+        when(repositoryRepository.findByIdAndWorkspaceId(repoId, personalWsId)).thenReturn(Optional.of(personalRepo));
+        when(pullRequestRepository.findByRepositoryIdAndNumber(repoId, 7)).thenReturn(Optional.of(pr));
+        when(repositoryRepository.findAllByWorkspaceId(personalWsId)).thenReturn(List.of(personalRepo));
+        when(pullRequestRepository.findAllByRepositoryId(repoId)).thenReturn(List.of(pr));
+
+        // 1. Get PR via personal workspace
+        PullRequest fetchedPr = repositoryApplicationService.getPullRequest(null, personalWsId, repoId, 7);
+        assertThat(fetchedPr).isNotNull();
+        assertThat(fetchedPr.getNumber()).isEqualTo(7);
+        assertThat(fetchedPr.getWorkspaceId()).isEqualTo(personalWsId);
+        assertThat(fetchedPr.getOrganizationId()).isNull();
+
+        // 2. List PRs via personal workspace (repo-specific and workspace-wide)
+        List<PullRequest> prList = repositoryApplicationService.listPullRequests(null, personalWsId, repoId);
+        assertThat(prList).hasSize(1);
+        assertThat(prList.get(0).getNumber()).isEqualTo(7);
+
+        List<PullRequest> allPrs = repositoryApplicationService.listPullRequests(null, personalWsId, null);
+        assertThat(allPrs).hasSize(1);
+        assertThat(allPrs.get(0).getNumber()).isEqualTo(7);
+
+        // 3. Fallback PR Changeset retrieval via personal workspace
+        var changeSet = repositoryApplicationService.getPullRequestChanges(null, personalWsId, repoId, 7);
+        assertThat(changeSet).isNotNull();
+        assertThat(changeSet.getNumber()).isEqualTo(7);
+        assertThat(changeSet.getTitle()).isEqualTo("Add workspace support");
     }
 
     private static String generateRsaKey() {

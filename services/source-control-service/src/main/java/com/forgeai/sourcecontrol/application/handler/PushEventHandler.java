@@ -172,7 +172,7 @@ public class PushEventHandler {
                     }
 
                     boolean syncSuccess = aiServiceClient.syncPush(
-                            repository.getOrganizationId(),
+                            repository.getOrganizationId() != null ? repository.getOrganizationId() : repository.getWorkspaceId(),
                             repository.getId(),
                             afterSha,
                             ref,

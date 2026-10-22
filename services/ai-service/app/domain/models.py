@@ -39,6 +39,7 @@ class IndexJobStatus(str, Enum):
 class CodeChunk(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     organization_id: UUID
+    workspace_id: Optional[UUID] = None
     repository_id: UUID
     commit_sha: str
     file_path: str
@@ -54,6 +55,7 @@ class CodeChunk(BaseModel):
 class GraphEdge(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     organization_id: UUID
+    workspace_id: Optional[UUID] = None
     repository_id: UUID
     source_symbol: str
     target_symbol: str
@@ -363,6 +365,7 @@ class TestValidationFeedback(BaseModel):
 class Analysis(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     organization_id: UUID
+    workspace_id: Optional[UUID] = None
     entity_type: str
     entity_id: str
     provider: str = "GEMINI"
@@ -393,6 +396,7 @@ class Analysis(BaseModel):
 class IndexJob(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     organization_id: UUID
+    workspace_id: Optional[UUID] = None
     repository_id: UUID
     commit_sha: str
     status: IndexJobStatus = IndexJobStatus.QUEUED
