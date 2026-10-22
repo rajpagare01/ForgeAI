@@ -18,3 +18,7 @@ spring:
     show-sql: false
   flyway:
     enabled: false
+
+forgeai:
+  security:
+    enforce-internal-marker: false

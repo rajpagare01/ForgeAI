@@ -61,16 +61,26 @@ class SourceControlOperationsSecurityTest {
     }
 
     @Test
-    @DisplayName("Dead-letter list: missing tenant context returns HTTP 403 Forbidden")
-    void getDeadLetterMissingTenantReturns403() {
-        ResponseEntity<List<OutboxEventEntity>> response = controller.getDeadLetterEvents(null, null, 0, 20);
+    @DisplayName("Dead-letter list: missing internal attestation header returns HTTP 403 Forbidden")
+    void getDeadLetterMissingAttestationReturns403() {
+        ResponseEntity<List<OutboxEventEntity>> response = controller.getDeadLetterEvents(
+                orgA.toString(), null, null, 0, 20);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         verifyNoInteractions(outboxEventRepository);
     }
 
     @Test
-    @DisplayName("Dead-letter list: queries exclusively caller's organizationId (cross-tenant isolated)")
-    void getDeadLetterIsStrictlyTenantScoped() {
+    @DisplayName("Dead-letter list: missing tenant context returns HTTP 403 Forbidden")
+    void getDeadLetterMissingTenantReturns403() {
+        ResponseEntity<List<OutboxEventEntity>> response = controller.getDeadLetterEvents(
+                null, null, "attested", 0, 20);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verifyNoInteractions(outboxEventRepository);
+    }
+
+    @Test
+    @DisplayName("CASE E: Org A dead-letter list never returns NULL-owned events (strictly tenant filtered)")
+    void caseE_getDeadLetterNeverReturnsNullOrCrossTenantEvents() {
         OutboxEventEntity eventA = OutboxEventEntity.builder()
                 .id(UUID.randomUUID())
                 .organizationId(orgA)
@@ -82,49 +92,49 @@ class SourceControlOperationsSecurityTest {
                 eq(orgA), eq("DEAD_LETTER"), any(PageRequest.class)))
                 .thenReturn(List.of(eventA));
 
-        ResponseEntity<List<OutboxEventEntity>> response = controller.getDeadLetterEvents(orgA.toString(), null, 0, 20);
+        ResponseEntity<List<OutboxEventEntity>> response = controller.getDeadLetterEvents(
+                orgA.toString(), null, "attested", 0, 20);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).hasSize(1);
         assertThat(response.getBody().get(0).getOrganizationId()).isEqualTo(orgA);
 
-        // Verify Org B asking returns empty list (zero records for other tenant)
+        // Verify Org B asking returns empty list (zero records for other tenant, never NULL events)
         when(outboxEventRepository.findByOrganizationIdAndStatusOrderByDeadLetterAtDesc(
                 eq(orgB), eq("DEAD_LETTER"), any(PageRequest.class)))
                 .thenReturn(List.of());
 
-        ResponseEntity<List<OutboxEventEntity>> responseB = controller.getDeadLetterEvents(orgB.toString(), null, 0, 20);
+        ResponseEntity<List<OutboxEventEntity>> responseB = controller.getDeadLetterEvents(
+                orgB.toString(), null, "attested", 0, 20);
         assertThat(responseB.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(responseB.getBody()).isEmpty();
     }
 
     @Test
-    @DisplayName("Outbox replay: missing tenant context returns HTTP 403 Forbidden")
-    void replayMissingTenantReturns403() {
+    @DisplayName("CASE A: DEAD_LETTER + organizationId == null + admin caller => replay denied")
+    void caseA_nullOrganizationIdReplayDeniedEvenForAdmin() {
         UUID eventId = UUID.randomUUID();
+        OutboxEventEntity nullOrgEvent = OutboxEventEntity.builder()
+                .id(eventId)
+                .organizationId(null) // Unowned or legacy null event
+                .status("DEAD_LETTER")
+                .deadLetterAt(Instant.now())
+                .build();
+
+        when(outboxEventRepository.findById(eventId)).thenReturn(Optional.of(nullOrgEvent));
+
         ResponseEntity<Map<String, Object>> response = controller.replayOutboxEvent(
-                eventId, null, null, "user-1", "ROLE_ADMIN", "outbox:replay");
+                eventId, orgA.toString(), null, "admin-1", "ROLE_ADMIN", "outbox:replay", "attested");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        verifyNoInteractions(outboxEventRepository);
+        assertThat(response.getBody()).containsEntry("error", "Forbidden: outbox event has no tenant ownership");
+        verify(auditService).recordEvent(eq(orgA), eq("admin-1"), eq("OUTBOX_REPLAY_DENIED"), any(), eq(eventId.toString()), eq("REPLAY"), eq("DENIED"), any());
+        verify(outboxEventRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("Outbox replay: ordinary user without operator/admin role or permission returns HTTP 403 Forbidden")
-    void replayOrdinaryUserDenied403() {
-        UUID eventId = UUID.randomUUID();
-        ResponseEntity<Map<String, Object>> response = controller.replayOutboxEvent(
-                eventId, orgA.toString(), null, "user-regular", "ROLE_USER", "project:read");
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(response.getBody()).containsEntry("error", "Forbidden: operational replay requires operator or organization admin privileges");
-        verify(auditService).recordEvent(eq(orgA), eq("user-regular"), eq("OUTBOX_REPLAY_DENIED"), any(), eq(eventId.toString()), eq("REPLAY"), eq("DENIED"), any());
-        verifyNoInteractions(outboxEventRepository);
-    }
-
-    @Test
-    @DisplayName("Outbox replay: cross-tenant replay attempt (Org B attempting to replay Org A event) returns HTTP 403")
-    void crossTenantReplayBlockedWith403() {
+    @DisplayName("CASE B: DEAD_LETTER + organizationId == Org A + Org B caller => 403 Forbidden")
+    void caseB_crossTenantReplayBlockedWith403() {
         UUID eventId = UUID.randomUUID();
         OutboxEventEntity eventA = OutboxEventEntity.builder()
                 .id(eventId)
@@ -135,9 +145,9 @@ class SourceControlOperationsSecurityTest {
 
         when(outboxEventRepository.findById(eventId)).thenReturn(Optional.of(eventA));
 
-        // Org B caller attempting replay
+        // Org B caller attempting replay on Org A event
         ResponseEntity<Map<String, Object>> response = controller.replayOutboxEvent(
-                eventId, orgB.toString(), null, "operator-b", "ROLE_ADMIN", "outbox:replay");
+                eventId, orgB.toString(), null, "operator-b", "ROLE_ADMIN", "outbox:replay", "attested");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody()).containsEntry("error", "Forbidden: outbox event does not belong to your organization");
@@ -146,8 +156,21 @@ class SourceControlOperationsSecurityTest {
     }
 
     @Test
-    @DisplayName("Outbox replay: authorized tenant admin succeeds and records audit event")
-    void authorizedAdminReplaySucceeds() {
+    @DisplayName("CASE C: DEAD_LETTER + organizationId == Org A + Org A developer => 403 Forbidden")
+    void caseC_developerReplayDenied403() {
+        UUID eventId = UUID.randomUUID();
+        ResponseEntity<Map<String, Object>> response = controller.replayOutboxEvent(
+                eventId, orgA.toString(), null, "dev-user", "DEVELOPER", "project:read", "attested");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).containsEntry("error", "Forbidden: operational replay requires operator or organization admin privileges");
+        verify(auditService).recordEvent(eq(orgA), eq("dev-user"), eq("OUTBOX_REPLAY_DENIED"), any(), eq(eventId.toString()), eq("REPLAY"), eq("DENIED"), any());
+        verifyNoInteractions(outboxEventRepository);
+    }
+
+    @Test
+    @DisplayName("CASE D: DEAD_LETTER + organizationId == Org A + Org A admin/operator => success (200 OK)")
+    void caseD_authorizedAdminReplaySucceeds() {
         UUID eventId = UUID.randomUUID();
         OutboxEventEntity eventA = OutboxEventEntity.builder()
                 .id(eventId)
@@ -171,7 +194,7 @@ class SourceControlOperationsSecurityTest {
                 .thenReturn(auditEvent);
 
         ResponseEntity<Map<String, Object>> response = controller.replayOutboxEvent(
-                eventId, orgA.toString(), null, "admin-user", "ROLE_ADMIN", "outbox:replay");
+                eventId, orgA.toString(), null, "admin-user", "ROLE_ADMIN", "outbox:replay", "attested");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsEntry("status", "REPLAY_SCHEDULED");
@@ -183,6 +206,29 @@ class SourceControlOperationsSecurityTest {
 
         verify(outboxEventRepository).save(eventA);
         verify(auditService).recordEvent(eq(orgA), eq("admin-user"), eq("OUTBOX_REPLAY_REQUESTED"), any(), eq(eventId.toString()), eq("REPLAY"), eq("SUCCESS"), any());
+    }
+
+    @Test
+    @DisplayName("Outbox replay: missing internal attestation header returns HTTP 403 Forbidden")
+    void replayMissingAttestationReturns403() {
+        UUID eventId = UUID.randomUUID();
+        ResponseEntity<Map<String, Object>> response = controller.replayOutboxEvent(
+                eventId, orgA.toString(), null, "admin-user", "ROLE_ADMIN", "outbox:replay", null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).containsEntry("error", "Forbidden: untrusted internal context");
+        verifyNoInteractions(outboxEventRepository);
+    }
+
+    @Test
+    @DisplayName("Outbox replay: missing tenant context returns HTTP 403 Forbidden")
+    void replayMissingTenantReturns403() {
+        UUID eventId = UUID.randomUUID();
+        ResponseEntity<Map<String, Object>> response = controller.replayOutboxEvent(
+                eventId, null, null, "user-1", "ROLE_ADMIN", "outbox:replay", "attested");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verifyNoInteractions(outboxEventRepository);
     }
 
     @Test

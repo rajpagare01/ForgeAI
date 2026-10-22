@@ -160,6 +160,7 @@ public class SourceControlClient {
                 .header("Accept", "application/json")
                 .header("X-Org-Id", organizationId.toString())
                 .header("X-Organization-Id", organizationId.toString())
+                .header("X-ForgeAI-Internal", "attested")
                 .header("X-Correlation-Id", correlationId)
                 .header("traceparent", traceparent)
                 .timeout(Duration.ofSeconds(5))

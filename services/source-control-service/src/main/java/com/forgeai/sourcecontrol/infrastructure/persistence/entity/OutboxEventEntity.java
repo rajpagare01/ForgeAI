@@ -25,7 +25,7 @@ public class OutboxEventEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id")
+    @Column(name = "organization_id", nullable = false)
     private UUID organizationId;
 
     @Column(name = "aggregate_type", nullable = false, length = 64)

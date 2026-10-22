@@ -13,5 +13,7 @@ spring:
     enabled: false
 
 forgeai:
+  security:
+    enforce-internal-marker: false
   github:
     webhook-secret: test-webhook-secret-key-xyz

@@ -33,3 +33,7 @@ management:
   endpoint:
     health:
       show-details: always
+
+forgeai:
+  security:
+    enforce-internal-marker: ${ENFORCE_INTERNAL_MARKER:true}

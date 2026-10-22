@@ -31,37 +31,33 @@ public class SourceControlOperationsController {
     @GetMapping("/outbox/stats")
     public ResponseEntity<Map<String, Object>> getOutboxStats(
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
-            @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader) {
-        String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
-        Map<String, Object> stats = new HashMap<>();
-
-        if (rawOrg != null && !rawOrg.isBlank()) {
-            try {
-                UUID organizationId = UUID.fromString(rawOrg.trim());
-                long pending = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "PENDING");
-                long retrying = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "RETRYING");
-                long deadLetter = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "DEAD_LETTER");
-                stats.put("pending", pending);
-                stats.put("retrying", retrying);
-                stats.put("deadLetter", deadLetter);
-                stats.put("totalUnpublished", pending + retrying);
-                stats.put("rateLimitRemaining", metrics.getRateLimitRemaining());
-                return ResponseEntity.ok(stats);
-            } catch (IllegalArgumentException ignored) {}
+            @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader) {
+        if (internalHeader == null || !internalHeader.equals("attested")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Untrusted internal context"));
         }
 
-        long pending = outboxEventRepository.countByStatus("PENDING");
-        long retrying = outboxEventRepository.countByStatus("RETRYING");
-        long deadLetter = outboxEventRepository.countByStatus("DEAD_LETTER");
-        long totalUnpublished = outboxEventRepository.countByPublishedAtIsNull();
+        String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
+        if (rawOrg == null || rawOrg.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "error", "Tenant context (X-Organization-Id) is required for operational stats; global fallback disabled"));
+        }
 
-        stats.put("pending", pending);
-        stats.put("retrying", retrying);
-        stats.put("deadLetter", deadLetter);
-        stats.put("totalUnpublished", totalUnpublished);
-        stats.put("rateLimitRemaining", metrics.getRateLimitRemaining());
-
-        return ResponseEntity.ok(stats);
+        try {
+            UUID organizationId = UUID.fromString(rawOrg.trim());
+            Map<String, Object> stats = new HashMap<>();
+            long pending = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "PENDING");
+            long retrying = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "RETRYING");
+            long deadLetter = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "DEAD_LETTER");
+            stats.put("pending", pending);
+            stats.put("retrying", retrying);
+            stats.put("deadLetter", deadLetter);
+            stats.put("totalUnpublished", pending + retrying);
+            stats.put("rateLimitRemaining", metrics.getRateLimitRemaining());
+            return ResponseEntity.ok(stats);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Invalid organization UUID"));
+        }
     }
 
     @GetMapping("/github/stats")
@@ -79,8 +75,13 @@ public class SourceControlOperationsController {
     public ResponseEntity<List<OutboxEventEntity>> getDeadLetterEvents(
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+
+        if (internalHeader == null || !internalHeader.equals("attested")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
         if (rawOrg == null || rawOrg.isBlank()) {
@@ -106,7 +107,13 @@ public class SourceControlOperationsController {
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
-            @RequestHeader(value = "X-Permissions", required = false) String permissionsHeader) {
+            @RequestHeader(value = "X-Permissions", required = false) String permissionsHeader,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader) {
+
+        if (internalHeader == null || !internalHeader.equals("attested")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "error", "Forbidden: untrusted internal context"));
+        }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
         if (rawOrg == null || rawOrg.isBlank()) {
@@ -145,8 +152,25 @@ public class SourceControlOperationsController {
                     "error", "Outbox event not found with id: " + id));
         }
 
+        // Strict tenant ownership invariant: events with NULL organizationId are strictly non-replayable
+        if (entity.getOrganizationId() == null) {
+            log.warn("Replay denied for event {} with null organizationId (caller org {})", id, organizationId);
+            auditService.recordEvent(
+                    organizationId,
+                    userId != null ? userId : "operator",
+                    "OUTBOX_REPLAY_DENIED",
+                    "OUTBOX_EVENT",
+                    id.toString(),
+                    "REPLAY",
+                    "DENIED",
+                    Map.of("reason", "Outbox event has no tenant ownership; replay denied")
+            );
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "error", "Forbidden: outbox event has no tenant ownership"));
+        }
+
         // Multi-tenant structured check: verify event belongs to caller's organization
-        if (entity.getOrganizationId() != null && !entity.getOrganizationId().equals(organizationId)) {
+        if (!entity.getOrganizationId().equals(organizationId)) {
             log.warn("Cross-tenant replay attempt blocked: caller org {} does not match event org {}",
                     organizationId, entity.getOrganizationId());
             auditService.recordEvent(
@@ -224,7 +248,14 @@ public class SourceControlOperationsController {
     public ResponseEntity<List<AuditEventEntity>> getRecentAuditEvents(
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
+            @RequestHeader(value = "X-Permissions", required = false) String permissionsHeader,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader,
             @RequestParam(defaultValue = "50") int limit) {
+
+        if (internalHeader == null || !internalHeader.equals("attested")) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
         if (rawOrg == null || rawOrg.isBlank()) {
@@ -234,6 +265,12 @@ public class SourceControlOperationsController {
         try {
             organizationId = UUID.fromString(rawOrg.trim());
         } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        if (!isAuthorizedOperatorOrAdmin(rolesHeader, permissionsHeader)) {
+            log.warn("Unauthorized audit events access: user lacks operator/admin privileges (roles={}, permissions={})",
+                    rolesHeader, permissionsHeader);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 

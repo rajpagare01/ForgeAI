@@ -6,7 +6,5 @@ import java.util.UUID;
 public interface DomainEvent {
     String getEventType();
     Instant getTimestamp();
-    default UUID getOrganizationId() {
-        return null;
-    }
+    UUID getOrganizationId();
 }

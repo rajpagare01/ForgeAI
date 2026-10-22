@@ -34,6 +34,8 @@ management:
       show-details: always
 
 forgeai:
+  security:
+    enforce-internal-marker: ${ENFORCE_INTERNAL_MARKER:true}
   github:
     # Numeric GitHub App ID — required for GitHub integration
     # Set via GITHUB_APP_ID environment variable

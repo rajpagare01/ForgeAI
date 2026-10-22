@@ -99,6 +99,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       SERVER_PORT: 8085
+      ENFORCE_INTERNAL_MARKER: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -140,6 +141,7 @@ services:
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
       GITHUB_PRIVATE_KEY_PATH: ${GITHUB_PRIVATE_KEY_PATH:-/app/secrets/github-app-private-key.pem}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      ENFORCE_INTERNAL_MARKER: "true"
     volumes:
       - ./secrets:/app/secrets:ro
     depends_on:
@@ -177,6 +179,7 @@ services:
       DB_USER: ${POSTGRES_USER:-forgeai}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       SERVER_PORT: 8083
+      ENFORCE_INTERNAL_MARKER: "true"
     depends_on:
       postgres:
         condition: service_healthy

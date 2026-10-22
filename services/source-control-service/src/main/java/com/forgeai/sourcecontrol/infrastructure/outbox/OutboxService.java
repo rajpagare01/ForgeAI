@@ -33,6 +33,14 @@ public class OutboxService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public <T extends DomainEvent> OutboxEventEntity publish(T event, String traceId, String aggregateType, String aggregateId) {
+        if (event == null) {
+            throw new IllegalArgumentException("Domain event must not be null");
+        }
+        if (event.getOrganizationId() == null) {
+            log.error("Outbox publication rejected: event {} has no organizationId", event.getEventType());
+            throw new IllegalArgumentException("Tenant-owned domain event " + event.getEventType() + " requires a non-null organizationId");
+        }
+
         try {
             // Restore active traceId from MDC first to preserve W3C trace context, then parameter, then random
             String effectiveTraceId = MDC.get("traceId");
@@ -42,7 +50,6 @@ public class OutboxService {
             if (effectiveTraceId == null || effectiveTraceId.isBlank()) {
                 effectiveTraceId = UUID.randomUUID().toString().replace("-", "");
             }
-
 
             EventEnvelope<T> envelope = EventEnvelope.from(event, effectiveTraceId, aggregateType, aggregateId);
             String payloadJson = objectMapper.writeValueAsString(envelope);

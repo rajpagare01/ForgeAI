@@ -30,3 +30,8 @@ services:
   ai:
     url: http://localhost:8084
 
+forgeai:
+  security:
+    enforce-internal-marker: false
+
+

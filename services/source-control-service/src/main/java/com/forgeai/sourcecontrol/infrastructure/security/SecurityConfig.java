@@ -14,10 +14,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final TenantContextFilter tenantContextFilter;
+
+    public SecurityConfig(TenantContextFilter tenantContextFilter) {
+        this.tenantContextFilter = tenantContextFilter;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
