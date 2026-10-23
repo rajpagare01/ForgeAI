@@ -19,8 +19,8 @@ public class JdbcBatchTestResultRepository {
 
     private static final String SQL_INSERT = """
         INSERT INTO test_results (
-            id, organization_id, test_run_id, test_case_id, status, duration_ms, error_message, stack_trace, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, organization_id, workspace_id, scope, test_run_id, test_case_id, status, duration_ms, error_message, stack_trace, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -48,13 +48,15 @@ public class JdbcBatchTestResultRepository {
                 (ps, r) -> {
                     ps.setObject(1, r.getId());
                     ps.setObject(2, r.getOrganizationId());
-                    ps.setObject(3, r.getTestRunId());
-                    ps.setObject(4, r.getTestCaseId());
-                    ps.setString(5, r.getStatus().name());
-                    ps.setLong(6, r.getDurationMs() != null ? r.getDurationMs() : 0L);
-                    ps.setString(7, r.getErrorMessage());
-                    ps.setString(8, r.getStackTrace());
-                    ps.setTimestamp(9, Timestamp.from(r.getCreatedAt()));
+                    ps.setObject(3, r.getWorkspaceId() != null ? r.getWorkspaceId() : r.getOrganizationId());
+                    ps.setString(4, r.getScope() != null ? r.getScope() : (r.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL"));
+                    ps.setObject(5, r.getTestRunId());
+                    ps.setObject(6, r.getTestCaseId());
+                    ps.setString(7, r.getStatus().name());
+                    ps.setLong(8, r.getDurationMs() != null ? r.getDurationMs() : 0L);
+                    ps.setString(9, r.getErrorMessage());
+                    ps.setString(10, r.getStackTrace());
+                    ps.setTimestamp(11, Timestamp.from(r.getCreatedAt()));
                 }
         );
 

@@ -23,8 +23,15 @@ public class TestCaseJpaEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "organization_id")
     private UUID organizationId;
+
+    @Column(name = "workspace_id")
+    private UUID workspaceId;
+
+    @Column(name = "scope", length = 32)
+    @Builder.Default
+    private String scope = "ORGANIZATION";
 
     @Column(name = "suite_id", nullable = false)
     private UUID suiteId;

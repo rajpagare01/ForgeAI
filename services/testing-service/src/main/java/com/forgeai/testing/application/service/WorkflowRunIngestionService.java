@@ -79,12 +79,16 @@ public class WorkflowRunIngestionService {
         if (request.getRepositoryId() == null) {
             throw new IllegalArgumentException("repositoryId is required");
         }
-        if (request.getOrganizationId() == null) {
-            throw new IllegalArgumentException("organizationId is required (must be installation-derived)");
+        if (request.getOrganizationId() == null && request.getWorkspaceId() == null) {
+            throw new IllegalArgumentException("workspaceId or organizationId is required (must be installation-derived)");
         }
         if (request.getWorkflowRunId() == null || request.getWorkflowRunId() == 0L) {
             throw new IllegalArgumentException("workflowRunId must be a non-zero GitHub workflow_run id");
         }
+
+        UUID effectiveWsId = request.getWorkspaceId() != null ? request.getWorkspaceId() : request.getOrganizationId();
+        String effectiveScope = request.getScope() != null ? request.getScope() :
+                (request.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
 
         if (testingMetrics != null) {
             testingMetrics.recordWorkflowRunReceived();
@@ -106,7 +110,9 @@ public class WorkflowRunIngestionService {
                     : "0000000000000000000000000000000000000000";
 
             TestRun run = TestRun.builder()
+                    .workspaceId(effectiveWsId)
                     .organizationId(request.getOrganizationId())
+                    .scope(effectiveScope)
                     .repositoryId(request.getRepositoryId())
                     .commitSha(commitSha)
                     .workflowRunId(request.getWorkflowRunId())

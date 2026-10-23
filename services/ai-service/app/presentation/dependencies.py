@@ -81,3 +81,43 @@ async def check_ai_quota(org_id: UUID = Depends(get_tenant_org_id)):
             detail="AI organizational quota or rate limit exceeded",
             headers={"Retry-After": str(retry_after or 60)},
         )
+
+
+EXEMPT_INTERNAL_PATHS = {
+    "/health",
+    "/healthz",
+    "/api/v1/ai/health",
+    "/metrics",
+    "/api/v1/ai/metrics",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+}
+
+
+def verify_internal_attestation(request: Request) -> None:
+    """
+    Enforces internal service attestation from the API Gateway or trusted internal services (ADV2-006).
+    If ENFORCE_INTERNAL_MARKER is enabled, requests lacking 'X-ForgeAI-Internal: attested'
+    are rejected with HTTP 403 Forbidden to protect direct service port exposure.
+    Health and observability endpoints are exempted.
+    """
+    if not settings.ENFORCE_INTERNAL_MARKER:
+        return
+
+    path = request.url.path
+    if path in EXEMPT_INTERNAL_PATHS or path.endswith("/health") or path.endswith("/healthz"):
+        return
+
+    attestation = request.headers.get(settings.INTERNAL_MARKER_HEADER)
+    if not attestation or attestation.strip().lower() != settings.INTERNAL_MARKER_EXPECTED.lower():
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning(
+            f"Blocked unattested direct request to {path} from {client_ip} "
+            f"(missing or invalid {settings.INTERNAL_MARKER_HEADER})"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: direct service invocation without attested gateway context",
+        )
+

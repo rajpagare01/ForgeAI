@@ -81,13 +81,17 @@ public class AiServiceClient {
     }
 
     public List<RemoteAiAnalysisDto> getAnalysesForPullRequest(UUID organizationId, UUID repositoryId, int prNumber) {
-        if (organizationId == null || repositoryId == null) {
+        return getAnalysesForPullRequest(organizationId, organizationId, repositoryId, prNumber);
+    }
+
+    public List<RemoteAiAnalysisDto> getAnalysesForPullRequest(UUID workspaceId, UUID organizationId, UUID repositoryId, int prNumber) {
+        if ((workspaceId == null && organizationId == null) || repositoryId == null) {
             return Collections.emptyList();
         }
         return circuitBreaker.execute(() -> {
             String entityId = repositoryId + "#" + prNumber;
             String encodedEntityId = URLEncoder.encode(entityId, StandardCharsets.UTF_8);
-            HttpRequest request = buildRequest("/api/v1/ai/analyses/PR/" + encodedEntityId, organizationId);
+            HttpRequest request = buildRequest("/api/v1/ai/analyses/PR/" + encodedEntityId, workspaceId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteAiAnalysisDto>>() {});
@@ -98,11 +102,15 @@ public class AiServiceClient {
     }
 
     public Optional<RemoteMergeReadinessDto> getMergeReadiness(UUID organizationId, UUID analysisId) {
-        if (organizationId == null || analysisId == null) {
+        return getMergeReadiness(organizationId, organizationId, analysisId);
+    }
+
+    public Optional<RemoteMergeReadinessDto> getMergeReadiness(UUID workspaceId, UUID organizationId, UUID analysisId) {
+        if ((workspaceId == null && organizationId == null) || analysisId == null) {
             return Optional.empty();
         }
         return circuitBreaker.execute(() -> {
-            HttpRequest request = buildRequest("/api/v1/ai/merge-readiness/" + analysisId, organizationId);
+            HttpRequest request = buildRequest("/api/v1/ai/merge-readiness/" + analysisId, workspaceId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return Optional.of(objectMapper.readValue(response.body(), RemoteMergeReadinessDto.class));
@@ -113,11 +121,15 @@ public class AiServiceClient {
     }
 
     public List<RemoteEngineeringActionDto> getEngineeringActions(UUID organizationId, UUID analysisId) {
-        if (organizationId == null || analysisId == null) {
+        return getEngineeringActions(organizationId, organizationId, analysisId);
+    }
+
+    public List<RemoteEngineeringActionDto> getEngineeringActions(UUID workspaceId, UUID organizationId, UUID analysisId) {
+        if ((workspaceId == null && organizationId == null) || analysisId == null) {
             return Collections.emptyList();
         }
         return circuitBreaker.execute(() -> {
-            HttpRequest request = buildRequest("/api/v1/ai/analyses/" + analysisId + "/actions", organizationId);
+            HttpRequest request = buildRequest("/api/v1/ai/analyses/" + analysisId + "/actions", workspaceId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteEngineeringActionDto>>() {});
@@ -127,7 +139,7 @@ public class AiServiceClient {
         }, Collections.emptyList());
     }
 
-    private HttpRequest buildRequest(String path, UUID organizationId) throws Exception {
+    private HttpRequest buildRequest(String path, UUID workspaceId, UUID organizationId) throws Exception {
         String traceId = MDC.get("traceId");
         String correlationId = MDC.get("correlationId");
         if (correlationId == null || correlationId.isBlank()) {
@@ -143,13 +155,27 @@ public class AiServiceClient {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
                 .header("Accept", "application/json")
-                .header("X-Org-Id", organizationId.toString())
-                .header("X-Organization-Id", organizationId.toString())
                 .header("X-ForgeAI-Internal", "attested")
                 .header("X-Correlation-Id", correlationId)
                 .header("traceparent", traceparent)
                 .timeout(Duration.ofSeconds(5))
                 .GET();
+
+        if (organizationId != null) {
+            builder.header("X-Org-Id", organizationId.toString());
+            builder.header("X-Organization-Id", organizationId.toString());
+            builder.header("X-Workspace-Id", (workspaceId != null ? workspaceId : organizationId).toString());
+            builder.header("X-Workspace-Scope", "ORGANIZATION");
+        } else if (workspaceId != null) {
+            builder.header("X-Workspace-Id", workspaceId.toString());
+            builder.header("X-Workspace-Scope", "PERSONAL");
+        }
+
+        UUID userId = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+        if (userId != null) {
+            builder.header("X-User-Id", userId.toString());
+        }
+
         return builder.build();
     }
 }

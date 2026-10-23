@@ -13,7 +13,13 @@ public interface SpringDataTraceabilityLinkRepository extends JpaRepository<Trac
 
     Optional<TraceabilityLinkJpaEntity> findByOrganizationIdAndId(UUID organizationId, UUID id);
 
+    Optional<TraceabilityLinkJpaEntity> findByWorkspaceIdAndId(UUID workspaceId, UUID id);
+
     List<TraceabilityLinkJpaEntity> findByOrganizationIdAndProjectId(UUID organizationId, UUID projectId);
+
+    List<TraceabilityLinkJpaEntity> findByWorkspaceIdAndProjectId(UUID workspaceId, UUID projectId);
+
+    List<TraceabilityLinkJpaEntity> findByProjectId(UUID projectId);
 
     List<TraceabilityLinkJpaEntity> findByOrganizationIdAndSourceTypeAndSourceId(
             UUID organizationId, String sourceType, String sourceId
@@ -33,5 +39,17 @@ public interface SpringDataTraceabilityLinkRepository extends JpaRepository<Trac
             String linkOrigin
     );
 
+    boolean existsByWorkspaceIdAndProjectIdAndSourceTypeAndSourceIdAndTargetTypeAndTargetIdAndLinkOrigin(
+            UUID workspaceId,
+            UUID projectId,
+            String sourceType,
+            String sourceId,
+            String targetType,
+            String targetId,
+            String linkOrigin
+    );
+
     void deleteByOrganizationIdAndId(UUID organizationId, UUID id);
+
+    void deleteByWorkspaceIdAndId(UUID workspaceId, UUID id);
 }

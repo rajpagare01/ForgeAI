@@ -43,12 +43,14 @@ public class InstallationController {
     public ResponseEntity<GitHubInstallation> claimInstallation(
             @RequestBody ClaimInstallationRequest request) {
         UUID organizationId = TenantContext.getOrganizationId();
-        UUID workspaceId = request != null ? request.workspaceId() : null;
+        UUID workspaceId = (request != null && request.workspaceId() != null)
+                ? request.workspaceId()
+                : TenantContext.getWorkspaceId();
         if (request == null || request.installationId() == null || request.installationId() <= 0) {
             throw new IllegalArgumentException("A valid installationId is required.");
         }
         GitHubInstallation claimed = repositoryApplicationService.claimInstallation(
-                organizationId, workspaceId, request.installationId());
+                organizationId, workspaceId, request.installationId(), TenantContext.getUserId());
         return ResponseEntity.ok(claimed);
     }
 
@@ -60,7 +62,9 @@ public class InstallationController {
     public ResponseEntity<GitHubInstallation> getCurrentInstallation(
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getClaimedInstallation(organizationId, workspaceId));
+        UUID effectiveWsId = workspaceId != null ? workspaceId : TenantContext.getWorkspaceId();
+        return ResponseEntity.ok(repositoryApplicationService.getClaimedInstallation(
+                organizationId, effectiveWsId, TenantContext.getUserId()));
     }
 }
 

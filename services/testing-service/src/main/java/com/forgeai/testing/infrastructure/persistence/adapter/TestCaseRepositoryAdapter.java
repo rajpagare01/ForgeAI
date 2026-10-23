@@ -43,6 +43,11 @@ public class TestCaseRepositoryAdapter implements TestCaseRepository {
     }
 
     @Override
+    public Optional<TestCase> findByIdAndWorkspaceId(UUID id, UUID workspaceId) {
+        return jpaRepository.findByIdAndWorkspaceId(id, workspaceId).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<TestCase> findBySuiteIdAndNameAndClassname(UUID suiteId, String name, String classname) {
         return jpaRepository.findBySuiteIdAndNameAndClassname(suiteId, name, classname)
                 .map(mapper::toDomain);
@@ -51,6 +56,13 @@ public class TestCaseRepositoryAdapter implements TestCaseRepository {
     @Override
     public List<TestCase> findAllByOrganizationIdAndRequirementKey(UUID organizationId, String requirementKey) {
         return jpaRepository.findAllByOrganizationIdAndRequirementKey(organizationId, requirementKey).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<TestCase> findAllByWorkspaceIdAndRequirementKey(UUID workspaceId, String requirementKey) {
+        return jpaRepository.findAllByWorkspaceIdAndRequirementKey(workspaceId, requirementKey).stream()
                 .map(mapper::toDomain)
                 .toList();
     }

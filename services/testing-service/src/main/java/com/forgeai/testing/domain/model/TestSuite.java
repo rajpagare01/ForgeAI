@@ -15,6 +15,8 @@ import java.util.UUID;
 public class TestSuite {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
+    private String scope;
     private UUID repositoryId;
     private String name;
     private String framework;

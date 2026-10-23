@@ -15,6 +15,8 @@ import java.util.UUID;
 public class TestRun {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
+    private String scope;
     private UUID repositoryId;
     private String commitSha;
     private Integer pullRequestNumber;

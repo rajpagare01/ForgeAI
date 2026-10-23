@@ -42,8 +42,22 @@ public class TestResultRepositoryAdapter implements TestResultRepository {
     }
 
     @Override
+    public List<TestResult> findAllByWorkspaceIdAndTestRunId(UUID workspaceId, UUID testRunId) {
+        return jpaRepository.findAllByWorkspaceIdAndTestRunId(workspaceId, testRunId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<TestResult> findAllByOrganizationIdAndTestCaseId(UUID organizationId, UUID testCaseId) {
         return jpaRepository.findAllByOrganizationIdAndTestCaseId(organizationId, testCaseId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<TestResult> findAllByWorkspaceIdAndTestCaseId(UUID workspaceId, UUID testCaseId) {
+        return jpaRepository.findAllByWorkspaceIdAndTestCaseId(workspaceId, testCaseId).stream()
                 .map(mapper::toDomain)
                 .toList();
     }

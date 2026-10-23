@@ -29,15 +29,32 @@ public class TestRunApplicationService {
     private final TestResultRepository testResultRepository;
     private final OutboxService outboxService;
 
+    private UUID resolveWorkspace(UUID workspaceId, UUID organizationId) {
+        if (workspaceId != null) return workspaceId;
+        if (organizationId != null) return organizationId;
+        throw new IllegalArgumentException("Workspace ID or Organization ID must be provided via tenant context");
+    }
+
+    private String resolveScope(String scope, UUID organizationId) {
+        if (scope != null) return scope;
+        return organizationId != null ? "ORGANIZATION" : "PERSONAL";
+    }
+
     @Transactional
     public TestRun createTestRun(UUID organizationId, CreateTestRunCommand command) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
-        }
+        return createTestRun(organizationId, organizationId, "ORGANIZATION", command);
+    }
+
+    @Transactional
+    public TestRun createTestRun(UUID workspaceId, UUID organizationId, String scope, CreateTestRunCommand command) {
+        UUID effectiveWsId = resolveWorkspace(workspaceId, organizationId);
+        String effectiveScope = resolveScope(scope, organizationId);
 
         Instant now = Instant.now();
         TestRun run = TestRun.builder()
+                .workspaceId(effectiveWsId)
                 .organizationId(organizationId)
+                .scope(effectiveScope)
                 .repositoryId(command.repositoryId())
                 .commitSha(command.commitSha())
                 .pullRequestNumber(command.pullRequestNumber())
@@ -53,29 +70,36 @@ public class TestRunApplicationService {
                 .build();
 
         TestRun saved = testRunRepository.save(run);
-        log.info("Created test run: id={}, repo={}, commit={}", saved.getId(), command.repositoryId(), command.commitSha());
+        log.info("Created test run: id={}, wsId={}, orgId={}, repo={}, commit={}",
+                saved.getId(), effectiveWsId, organizationId, command.repositoryId(), command.commitSha());
         return saved;
     }
 
     @Transactional(readOnly = true)
     public TestRun getTestRun(UUID organizationId, UUID runId) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
-        }
-        return testRunRepository.findByIdAndOrganizationId(runId, organizationId)
+        return getTestRun(organizationId, organizationId, runId);
+    }
+
+    @Transactional(readOnly = true)
+    public TestRun getTestRun(UUID workspaceId, UUID organizationId, UUID runId) {
+        UUID effectiveWsId = resolveWorkspace(workspaceId, organizationId);
+        return testRunRepository.findByIdAndWorkspaceId(runId, effectiveWsId)
                 .orElseThrow(() -> new ResourceNotFoundException("Test run not found: " + runId));
     }
 
     @Transactional
     public TestRun completeTestRun(UUID organizationId, UUID runId) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
-        }
+        return completeTestRun(organizationId, organizationId, runId);
+    }
 
-        TestRun run = testRunRepository.findByIdAndOrganizationId(runId, organizationId)
+    @Transactional
+    public TestRun completeTestRun(UUID workspaceId, UUID organizationId, UUID runId) {
+        UUID effectiveWsId = resolveWorkspace(workspaceId, organizationId);
+
+        TestRun run = testRunRepository.findByIdAndWorkspaceId(runId, effectiveWsId)
                 .orElseThrow(() -> new ResourceNotFoundException("Test run not found: " + runId));
 
-        List<TestResult> results = testResultRepository.findAllByOrganizationIdAndTestRunId(organizationId, runId);
+        List<TestResult> results = testResultRepository.findAllByWorkspaceIdAndTestRunId(effectiveWsId, runId);
 
         int passed = 0;
         int failed = 0;
@@ -102,6 +126,8 @@ public class TestRunApplicationService {
             TestRunFailedEvent failedEvent = TestRunFailedEvent.builder()
                     .testRunId(updated.getId())
                     .organizationId(updated.getOrganizationId())
+                    .workspaceId(updated.getWorkspaceId())
+                    .scope(updated.getScope())
                     .repositoryId(updated.getRepositoryId())
                     .commitSha(updated.getCommitSha())
                     .totalTests(updated.getTotalTests())
@@ -113,6 +139,8 @@ public class TestRunApplicationService {
             TestRunCompletedEvent completedEvent = TestRunCompletedEvent.builder()
                     .testRunId(updated.getId())
                     .organizationId(updated.getOrganizationId())
+                    .workspaceId(updated.getWorkspaceId())
+                    .scope(updated.getScope())
                     .repositoryId(updated.getRepositoryId())
                     .commitSha(updated.getCommitSha())
                     .totalTests(updated.getTotalTests())
@@ -132,23 +160,29 @@ public class TestRunApplicationService {
 
     @Transactional(readOnly = true)
     public List<TestRun> listTestRuns(UUID organizationId, UUID repositoryId, String commitSha) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
-        }
+        return listTestRuns(organizationId, organizationId, repositoryId, commitSha);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TestRun> listTestRuns(UUID workspaceId, UUID organizationId, UUID repositoryId, String commitSha) {
+        UUID effectiveWsId = resolveWorkspace(workspaceId, organizationId);
         if (commitSha != null && !commitSha.isBlank()) {
-            return testRunRepository.findAllByOrganizationIdAndCommitSha(organizationId, commitSha);
+            return testRunRepository.findAllByWorkspaceIdAndCommitSha(effectiveWsId, commitSha);
         }
         if (repositoryId != null) {
-            return testRunRepository.findAllByOrganizationIdAndRepositoryId(organizationId, repositoryId);
+            return testRunRepository.findAllByWorkspaceIdAndRepositoryId(effectiveWsId, repositoryId);
         }
-        return testRunRepository.findAllByOrganizationId(organizationId);
+        return testRunRepository.findAllByWorkspaceId(effectiveWsId);
     }
 
     @Transactional(readOnly = true)
     public List<TestResult> getTestResults(UUID organizationId, UUID runId) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
-        }
-        return testResultRepository.findAllByOrganizationIdAndTestRunId(organizationId, runId);
+        return getTestResults(organizationId, organizationId, runId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TestResult> getTestResults(UUID workspaceId, UUID organizationId, UUID runId) {
+        UUID effectiveWsId = resolveWorkspace(workspaceId, organizationId);
+        return testResultRepository.findAllByWorkspaceIdAndTestRunId(effectiveWsId, runId);
     }
 }

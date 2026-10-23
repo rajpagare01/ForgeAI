@@ -14,6 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class TraceabilityLink {
     private UUID id;
+    private UUID workspaceId;
     private UUID organizationId;
     private UUID projectId;
     private TraceabilityType sourceType;

@@ -49,6 +49,20 @@ public class AuditService {
             String action,
             String outcome,
             Map<String, Object> metadata) {
+        return recordEvent(organizationId, organizationId, actorUserId, eventType, entityType, entityId, action, outcome, metadata);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public AuditEventEntity recordEvent(
+            UUID organizationId,
+            UUID workspaceId,
+            String actorUserId,
+            String eventType,
+            String entityType,
+            String entityId,
+            String action,
+            String outcome,
+            Map<String, Object> metadata) {
 
         String traceId = MDC.get("traceId");
         String correlationId = MDC.get("correlationId");
@@ -64,6 +78,7 @@ public class AuditService {
 
         AuditEventEntity entity = AuditEventEntity.builder()
                 .organizationId(organizationId)
+                .workspaceId(workspaceId)
                 .actorUserId(actorUserId)
                 .eventType(eventType)
                 .entityType(entityType)
@@ -94,5 +109,11 @@ public class AuditService {
     public List<AuditEventEntity> getRecentEventsForTenant(UUID organizationId, int limit) {
         return auditEventRepository.findByOrganizationIdOrderByCreatedAtDesc(
                 organizationId, PageRequest.of(0, Math.min(limit, 100)));
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuditEventEntity> getRecentEventsForWorkspace(UUID workspaceId, int limit) {
+        return auditEventRepository.findByWorkspaceIdOrderByCreatedAtDesc(
+                workspaceId, PageRequest.of(0, Math.min(limit, 100)));
     }
 }

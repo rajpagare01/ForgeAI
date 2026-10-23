@@ -32,6 +32,16 @@ public class OutboxEventEntity {
     @Column(name = "event_type", nullable = false, length = 64)
     private String eventType;
 
+    @Column(name = "organization_id")
+    private UUID organizationId;
+
+    @Column(name = "workspace_id")
+    private UUID workspaceId;
+
+    @Column(name = "scope", length = 32)
+    @Builder.Default
+    private String scope = "ORGANIZATION";
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
     private String payload;

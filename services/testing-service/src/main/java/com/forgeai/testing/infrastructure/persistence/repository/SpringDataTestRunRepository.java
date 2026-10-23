@@ -9,9 +9,14 @@ import java.util.UUID;
 
 public interface SpringDataTestRunRepository extends JpaRepository<TestRunJpaEntity, UUID> {
     Optional<TestRunJpaEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
+    Optional<TestRunJpaEntity> findByIdAndWorkspaceId(UUID id, UUID workspaceId);
     Optional<TestRunJpaEntity> findByRepositoryIdAndWorkflowRunId(UUID repositoryId, Long workflowRunId);
     List<TestRunJpaEntity> findAllByOrganizationId(UUID organizationId);
+    List<TestRunJpaEntity> findAllByWorkspaceId(UUID workspaceId);
     List<TestRunJpaEntity> findAllByOrganizationIdAndRepositoryId(UUID organizationId, UUID repositoryId);
+    List<TestRunJpaEntity> findAllByWorkspaceIdAndRepositoryId(UUID workspaceId, UUID repositoryId);
     List<TestRunJpaEntity> findAllByOrganizationIdAndCommitSha(UUID organizationId, String commitSha);
+    List<TestRunJpaEntity> findAllByWorkspaceIdAndCommitSha(UUID workspaceId, String commitSha);
     List<TestRunJpaEntity> findAllByOrganizationIdAndRepositoryIdAndPullRequestNumber(UUID organizationId, UUID repositoryId, Integer pullRequestNumber);
+    List<TestRunJpaEntity> findAllByWorkspaceIdAndRepositoryIdAndPullRequestNumber(UUID workspaceId, UUID repositoryId, Integer pullRequestNumber);
 }

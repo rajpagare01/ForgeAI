@@ -15,6 +15,8 @@ import java.util.UUID;
 public class TestResult {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
+    private String scope;
     private UUID testRunId;
     private UUID testCaseId;
     private TestResultStatus status;

@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public interface SpringDataTestCaseRepository extends JpaRepository<TestCaseJpaEntity, UUID> {
     Optional<TestCaseJpaEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
+    Optional<TestCaseJpaEntity> findByIdAndWorkspaceId(UUID id, UUID workspaceId);
     Optional<TestCaseJpaEntity> findBySuiteIdAndNameAndClassname(UUID suiteId, String name, String classname);
     List<TestCaseJpaEntity> findAllByOrganizationIdAndRequirementKey(UUID organizationId, String requirementKey);
+    List<TestCaseJpaEntity> findAllByWorkspaceIdAndRequirementKey(UUID workspaceId, String requirementKey);
 }

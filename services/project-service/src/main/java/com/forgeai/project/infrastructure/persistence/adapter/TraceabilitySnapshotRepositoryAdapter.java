@@ -31,13 +31,32 @@ public class TraceabilitySnapshotRepositoryAdapter implements TraceabilitySnapsh
 
     @Override
     public Optional<TraceabilitySnapshot> findById(UUID organizationId, UUID id) {
-        return springDataRepository.findByOrganizationIdAndId(organizationId, id)
+        if (organizationId != null) {
+            return springDataRepository.findByOrganizationIdAndId(organizationId, id)
+                    .map(EntityDomainMapper::toDomain);
+        }
+        return findById(id);
+    }
+
+    @Override
+    public Optional<TraceabilitySnapshot> findById(UUID id) {
+        return springDataRepository.findById(id)
                 .map(EntityDomainMapper::toDomain);
     }
 
     @Override
     public List<TraceabilitySnapshot> findByProjectId(UUID organizationId, UUID projectId) {
-        return springDataRepository.findByOrganizationIdAndProjectIdOrderByCreatedAtDesc(organizationId, projectId).stream()
+        if (organizationId != null) {
+            return springDataRepository.findByOrganizationIdAndProjectIdOrderByCreatedAtDesc(organizationId, projectId).stream()
+                    .map(EntityDomainMapper::toDomain)
+                    .collect(Collectors.toList());
+        }
+        return findByProjectId(projectId);
+    }
+
+    @Override
+    public List<TraceabilitySnapshot> findByProjectId(UUID projectId) {
+        return springDataRepository.findByProjectIdOrderByCreatedAtDesc(projectId).stream()
                 .map(EntityDomainMapper::toDomain)
                 .collect(Collectors.toList());
     }

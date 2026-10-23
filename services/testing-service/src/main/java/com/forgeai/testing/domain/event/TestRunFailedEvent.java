@@ -15,6 +15,8 @@ import java.util.UUID;
 public class TestRunFailedEvent implements DomainEvent {
     private UUID testRunId;
     private UUID organizationId;
+    private UUID workspaceId;
+    private String scope;
     private UUID repositoryId;
     private String commitSha;
     private Integer totalTests;

@@ -41,8 +41,19 @@ public class TestSuiteRepositoryAdapter implements TestSuiteRepository {
     }
 
     @Override
+    public Optional<TestSuite> findByIdAndWorkspaceId(UUID id, UUID workspaceId) {
+        return jpaRepository.findByIdAndWorkspaceId(id, workspaceId).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<TestSuite> findByOrganizationIdAndRepositoryIdAndName(UUID organizationId, UUID repositoryId, String name) {
         return jpaRepository.findByOrganizationIdAndRepositoryIdAndName(organizationId, repositoryId, name)
+                .map(mapper::toDomain);
+    }
+
+    @Override
+    public Optional<TestSuite> findByWorkspaceIdAndRepositoryIdAndName(UUID workspaceId, UUID repositoryId, String name) {
+        return jpaRepository.findByWorkspaceIdAndRepositoryIdAndName(workspaceId, repositoryId, name)
                 .map(mapper::toDomain);
     }
 }

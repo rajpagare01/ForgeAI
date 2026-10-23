@@ -11,9 +11,13 @@ public interface TraceabilityLinkRepository {
     TraceabilityLink save(TraceabilityLink link);
     List<TraceabilityLink> saveAll(List<TraceabilityLink> links);
     Optional<TraceabilityLink> findById(UUID organizationId, UUID id);
+    Optional<TraceabilityLink> findById(UUID id);
     List<TraceabilityLink> findByProjectId(UUID organizationId, UUID projectId);
+    List<TraceabilityLink> findByProjectId(UUID projectId);
     List<TraceabilityLink> findBySource(UUID organizationId, TraceabilityType sourceType, String sourceId);
     List<TraceabilityLink> findByTarget(UUID organizationId, TraceabilityType targetType, String targetId);
     boolean exists(UUID organizationId, UUID projectId, TraceabilityType sourceType, String sourceId, TraceabilityType targetType, String targetId, String linkOrigin);
+    boolean exists(UUID workspaceId, UUID organizationId, UUID projectId, TraceabilityType sourceType, String sourceId, TraceabilityType targetType, String targetId, String linkOrigin);
     void deleteById(UUID organizationId, UUID id);
+    void deleteById(UUID workspaceId, UUID organizationId, UUID id);
 }

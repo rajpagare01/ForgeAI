@@ -74,17 +74,39 @@ public class TraceabilityAggregationService {
 
     @Transactional(readOnly = true)
     public ProjectTraceabilityResponse getProjectTraceability(UUID organizationId, UUID projectId) {
-        validateTenant(organizationId);
-        Project project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        return getProjectTraceability(organizationId, projectId, null);
+    }
 
+    @Transactional(readOnly = true)
+    public ProjectTraceabilityResponse getProjectTraceability(UUID organizationId, UUID projectId, UUID userId) {
+        validateTenant(organizationId);
+        Project project;
+        if (organizationId != null) {
+            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
+        } else {
+            project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
+
+        UUID wsId = project.getWorkspaceId();
+        UUID effectiveOrgId = project.getOrganizationId();
         RequestAggregationCache cache = new RequestAggregationCache();
 
         // 1. Fetch domain items
-        List<Requirement> requirements = requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
-        List<Task> tasks = taskRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
-        List<ProjectRepositoryLink> repoLinks = projectRepositoryLinkRepository.findByProjectId(organizationId, projectId);
-        List<TraceabilityLink> persistedLinks = traceabilityLinkRepository.findByProjectId(organizationId, projectId);
+        List<Requirement> requirements = effectiveOrgId != null
+                ? requirementRepository.findAllByOrganizationIdAndProjectId(effectiveOrgId, projectId)
+                : requirementRepository.findAllByProjectId(projectId);
+        List<Task> tasks = effectiveOrgId != null
+                ? taskRepository.findAllByOrganizationIdAndProjectId(effectiveOrgId, projectId)
+                : taskRepository.findAllByProjectId(projectId);
+        List<ProjectRepositoryLink> repoLinks = effectiveOrgId != null
+                ? projectRepositoryLinkRepository.findByProjectId(effectiveOrgId, projectId)
+                : projectRepositoryLinkRepository.findByProjectId(projectId);
+        List<TraceabilityLink> persistedLinks = effectiveOrgId != null
+                ? traceabilityLinkRepository.findByProjectId(effectiveOrgId, projectId)
+                : traceabilityLinkRepository.findByProjectId(projectId);
 
         // Map tasks by requirement ID
         Map<UUID, List<Task>> tasksByReqId = tasks.stream()
@@ -94,7 +116,9 @@ public class TraceabilityAggregationService {
         // Fetch task code links
         Map<UUID, List<CodeLink>> codeLinksByTaskId = new HashMap<>();
         for (Task t : tasks) {
-            codeLinksByTaskId.put(t.getId(), codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, t.getId()));
+            codeLinksByTaskId.put(t.getId(), effectiveOrgId != null
+                    ? codeLinkRepository.findAllByOrganizationIdAndTaskId(effectiveOrgId, t.getId())
+                    : codeLinkRepository.findAllByTaskId(t.getId()));
         }
 
         // 2. Fetch external artifacts across connected repositories (using cache)
@@ -106,7 +130,9 @@ public class TraceabilityAggregationService {
         for (ProjectRepositoryLink rl : repoLinks) {
             Optional<RemoteRepositoryDto> repoOpt = cache.repoCache.computeIfAbsent(
                     rl.getRepositoryId(),
-                    rId -> sourceControlClient.getRepository(organizationId, rId)
+                    rId -> effectiveOrgId != null
+                            ? sourceControlClient.getRepository(effectiveOrgId, rId)
+                            : sourceControlClient.getRepository(wsId, null, rId)
             );
             repoOpt.ifPresent(r -> repoDetails.put(rl.getRepositoryId(), r));
 
@@ -114,7 +140,9 @@ public class TraceabilityAggregationService {
                     rl.getRepositoryId(),
                     rId -> {
                         try {
-                            return sourceControlClient.listPullRequests(organizationId, rId);
+                            return effectiveOrgId != null
+                                    ? sourceControlClient.listPullRequests(effectiveOrgId, rId)
+                                    : sourceControlClient.listPullRequests(wsId, null, rId);
                         } catch (Exception e) {
                             log.warn("Failed to fetch PRs for repo {}: {}", rId, e.getMessage());
                             return Collections.emptyList();
@@ -127,7 +155,9 @@ public class TraceabilityAggregationService {
                     rl.getRepositoryId(),
                     rId -> {
                         try {
-                            return sourceControlClient.listCommits(organizationId, rId);
+                            return effectiveOrgId != null
+                                    ? sourceControlClient.listCommits(effectiveOrgId, rId)
+                                    : sourceControlClient.listCommits(wsId, null, rId);
                         } catch (Exception e) {
                             log.warn("Failed to fetch commits for repo {}: {}", rId, e.getMessage());
                             return Collections.emptyList();
@@ -142,7 +172,9 @@ public class TraceabilityAggregationService {
         for (Requirement r : requirements) {
             Optional<RemoteRequirementTestTraceDto> traceOpt = cache.testTraceByReqKeyCache.computeIfAbsent(
                     r.getIdentifier(),
-                    rKey -> testingServiceClient.getTraceabilityForRequirement(organizationId, rKey)
+                    rKey -> effectiveOrgId != null
+                            ? testingServiceClient.getTraceabilityForRequirement(effectiveOrgId, rKey)
+                            : testingServiceClient.getTraceabilityForRequirement(wsId, null, rKey)
             );
             traceOpt.ifPresent(t -> reqTestsByKey.put(r.getIdentifier(), t));
         }
@@ -152,7 +184,9 @@ public class TraceabilityAggregationService {
             if (pr.getHeadSha() != null) {
                 List<RemoteTestRunDto> runs = cache.testRunsByShaCache.computeIfAbsent(
                         pr.getHeadSha(),
-                        sha -> testingServiceClient.listTestRuns(organizationId, pr.getRepositoryId(), sha)
+                        sha -> effectiveOrgId != null
+                                ? testingServiceClient.listTestRuns(effectiveOrgId, pr.getRepositoryId(), sha)
+                                : testingServiceClient.listTestRuns(wsId, null, pr.getRepositoryId(), sha)
                 );
                 testRunsBySha.put(pr.getHeadSha(), runs);
             }
@@ -171,7 +205,9 @@ public class TraceabilityAggregationService {
             String prKey = pr.getRepositoryId() + "#" + prNum;
             List<RemoteAiAnalysisDto> analyses = cache.analysesByPrKeyCache.computeIfAbsent(
                     prKey,
-                    k -> aiServiceClient.getAnalysesForPullRequest(organizationId, pr.getRepositoryId(), prNum)
+                    k -> effectiveOrgId != null
+                            ? aiServiceClient.getAnalysesForPullRequest(effectiveOrgId, pr.getRepositoryId(), prNum)
+                            : aiServiceClient.getAnalysesForPullRequest(wsId, null, pr.getRepositoryId(), prNum)
             );
             aiAnalysesByPrKey.put(prKey, analyses);
             allAnalyses.addAll(analyses);
@@ -180,7 +216,9 @@ public class TraceabilityAggregationService {
                 if (analysis.getId() != null) {
                     List<RemoteEngineeringActionDto> actions = cache.actionsByAnalysisIdCache.computeIfAbsent(
                             analysis.getId(),
-                            aId -> aiServiceClient.getEngineeringActions(organizationId, aId)
+                            aId -> effectiveOrgId != null
+                                    ? aiServiceClient.getEngineeringActions(effectiveOrgId, aId)
+                                    : aiServiceClient.getEngineeringActions(wsId, null, aId)
                     );
                     actionsByAnalysisId.put(analysis.getId(), actions);
                 }
@@ -322,7 +360,7 @@ public class TraceabilityAggregationService {
 
         return new ProjectTraceabilityResponse(
                 projectId,
-                organizationId,
+                effectiveOrgId,
                 projectHealth,
                 allGaps,
                 chains,
@@ -334,21 +372,45 @@ public class TraceabilityAggregationService {
 
     @Transactional(readOnly = true)
     public ProjectHealth getProjectHealth(UUID organizationId, UUID projectId) {
-        return getProjectTraceability(organizationId, projectId).health();
+        return getProjectHealth(organizationId, projectId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public ProjectHealth getProjectHealth(UUID organizationId, UUID projectId, UUID userId) {
+        return getProjectTraceability(organizationId, projectId, userId).health();
     }
 
     @Transactional(readOnly = true)
     public List<TraceabilityGap> getProjectGaps(UUID organizationId, UUID projectId) {
-        return getProjectTraceability(organizationId, projectId).gaps();
+        return getProjectGaps(organizationId, projectId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TraceabilityGap> getProjectGaps(UUID organizationId, UUID projectId, UUID userId) {
+        return getProjectTraceability(organizationId, projectId, userId).gaps();
     }
 
     @Transactional(readOnly = true)
     public TraceabilitySpineChainDto getRequirementTraceability(UUID organizationId, UUID requirementId) {
-        validateTenant(organizationId);
-        Requirement req = requirementRepository.findByIdAndOrganizationId(requirementId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId + " in org=" + organizationId));
+        return getRequirementTraceability(organizationId, requirementId, null);
+    }
 
-        ProjectTraceabilityResponse full = getProjectTraceability(organizationId, req.getProjectId());
+    @Transactional(readOnly = true)
+    public TraceabilitySpineChainDto getRequirementTraceability(UUID organizationId, UUID requirementId, UUID userId) {
+        validateTenant(organizationId);
+        Requirement req;
+        if (organizationId != null) {
+            req = requirementRepository.findByIdAndOrganizationId(requirementId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId + " in org=" + organizationId));
+        } else {
+            req = requirementRepository.findById(requirementId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId));
+            Project project = projectRepository.findById(req.getProjectId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + req.getProjectId()));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
+
+        ProjectTraceabilityResponse full = getProjectTraceability(organizationId, req.getProjectId(), userId);
         return full.chains().stream()
                 .filter(c -> c.requirement().id().equals(requirementId))
                 .findFirst()
@@ -357,15 +419,29 @@ public class TraceabilityAggregationService {
 
     @Transactional(readOnly = true)
     public TaskTraceabilityResponse getTaskTraceability(UUID organizationId, UUID taskId) {
+        return getTaskTraceability(organizationId, taskId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public TaskTraceabilityResponse getTaskTraceability(UUID organizationId, UUID taskId, UUID userId) {
         validateTenant(organizationId);
         if (taskId == null) {
             throw new IllegalArgumentException("taskId cannot be null");
         }
 
-        Task task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+        Task task;
+        if (organizationId != null) {
+            task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
+        } else {
+            task = taskRepository.findById(taskId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+            Project project = projectRepository.findById(task.getProjectId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
 
-        ProjectTraceabilityResponse full = getProjectTraceability(organizationId, task.getProjectId());
+        ProjectTraceabilityResponse full = getProjectTraceability(organizationId, task.getProjectId(), userId);
 
         // Find parent requirement and chain
         RequirementResponse parentReq = null;
@@ -381,7 +457,9 @@ public class TraceabilityAggregationService {
         }
 
         // Explicit Code Links
-        List<CodeLinkResponse> codeLinks = codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, task.getId()).stream()
+        List<CodeLinkResponse> codeLinks = (organizationId != null
+                ? codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, task.getId())
+                : codeLinkRepository.findAllByTaskId(task.getId())).stream()
                 .map(CodeLinkResponse::from)
                 .collect(Collectors.toList());
 
@@ -525,13 +603,34 @@ public class TraceabilityAggregationService {
 
     @Transactional
     public int syncTraceability(UUID organizationId, UUID projectId) {
-        validateTenant(organizationId);
-        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        return syncTraceability(organizationId, projectId, null);
+    }
 
-        List<Requirement> requirements = requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
-        List<Task> tasks = taskRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
-        List<ProjectRepositoryLink> repoLinks = projectRepositoryLinkRepository.findByProjectId(organizationId, projectId);
+    @Transactional
+    public int syncTraceability(UUID organizationId, UUID projectId, UUID userId) {
+        validateTenant(organizationId);
+        Project project;
+        if (organizationId != null) {
+            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        } else {
+            project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
+
+        UUID wsId = project.getWorkspaceId();
+        UUID effectiveOrgId = project.getOrganizationId();
+
+        List<Requirement> requirements = effectiveOrgId != null
+                ? requirementRepository.findAllByOrganizationIdAndProjectId(effectiveOrgId, projectId)
+                : requirementRepository.findAllByProjectId(projectId);
+        List<Task> tasks = effectiveOrgId != null
+                ? taskRepository.findAllByOrganizationIdAndProjectId(effectiveOrgId, projectId)
+                : taskRepository.findAllByProjectId(projectId);
+        List<ProjectRepositoryLink> repoLinks = effectiveOrgId != null
+                ? projectRepositoryLinkRepository.findByProjectId(effectiveOrgId, projectId)
+                : projectRepositoryLinkRepository.findByProjectId(projectId);
 
         int createdCount = 0;
 
@@ -539,7 +638,7 @@ public class TraceabilityAggregationService {
         for (Task task : tasks) {
             if (task.getRequirementId() != null) {
                 boolean exists = traceabilityLinkRepository.exists(
-                        organizationId, projectId,
+                        wsId, effectiveOrgId, projectId,
                         TraceabilityType.REQUIREMENT, task.getRequirementId().toString(),
                         TraceabilityType.TASK, task.getId().toString(),
                         LinkOrigin.REQUIREMENT_TASK_RELATION.name()
@@ -547,7 +646,8 @@ public class TraceabilityAggregationService {
                 if (!exists) {
                     TraceabilityLink link = TraceabilityLink.builder()
                             .id(UUID.randomUUID())
-                            .organizationId(organizationId)
+                            .workspaceId(wsId)
+                            .organizationId(effectiveOrgId)
                             .projectId(projectId)
                             .sourceType(TraceabilityType.REQUIREMENT)
                             .sourceId(task.getRequirementId().toString())
@@ -565,7 +665,9 @@ public class TraceabilityAggregationService {
             }
 
             // 2. Explicit Task Code Links
-            List<CodeLink> codeLinks = codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, task.getId());
+            List<CodeLink> codeLinks = effectiveOrgId != null
+                    ? codeLinkRepository.findAllByOrganizationIdAndTaskId(effectiveOrgId, task.getId())
+                    : codeLinkRepository.findAllByTaskId(task.getId());
             for (CodeLink cl : codeLinks) {
                 TraceabilityType targetType = switch (cl.getLinkType()) {
                     case PULL_REQUEST -> TraceabilityType.PULL_REQUEST;
@@ -573,7 +675,7 @@ public class TraceabilityAggregationService {
                     default -> TraceabilityType.CODE;
                 };
                 boolean exists = traceabilityLinkRepository.exists(
-                        organizationId, projectId,
+                        wsId, effectiveOrgId, projectId,
                         TraceabilityType.TASK, task.getId().toString(),
                         targetType, cl.getExternalRef(),
                         LinkOrigin.EXPLICIT_USER_LINK.name()
@@ -581,7 +683,8 @@ public class TraceabilityAggregationService {
                 if (!exists) {
                     TraceabilityLink link = TraceabilityLink.builder()
                             .id(UUID.randomUUID())
-                            .organizationId(organizationId)
+                            .workspaceId(wsId)
+                            .organizationId(effectiveOrgId)
                             .projectId(projectId)
                             .sourceType(TraceabilityType.TASK)
                             .sourceId(task.getId().toString())
@@ -602,7 +705,9 @@ public class TraceabilityAggregationService {
 
         // 3. Derived Task -> PR and Task -> Commit linkages from GitHub activity
         for (ProjectRepositoryLink repoLink : repoLinks) {
-            List<RemotePullRequestDto> prs = sourceControlClient.listPullRequests(organizationId, repoLink.getRepositoryId());
+            List<RemotePullRequestDto> prs = effectiveOrgId != null
+                    ? sourceControlClient.listPullRequests(effectiveOrgId, repoLink.getRepositoryId())
+                    : sourceControlClient.listPullRequests(wsId, null, repoLink.getRepositoryId());
             for (RemotePullRequestDto pr : prs) {
                 for (Task task : tasks) {
                     String taskKey = task.getTaskKey().toLowerCase();
@@ -619,7 +724,7 @@ public class TraceabilityAggregationService {
                                 : "pr_text_match=" + pr.getPrNumber();
 
                         boolean exists = traceabilityLinkRepository.exists(
-                                organizationId, projectId,
+                                wsId, effectiveOrgId, projectId,
                                 TraceabilityType.TASK, task.getId().toString(),
                                 TraceabilityType.PULL_REQUEST, String.valueOf(pr.getPrNumber()),
                                 origin.name()
@@ -627,7 +732,8 @@ public class TraceabilityAggregationService {
                         if (!exists) {
                             TraceabilityLink link = TraceabilityLink.builder()
                                     .id(UUID.randomUUID())
-                                    .organizationId(organizationId)
+                                    .workspaceId(wsId)
+                                    .organizationId(effectiveOrgId)
                                     .projectId(projectId)
                                     .sourceType(TraceabilityType.TASK)
                                     .sourceId(task.getId().toString())
@@ -648,12 +754,14 @@ public class TraceabilityAggregationService {
                 }
             }
 
-            List<RemoteCommitDto> commits = sourceControlClient.listCommits(organizationId, repoLink.getRepositoryId());
+            List<RemoteCommitDto> commits = effectiveOrgId != null
+                    ? sourceControlClient.listCommits(effectiveOrgId, repoLink.getRepositoryId())
+                    : sourceControlClient.listCommits(wsId, null, repoLink.getRepositoryId());
             for (RemoteCommitDto commit : commits) {
                 for (Task task : tasks) {
                     if (matchesText(commit.getMessage(), task.getTaskKey().toLowerCase())) {
                         boolean exists = traceabilityLinkRepository.exists(
-                                organizationId, projectId,
+                                wsId, effectiveOrgId, projectId,
                                 TraceabilityType.TASK, task.getId().toString(),
                                 TraceabilityType.COMMIT, commit.getCommitSha(),
                                 LinkOrigin.COMMIT_MESSAGE.name()
@@ -661,7 +769,8 @@ public class TraceabilityAggregationService {
                         if (!exists) {
                             TraceabilityLink link = TraceabilityLink.builder()
                                     .id(UUID.randomUUID())
-                                    .organizationId(organizationId)
+                                    .workspaceId(wsId)
+                                    .organizationId(effectiveOrgId)
                                     .projectId(projectId)
                                     .sourceType(TraceabilityType.TASK)
                                     .sourceId(task.getId().toString())
@@ -698,13 +807,26 @@ public class TraceabilityAggregationService {
 
     @Transactional
     public TraceabilityLink createLink(UUID organizationId, UUID projectId, CreateTraceabilityLinkRequest request) {
+        return createLink(organizationId, projectId, null, request);
+    }
+
+    @Transactional
+    public TraceabilityLink createLink(UUID organizationId, UUID projectId, UUID userId, CreateTraceabilityLinkRequest request) {
         validateTenant(organizationId);
-        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        Project project;
+        if (organizationId != null) {
+            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        } else {
+            project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
 
         TraceabilityLink link = TraceabilityLink.builder()
                 .id(UUID.randomUUID())
-                .organizationId(organizationId)
+                .workspaceId(project.getWorkspaceId())
+                .organizationId(project.getOrganizationId())
                 .projectId(projectId)
                 .sourceType(request.sourceType())
                 .sourceId(request.sourceId())
@@ -721,7 +843,7 @@ public class TraceabilityAggregationService {
 
         TraceabilityLink saved = traceabilityLinkRepository.save(link);
         if (auditService != null) {
-            UUID actor = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+            UUID actor = userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId();
             String actorStr = actor != null ? actor.toString() : "system";
             auditService.recordEvent(
                     organizationId,
@@ -739,10 +861,24 @@ public class TraceabilityAggregationService {
 
     @Transactional
     public void deleteLink(UUID organizationId, UUID linkId) {
+        deleteLink(organizationId, linkId, null);
+    }
+
+    @Transactional
+    public void deleteLink(UUID organizationId, UUID linkId, UUID userId) {
         validateTenant(organizationId);
-        traceabilityLinkRepository.deleteById(organizationId, linkId);
+        if (organizationId != null) {
+            traceabilityLinkRepository.deleteById(organizationId, linkId);
+        } else {
+            TraceabilityLink link = traceabilityLinkRepository.findById(linkId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Traceability link not found: " + linkId));
+            Project project = projectRepository.findById(link.getProjectId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + link.getProjectId()));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+            traceabilityLinkRepository.deleteById(project.getWorkspaceId(), null, linkId);
+        }
         if (auditService != null) {
-            UUID actor = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+            UUID actor = userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId();
             String actorStr = actor != null ? actor.toString() : "system";
             auditService.recordEvent(
                     organizationId,
@@ -783,7 +919,9 @@ public class TraceabilityAggregationService {
         }
 
         // 3. Strict fail-closed authorization: repository must exist in Source Control under the same organization or workspace
-        RemoteRepositoryDto repoDto = sourceControlClient.getRepository(organizationId, repositoryId)
+        RemoteRepositoryDto repoDto = (project.getOrganizationId() != null
+                ? sourceControlClient.getRepository(project.getOrganizationId(), repositoryId)
+                : sourceControlClient.getRepository(project.getWorkspaceId(), null, repositoryId))
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found or not authorized for organization/workspace: id=" + repositoryId));
 
         // 4. Never trust caller-provided repositoryName as authoritative proof; use authoritative metadata
@@ -858,10 +996,27 @@ public class TraceabilityAggregationService {
 
     @Transactional
     public TraceabilitySnapshot createSnapshot(UUID organizationId, UUID projectId, String snapshotName, Integer prNumber, String commitSha, UUID repositoryId) {
-        validateTenant(organizationId);
-        ProjectTraceabilityResponse response = getProjectTraceability(organizationId, projectId);
+        return createSnapshot(organizationId, projectId, null, snapshotName, prNumber, commitSha, repositoryId);
+    }
 
-        List<TraceabilitySnapshot> existing = traceabilitySnapshotRepository.findByProjectId(organizationId, projectId);
+    @Transactional
+    public TraceabilitySnapshot createSnapshot(UUID organizationId, UUID projectId, UUID userId, String snapshotName, Integer prNumber, String commitSha, UUID repositoryId) {
+        validateTenant(organizationId);
+        Project project;
+        if (organizationId != null) {
+            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        } else {
+            project = projectRepository.findById(projectId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
+
+        ProjectTraceabilityResponse response = getProjectTraceability(organizationId, projectId, userId);
+
+        List<TraceabilitySnapshot> existing = organizationId != null
+                ? traceabilitySnapshotRepository.findByProjectId(organizationId, projectId)
+                : traceabilitySnapshotRepository.findByProjectId(projectId);
         int nextVersion = existing.size() + 1;
         String name = (snapshotName != null && !snapshotName.isBlank()) ? snapshotName : "Snapshot v" + nextVersion;
 
@@ -872,11 +1027,12 @@ public class TraceabilityAggregationService {
             dataJson = "{}";
         }
 
-        UUID actor = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+        UUID actor = userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId();
         String actorStr = actor != null ? actor.toString() : "system";
         TraceabilitySnapshot snapshot = TraceabilitySnapshot.builder()
                 .id(UUID.randomUUID())
-                .organizationId(organizationId)
+                .workspaceId(project.getWorkspaceId())
+                .organizationId(project.getOrganizationId())
                 .projectId(projectId)
                 .snapshotName(name)
                 .prNumber(prNumber)
@@ -913,20 +1069,46 @@ public class TraceabilityAggregationService {
 
     @Transactional(readOnly = true)
     public List<TraceabilitySnapshotResponse> listSnapshots(UUID organizationId, UUID projectId) {
+        return listSnapshots(organizationId, projectId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TraceabilitySnapshotResponse> listSnapshots(UUID organizationId, UUID projectId, UUID userId) {
         validateTenant(organizationId);
-        projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+        if (organizationId != null) {
+            projectRepository.findByIdAndOrganizationId(projectId, organizationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+            return traceabilitySnapshotRepository.findByProjectId(organizationId, projectId).stream()
+                    .map(TraceabilitySnapshotResponse::from)
+                    .collect(Collectors.toList());
+        }
+        Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
-        return traceabilitySnapshotRepository.findByProjectId(organizationId, projectId).stream()
+        verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        return traceabilitySnapshotRepository.findByProjectId(projectId).stream()
                 .map(TraceabilitySnapshotResponse::from)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public TraceabilitySnapshotResponse getSnapshot(UUID organizationId, UUID snapshotId) {
+        return getSnapshot(organizationId, snapshotId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public TraceabilitySnapshotResponse getSnapshot(UUID organizationId, UUID snapshotId, UUID userId) {
         validateTenant(organizationId);
-        return traceabilitySnapshotRepository.findById(organizationId, snapshotId)
-                .map(TraceabilitySnapshotResponse::from)
+        if (organizationId != null) {
+            return traceabilitySnapshotRepository.findById(organizationId, snapshotId)
+                    .map(TraceabilitySnapshotResponse::from)
+                    .orElseThrow(() -> new ResourceNotFoundException("Snapshot not found: id=" + snapshotId));
+        }
+        TraceabilitySnapshot snapshot = traceabilitySnapshotRepository.findById(snapshotId)
                 .orElseThrow(() -> new ResourceNotFoundException("Snapshot not found: id=" + snapshotId));
+        Project project = projectRepository.findById(snapshot.getProjectId())
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + snapshot.getProjectId()));
+        verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        return TraceabilitySnapshotResponse.from(snapshot);
     }
 
     // ======================================================================
@@ -1467,8 +1649,8 @@ public class TraceabilityAggregationService {
     }
 
     private void validateTenant(UUID organizationId) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        if (organizationId == null && com.forgeai.project.infrastructure.security.TenantContext.getUserId() == null) {
+            throw new IllegalArgumentException("Tenant context required: either Organization ID or User ID must be provided");
         }
     }
 }

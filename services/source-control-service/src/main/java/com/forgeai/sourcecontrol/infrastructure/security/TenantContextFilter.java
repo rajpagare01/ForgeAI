@@ -49,6 +49,24 @@ public class TenantContextFilter extends OncePerRequestFilter {
                     }
                 }
 
+                String wsIdHeader = request.getHeader("X-Workspace-Id");
+                if (wsIdHeader != null && !wsIdHeader.isBlank()) {
+                    try {
+                        TenantContext.setWorkspaceId(UUID.fromString(wsIdHeader.trim()));
+                    } catch (IllegalArgumentException e) {
+                        log.warn("Invalid UUID format in X-Workspace-Id: {}", wsIdHeader);
+                    }
+                }
+
+                String wsScopeHeader = request.getHeader("X-Workspace-Scope");
+                if (wsScopeHeader != null && !wsScopeHeader.isBlank()) {
+                    TenantContext.setWorkspaceScope(wsScopeHeader.trim().toUpperCase());
+                } else if (TenantContext.getOrganizationId() != null) {
+                    TenantContext.setWorkspaceScope("ORGANIZATION");
+                } else if (TenantContext.getWorkspaceId() != null) {
+                    TenantContext.setWorkspaceScope("PERSONAL");
+                }
+
                 String userIdHeader = request.getHeader(HEADER_USER_ID);
                 if (userIdHeader != null && !userIdHeader.isBlank()) {
                     try {
@@ -87,6 +105,8 @@ public class TenantContextFilter extends OncePerRequestFilter {
                         return "X-User-Id".equalsIgnoreCase(name) ||
                                "X-Org-Id".equalsIgnoreCase(name) ||
                                "X-Organization-Id".equalsIgnoreCase(name) ||
+                               "X-Workspace-Id".equalsIgnoreCase(name) ||
+                               "X-Workspace-Scope".equalsIgnoreCase(name) ||
                                "X-User-Roles".equalsIgnoreCase(name) ||
                                "X-Permissions".equalsIgnoreCase(name);
                     }

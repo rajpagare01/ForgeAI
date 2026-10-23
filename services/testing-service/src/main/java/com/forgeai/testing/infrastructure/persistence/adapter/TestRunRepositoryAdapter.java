@@ -54,6 +54,11 @@ public class TestRunRepositoryAdapter implements TestRunRepository {
     }
 
     @Override
+    public Optional<TestRun> findByIdAndWorkspaceId(UUID id, UUID workspaceId) {
+        return jpaRepository.findByIdAndWorkspaceId(id, workspaceId).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<TestRun> findByRepositoryIdAndWorkflowRunId(UUID repositoryId, Long workflowRunId) {
         return jpaRepository.findByRepositoryIdAndWorkflowRunId(repositoryId, workflowRunId)
                 .map(mapper::toDomain);
@@ -67,8 +72,22 @@ public class TestRunRepositoryAdapter implements TestRunRepository {
     }
 
     @Override
+    public List<TestRun> findAllByWorkspaceId(UUID workspaceId) {
+        return jpaRepository.findAllByWorkspaceId(workspaceId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<TestRun> findAllByOrganizationIdAndRepositoryId(UUID organizationId, UUID repositoryId) {
         return jpaRepository.findAllByOrganizationIdAndRepositoryId(organizationId, repositoryId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<TestRun> findAllByWorkspaceIdAndRepositoryId(UUID workspaceId, UUID repositoryId) {
+        return jpaRepository.findAllByWorkspaceIdAndRepositoryId(workspaceId, repositoryId).stream()
                 .map(mapper::toDomain)
                 .toList();
     }
@@ -81,8 +100,22 @@ public class TestRunRepositoryAdapter implements TestRunRepository {
     }
 
     @Override
+    public List<TestRun> findAllByWorkspaceIdAndCommitSha(UUID workspaceId, String commitSha) {
+        return jpaRepository.findAllByWorkspaceIdAndCommitSha(workspaceId, commitSha).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<TestRun> findAllByOrganizationIdAndRepositoryIdAndPullRequestNumber(UUID organizationId, UUID repositoryId, Integer pullRequestNumber) {
         return jpaRepository.findAllByOrganizationIdAndRepositoryIdAndPullRequestNumber(organizationId, repositoryId, pullRequestNumber).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<TestRun> findAllByWorkspaceIdAndRepositoryIdAndPullRequestNumber(UUID workspaceId, UUID repositoryId, Integer pullRequestNumber) {
+        return jpaRepository.findAllByWorkspaceIdAndRepositoryIdAndPullRequestNumber(workspaceId, repositoryId, pullRequestNumber).stream()
                 .map(mapper::toDomain)
                 .toList();
     }

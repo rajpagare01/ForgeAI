@@ -39,13 +39,32 @@ public class TraceabilityLinkRepositoryAdapter implements TraceabilityLinkReposi
 
     @Override
     public Optional<TraceabilityLink> findById(UUID organizationId, UUID id) {
-        return springDataRepository.findByOrganizationIdAndId(organizationId, id)
+        if (organizationId != null) {
+            return springDataRepository.findByOrganizationIdAndId(organizationId, id)
+                    .map(EntityDomainMapper::toDomain);
+        }
+        return findById(id);
+    }
+
+    @Override
+    public Optional<TraceabilityLink> findById(UUID id) {
+        return springDataRepository.findById(id)
                 .map(EntityDomainMapper::toDomain);
     }
 
     @Override
     public List<TraceabilityLink> findByProjectId(UUID organizationId, UUID projectId) {
-        return springDataRepository.findByOrganizationIdAndProjectId(organizationId, projectId).stream()
+        if (organizationId != null) {
+            return springDataRepository.findByOrganizationIdAndProjectId(organizationId, projectId).stream()
+                    .map(EntityDomainMapper::toDomain)
+                    .collect(Collectors.toList());
+        }
+        return findByProjectId(projectId);
+    }
+
+    @Override
+    public List<TraceabilityLink> findByProjectId(UUID projectId) {
+        return springDataRepository.findByProjectId(projectId).stream()
                 .map(EntityDomainMapper::toDomain)
                 .collect(Collectors.toList());
     }
@@ -66,13 +85,41 @@ public class TraceabilityLinkRepositoryAdapter implements TraceabilityLinkReposi
 
     @Override
     public boolean exists(UUID organizationId, UUID projectId, TraceabilityType sourceType, String sourceId, TraceabilityType targetType, String targetId, String linkOrigin) {
-        return springDataRepository.existsByOrganizationIdAndProjectIdAndSourceTypeAndSourceIdAndTargetTypeAndTargetIdAndLinkOrigin(
-                organizationId, projectId, sourceType.name(), sourceId, targetType.name(), targetId, linkOrigin
+        if (organizationId != null) {
+            return springDataRepository.existsByOrganizationIdAndProjectIdAndSourceTypeAndSourceIdAndTargetTypeAndTargetIdAndLinkOrigin(
+                    organizationId, projectId, sourceType.name(), sourceId, targetType.name(), targetId, linkOrigin
+            );
+        }
+        return springDataRepository.existsByWorkspaceIdAndProjectIdAndSourceTypeAndSourceIdAndTargetTypeAndTargetIdAndLinkOrigin(
+                projectId, projectId, sourceType.name(), sourceId, targetType.name(), targetId, linkOrigin
+        );
+    }
+
+    @Override
+    public boolean exists(UUID workspaceId, UUID organizationId, UUID projectId, TraceabilityType sourceType, String sourceId, TraceabilityType targetType, String targetId, String linkOrigin) {
+        if (organizationId != null) {
+            return springDataRepository.existsByOrganizationIdAndProjectIdAndSourceTypeAndSourceIdAndTargetTypeAndTargetIdAndLinkOrigin(
+                    organizationId, projectId, sourceType.name(), sourceId, targetType.name(), targetId, linkOrigin
+            );
+        }
+        return springDataRepository.existsByWorkspaceIdAndProjectIdAndSourceTypeAndSourceIdAndTargetTypeAndTargetIdAndLinkOrigin(
+                workspaceId, projectId, sourceType.name(), sourceId, targetType.name(), targetId, linkOrigin
         );
     }
 
     @Override
     public void deleteById(UUID organizationId, UUID id) {
-        springDataRepository.deleteByOrganizationIdAndId(organizationId, id);
+        deleteById(null, organizationId, id);
+    }
+
+    @Override
+    public void deleteById(UUID workspaceId, UUID organizationId, UUID id) {
+        if (organizationId != null) {
+            springDataRepository.deleteByOrganizationIdAndId(organizationId, id);
+        } else if (workspaceId != null) {
+            springDataRepository.deleteByWorkspaceIdAndId(workspaceId, id);
+        } else {
+            springDataRepository.deleteById(id);
+        }
     }
 }

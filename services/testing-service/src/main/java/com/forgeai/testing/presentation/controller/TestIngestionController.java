@@ -29,7 +29,9 @@ public class TestIngestionController {
             @PathVariable UUID runId,
             @Valid @RequestBody RecordTestResultsBatchCommand command) {
         UUID organizationId = TenantContext.getOrganizationId();
-        int count = testIngestionService.ingestBatch(organizationId, runId, command.results());
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        String scope = TenantContext.getWorkspaceScope();
+        int count = testIngestionService.ingestBatch(workspaceId, organizationId, scope, runId, command.results());
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "status", "INGESTED",
                 "runId", runId,
@@ -42,7 +44,9 @@ public class TestIngestionController {
             @PathVariable UUID runId,
             @RequestParam("file") MultipartFile file) throws IOException {
         UUID organizationId = TenantContext.getOrganizationId();
-        int count = testIngestionService.ingestJunitXml(organizationId, runId, file.getBytes());
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        String scope = TenantContext.getWorkspaceScope();
+        int count = testIngestionService.ingestJunitXml(workspaceId, organizationId, scope, runId, file.getBytes());
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "status", "INGESTED",
                 "runId", runId,
@@ -55,7 +59,9 @@ public class TestIngestionController {
             @PathVariable UUID runId,
             @RequestBody byte[] xmlBytes) {
         UUID organizationId = TenantContext.getOrganizationId();
-        int count = testIngestionService.ingestJunitXml(organizationId, runId, xmlBytes);
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        String scope = TenantContext.getWorkspaceScope();
+        int count = testIngestionService.ingestJunitXml(workspaceId, organizationId, scope, runId, xmlBytes);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "status", "INGESTED",
                 "runId", runId,

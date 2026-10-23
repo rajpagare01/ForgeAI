@@ -24,7 +24,8 @@ public class RequirementTestTraceController {
     @GetMapping("/{reqKey}/tests")
     public ResponseEntity<RequirementTraceabilityResponse> getTestsForRequirement(@PathVariable String reqKey) {
         UUID organizationId = TenantContext.getOrganizationId();
-        RequirementTraceabilityResponse response = requirementTraceabilityService.getTraceabilityForRequirement(organizationId, reqKey);
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        RequirementTraceabilityResponse response = requirementTraceabilityService.getTraceabilityForRequirement(workspaceId, organizationId, reqKey);
         return ResponseEntity.ok(response);
     }
 }

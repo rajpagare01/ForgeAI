@@ -24,6 +24,13 @@ public class JwtRevocationGatewayFilter implements GlobalFilter, Ordered {
     private final ReactiveJwtDecoder jwtDecoder;
     private final ReactiveRedisOperations<String, String> redisOperations;
 
+    @org.springframework.beans.factory.annotation.Value("${security.revocation.fail-closed:false}")
+    private boolean failClosed = false;
+
+    public void setFailClosed(boolean failClosed) {
+        this.failClosed = failClosed;
+    }
+
     public JwtRevocationGatewayFilter(ReactiveJwtDecoder jwtDecoder,
                                       ReactiveRedisOperations<String, String> redisOperations) {
         this.jwtDecoder = jwtDecoder;
@@ -67,13 +74,13 @@ public class JwtRevocationGatewayFilter implements GlobalFilter, Ordered {
                             .onErrorResume(e -> {
                                 String path = exchange.getRequest().getURI().getPath();
                                 boolean isPrivileged = path.startsWith("/api/v1/operations") || path.startsWith("/api/v1/admin");
-                                if (isPrivileged) {
-                                    log.error("Redis unreachable during revocation check on privileged route {}, failing closed: {}", path, e.getMessage());
+                                if (isPrivileged || failClosed) {
+                                    log.error("Redis unreachable during revocation check on route {}, failing closed: {}", path, e.getMessage());
                                     exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
                                     return exchange.getResponse().setComplete();
                                 }
-                                // Fail-open for user traffic if Redis partitions/fails
-                                log.error("Redis unreachable during revocation check, failing open: {}", e.getMessage());
+                                // Fail-open for user traffic ONLY if explicitly configured with failClosed=false
+                                log.warn("Redis unreachable during revocation check, failing open as configured: {}", e.getMessage());
                                 return chain.filter(exchange);
                             });
                 })

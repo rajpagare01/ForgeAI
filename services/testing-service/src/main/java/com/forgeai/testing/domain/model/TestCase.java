@@ -15,6 +15,8 @@ import java.util.UUID;
 public class TestCase {
     private UUID id;
     private UUID organizationId;
+    private UUID workspaceId;
+    private String scope;
     private UUID suiteId;
     private String name;
     private String classname;

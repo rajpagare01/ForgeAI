@@ -32,23 +32,35 @@ public class SourceControlOperationsController {
     public ResponseEntity<Map<String, Object>> getOutboxStats(
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-Workspace-Id", required = false) String wsHeader,
             @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader) {
         if (internalHeader == null || !internalHeader.equals("attested")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Untrusted internal context"));
         }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
-        if (rawOrg == null || rawOrg.isBlank()) {
+        String rawWs = wsHeader != null && !wsHeader.isBlank() ? wsHeader : null;
+        if ((rawOrg == null || rawOrg.isBlank()) && (rawWs == null || rawWs.isBlank())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "error", "Tenant context (X-Organization-Id) is required for operational stats; global fallback disabled"));
+                    "error", "Tenant context (X-Organization-Id or X-Workspace-Id) is required for operational stats; global fallback disabled"));
         }
 
         try {
-            UUID organizationId = UUID.fromString(rawOrg.trim());
+            UUID organizationId = (rawOrg != null && !rawOrg.isBlank()) ? UUID.fromString(rawOrg.trim()) : null;
+            UUID workspaceId = (rawWs != null && !rawWs.isBlank()) ? UUID.fromString(rawWs.trim()) : null;
             Map<String, Object> stats = new HashMap<>();
-            long pending = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "PENDING");
-            long retrying = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "RETRYING");
-            long deadLetter = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "DEAD_LETTER");
+            long pending;
+            long retrying;
+            long deadLetter;
+            if (organizationId != null) {
+                pending = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "PENDING");
+                retrying = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "RETRYING");
+                deadLetter = outboxEventRepository.countByOrganizationIdAndStatus(organizationId, "DEAD_LETTER");
+            } else {
+                pending = outboxEventRepository.countByWorkspaceIdAndStatus(workspaceId, "PENDING");
+                retrying = outboxEventRepository.countByWorkspaceIdAndStatus(workspaceId, "RETRYING");
+                deadLetter = outboxEventRepository.countByWorkspaceIdAndStatus(workspaceId, "DEAD_LETTER");
+            }
             stats.put("pending", pending);
             stats.put("retrying", retrying);
             stats.put("deadLetter", deadLetter);
@@ -56,7 +68,7 @@ public class SourceControlOperationsController {
             stats.put("rateLimitRemaining", metrics.getRateLimitRemaining());
             return ResponseEntity.ok(stats);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Invalid organization UUID"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Invalid tenant/workspace UUID"));
         }
     }
 
@@ -75,6 +87,7 @@ public class SourceControlOperationsController {
     public ResponseEntity<List<OutboxEventEntity>> getDeadLetterEvents(
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-Workspace-Id", required = false) String wsHeader,
             @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -84,19 +97,32 @@ public class SourceControlOperationsController {
         }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
-        if (rawOrg == null || rawOrg.isBlank()) {
+        String rawWs = wsHeader != null && !wsHeader.isBlank() ? wsHeader : null;
+        if ((rawOrg == null || rawOrg.isBlank()) && (rawWs == null || rawWs.isBlank())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        UUID organizationId;
+        UUID organizationId = null;
+        UUID workspaceId = null;
         try {
-            organizationId = UUID.fromString(rawOrg.trim());
+            if (rawOrg != null && !rawOrg.isBlank()) {
+                organizationId = UUID.fromString(rawOrg.trim());
+            }
+            if (rawWs != null && !rawWs.isBlank()) {
+                workspaceId = UUID.fromString(rawWs.trim());
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
         int pageSize = Math.min(size, 50);
-        List<OutboxEventEntity> deadLetters = outboxEventRepository.findByOrganizationIdAndStatusOrderByDeadLetterAtDesc(
-                organizationId, "DEAD_LETTER", PageRequest.of(page, pageSize));
+        List<OutboxEventEntity> deadLetters;
+        if (organizationId != null) {
+            deadLetters = outboxEventRepository.findByOrganizationIdAndStatusOrderByDeadLetterAtDesc(
+                    organizationId, "DEAD_LETTER", PageRequest.of(page, pageSize));
+        } else {
+            deadLetters = outboxEventRepository.findByWorkspaceIdAndStatusOrderByDeadLetterAtDesc(
+                    workspaceId, "DEAD_LETTER", PageRequest.of(page, pageSize));
+        }
         return ResponseEntity.ok(deadLetters);
     }
 
@@ -105,6 +131,7 @@ public class SourceControlOperationsController {
             @PathVariable UUID id,
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-Workspace-Id", required = false) String wsHeader,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
             @RequestHeader(value = "X-Permissions", required = false) String permissionsHeader,
@@ -116,24 +143,35 @@ public class SourceControlOperationsController {
         }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
-        if (rawOrg == null || rawOrg.isBlank()) {
+        String rawWs = wsHeader != null && !wsHeader.isBlank() ? wsHeader : null;
+        if ((rawOrg == null || rawOrg.isBlank()) && (rawWs == null || rawWs.isBlank())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "error", "Tenant context (X-Organization-Id) is required for operational replay"));
+                    "error", "Tenant context (X-Organization-Id or X-Workspace-Id) is required for operational replay"));
         }
-        UUID organizationId;
+        UUID organizationId = null;
+        UUID workspaceId = null;
         try {
-            organizationId = UUID.fromString(rawOrg.trim());
+            if (rawOrg != null && !rawOrg.isBlank()) {
+                organizationId = UUID.fromString(rawOrg.trim());
+            }
+            if (rawWs != null && !rawWs.isBlank()) {
+                workspaceId = UUID.fromString(rawWs.trim());
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "error", "Invalid organization UUID"));
+                    "error", "Invalid organization or workspace UUID"));
         }
+
+        UUID auditOrgId = organizationId;
+        UUID auditWsId = workspaceId != null ? workspaceId : organizationId;
 
         // Privileged operation authorization check (requires operator or admin role/permission)
         if (!isAuthorizedOperatorOrAdmin(rolesHeader, permissionsHeader)) {
             log.warn("Unauthorized replay attempt: user {} lacks operator/admin privileges (roles={}, permissions={})",
                     userId, rolesHeader, permissionsHeader);
-            auditService.recordEvent(
+            recordAudit(
                     organizationId,
+                    workspaceId,
                     userId != null ? userId : "unauthorized_user",
                     "OUTBOX_REPLAY_DENIED",
                     "OUTBOX_EVENT",
@@ -152,39 +190,59 @@ public class SourceControlOperationsController {
                     "error", "Outbox event not found with id: " + id));
         }
 
-        // Strict tenant ownership invariant: events with NULL organizationId are strictly non-replayable
-        if (entity.getOrganizationId() == null) {
-            log.warn("Replay denied for event {} with null organizationId (caller org {})", id, organizationId);
-            auditService.recordEvent(
-                    organizationId,
-                    userId != null ? userId : "operator",
-                    "OUTBOX_REPLAY_DENIED",
-                    "OUTBOX_EVENT",
-                    id.toString(),
-                    "REPLAY",
-                    "DENIED",
-                    Map.of("reason", "Outbox event has no tenant ownership; replay denied")
-            );
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "error", "Forbidden: outbox event has no tenant ownership"));
-        }
-
-        // Multi-tenant structured check: verify event belongs to caller's organization
-        if (!entity.getOrganizationId().equals(organizationId)) {
-            log.warn("Cross-tenant replay attempt blocked: caller org {} does not match event org {}",
-                    organizationId, entity.getOrganizationId());
-            auditService.recordEvent(
-                    organizationId,
-                    userId != null ? userId : "operator",
-                    "OUTBOX_REPLAY_DENIED",
-                    "OUTBOX_EVENT",
-                    id.toString(),
-                    "REPLAY",
-                    "DENIED",
-                    Map.of("reason", "Cross-tenant access attempted")
-            );
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
-                    "error", "Forbidden: outbox event does not belong to your organization"));
+        // Check tenant / workspace ownership
+        if (organizationId != null) {
+            if (entity.getOrganizationId() == null) {
+                log.warn("Replay denied for event {} with null organizationId (caller org {})", id, organizationId);
+                recordAudit(
+                        organizationId,
+                        workspaceId,
+                        userId != null ? userId : "operator",
+                        "OUTBOX_REPLAY_DENIED",
+                        "OUTBOX_EVENT",
+                        id.toString(),
+                        "REPLAY",
+                        "DENIED",
+                        Map.of("reason", "Outbox event has no tenant ownership; replay denied")
+                );
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                        "error", "Forbidden: outbox event has no tenant ownership"));
+            }
+            if (!entity.getOrganizationId().equals(organizationId)) {
+                log.warn("Cross-tenant replay attempt blocked: caller org {} does not match event org {}",
+                        organizationId, entity.getOrganizationId());
+                recordAudit(
+                        organizationId,
+                        workspaceId,
+                        userId != null ? userId : "operator",
+                        "OUTBOX_REPLAY_DENIED",
+                        "OUTBOX_EVENT",
+                        id.toString(),
+                        "REPLAY",
+                        "DENIED",
+                        Map.of("reason", "Cross-tenant access attempted")
+                );
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                        "error", "Forbidden: outbox event does not belong to your organization"));
+            }
+        } else if (workspaceId != null) {
+            if (entity.getWorkspaceId() == null || entity.getOrganizationId() != null || !entity.getWorkspaceId().equals(workspaceId)) {
+                log.warn("Cross-workspace replay attempt blocked: caller ws {} does not match event ws {}",
+                        workspaceId, entity.getWorkspaceId());
+                recordAudit(
+                        null,
+                        workspaceId,
+                        userId != null ? userId : "operator",
+                        "OUTBOX_REPLAY_DENIED",
+                        "OUTBOX_EVENT",
+                        id.toString(),
+                        "REPLAY",
+                        "DENIED",
+                        Map.of("reason", "Cross-tenant or cross-workspace access attempted")
+                );
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                        "error", "Forbidden: outbox event does not belong to your organization or workspace"));
+            }
         }
 
         // Validate state
@@ -202,8 +260,9 @@ public class SourceControlOperationsController {
         outboxEventRepository.save(entity);
 
         // Record audit event for compliance
-        AuditEventEntity auditEvent = auditService.recordEvent(
+        AuditEventEntity auditEvent = recordAudit(
                 organizationId,
+                workspaceId,
                 userId != null ? userId : "operator",
                 "OUTBOX_REPLAY_REQUESTED",
                 "OUTBOX_EVENT",
@@ -216,9 +275,17 @@ public class SourceControlOperationsController {
         return ResponseEntity.ok(Map.of(
                 "status", "REPLAY_SCHEDULED",
                 "eventId", entity.getId(),
-                "auditEventId", auditEvent.getId(),
+                "auditEventId", auditEvent != null ? auditEvent.getId() : UUID.randomUUID(),
                 "message", "Outbox event successfully reset to PENDING and scheduled for immediate processing"
         ));
+    }
+
+    private AuditEventEntity recordAudit(UUID organizationId, UUID workspaceId, String actorUserId, String eventType, String entityType, String entityId, String action, String outcome, Map<String, Object> metadata) {
+        if (organizationId != null) {
+            return auditService.recordEvent(organizationId, actorUserId, eventType, entityType, entityId, action, outcome, metadata);
+        } else {
+            return auditService.recordEvent(null, workspaceId, actorUserId, eventType, entityType, entityId, action, outcome, metadata);
+        }
     }
 
     private boolean isAuthorizedOperatorOrAdmin(String rolesHeader, String permissionsHeader) {
@@ -248,6 +315,7 @@ public class SourceControlOperationsController {
     public ResponseEntity<List<AuditEventEntity>> getRecentAuditEvents(
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-Workspace-Id", required = false) String wsHeader,
             @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
             @RequestHeader(value = "X-Permissions", required = false) String permissionsHeader,
             @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader,
@@ -258,12 +326,19 @@ public class SourceControlOperationsController {
         }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
-        if (rawOrg == null || rawOrg.isBlank()) {
+        String rawWs = wsHeader != null && !wsHeader.isBlank() ? wsHeader : null;
+        if ((rawOrg == null || rawOrg.isBlank()) && (rawWs == null || rawWs.isBlank())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        UUID organizationId;
+        UUID organizationId = null;
+        UUID workspaceId = null;
         try {
-            organizationId = UUID.fromString(rawOrg.trim());
+            if (rawOrg != null && !rawOrg.isBlank()) {
+                organizationId = UUID.fromString(rawOrg.trim());
+            }
+            if (rawWs != null && !rawWs.isBlank()) {
+                workspaceId = UUID.fromString(rawWs.trim());
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
@@ -274,7 +349,49 @@ public class SourceControlOperationsController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        List<AuditEventEntity> events = auditService.getRecentEventsForTenant(organizationId, limit);
+        List<AuditEventEntity> events;
+        if (organizationId != null) {
+            events = auditService.getRecentEventsForTenant(organizationId, limit);
+        } else {
+            events = auditService.getRecentEventsForWorkspace(workspaceId, limit);
+        }
         return ResponseEntity.ok(events);
+    }
+
+    public ResponseEntity<Map<String, Object>> getOutboxStats(
+            String orgHeader,
+            String altOrgHeader,
+            String internalHeader) {
+        return getOutboxStats(orgHeader, altOrgHeader, null, internalHeader);
+    }
+
+    public ResponseEntity<List<OutboxEventEntity>> getDeadLetterEvents(
+            String orgHeader,
+            String altOrgHeader,
+            String internalHeader,
+            int page,
+            int size) {
+        return getDeadLetterEvents(orgHeader, altOrgHeader, null, internalHeader, page, size);
+    }
+
+    public ResponseEntity<Map<String, Object>> replayOutboxEvent(
+            UUID id,
+            String orgHeader,
+            String altOrgHeader,
+            String userId,
+            String rolesHeader,
+            String permissionsHeader,
+            String internalHeader) {
+        return replayOutboxEvent(id, orgHeader, altOrgHeader, null, userId, rolesHeader, permissionsHeader, internalHeader);
+    }
+
+    public ResponseEntity<List<AuditEventEntity>> getRecentAuditEvents(
+            String orgHeader,
+            String altOrgHeader,
+            String rolesHeader,
+            String permissionsHeader,
+            String internalHeader,
+            int limit) {
+        return getRecentAuditEvents(orgHeader, altOrgHeader, null, rolesHeader, permissionsHeader, internalHeader, limit);
     }
 }

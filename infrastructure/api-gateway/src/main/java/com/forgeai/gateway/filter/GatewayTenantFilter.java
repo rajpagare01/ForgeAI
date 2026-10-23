@@ -64,6 +64,8 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
         if (clientOrgId == null || clientOrgId.isBlank()) {
             clientOrgId = exchange.getRequest().getHeaders().getFirst("X-Organization-Id");
         }
+        String clientWorkspaceId = exchange.getRequest().getHeaders().getFirst("X-Workspace-Id");
+        String clientWorkspaceScope = exchange.getRequest().getHeaders().getFirst("X-Workspace-Scope");
 
         // Step 1: Strip any inbound client-spoofed headers to guarantee boundary integrity
         ServerHttpRequest sanitizedRequest = exchange.getRequest().mutate()
@@ -74,6 +76,8 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                     httpHeaders.remove("X-User-Roles");
                     httpHeaders.remove("X-Permissions");
                     httpHeaders.remove("X-Workspace-Id");
+                    httpHeaders.remove("X-Workspace-Scope");
+                    httpHeaders.remove("X-ForgeAI-Internal");
                 })
                 .build();
 
@@ -103,6 +107,8 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
         }
 
         final String requestedClientOrgId = clientOrgId;
+        final String requestedClientWsId = clientWorkspaceId;
+        final String requestedClientWsScope = clientWorkspaceScope;
 
         // Step 2: Validate JWT claims via JWKS / asymmetric public key
         return jwtDecoder.decode(token)
@@ -112,6 +118,7 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                     String role = jwt.getClaimAsString("role");
                     List<String> permissions = jwt.getClaimAsStringList("permissions");
 
+
                     // If JWT already has an authoritative org_id claim:
                     if (jwtOrgId != null && !jwtOrgId.isBlank()) {
                         if (requestedClientOrgId != null && !requestedClientOrgId.isBlank() && !requestedClientOrgId.equalsIgnoreCase(jwtOrgId)) {
@@ -119,7 +126,8 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                             exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
                             return exchange.getResponse().setComplete();
                         }
-                        return forwardDownstream(exchange, chain, sanitizedRequest, userId, jwtOrgId, role, permissions);
+                        // For org context, client-supplied workspaceId is stripped downstream
+                        return forwardDownstream(exchange, chain, sanitizedRequest, userId, jwtOrgId, role, permissions, null, "ORGANIZATION");
                     }
 
                     String path = exchange.getRequest().getURI().getPath();
@@ -131,25 +139,39 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                                                 path.startsWith("/actuator");
 
                     if (isUserScopedRoute) {
-                        return forwardDownstream(exchange, chain, sanitizedRequest, userId, null, role, permissions);
+                        return forwardDownstream(exchange, chain, sanitizedRequest, userId, null, role, permissions, null, null);
                     }
 
                     // If JWT does not have org_id claim, but client requested a specific org context:
                     if (requestedClientOrgId != null && !requestedClientOrgId.isBlank()) {
-                        return resolveUserOrgRole(userId, requestedClientOrgId.trim(), token)
+                        String targetOrg = requestedClientOrgId.trim();
+                        return resolveUserOrgRole(userId, targetOrg, token)
                                 .flatMap(resolvedRole -> {
                                     String effectiveRole = (role != null && !role.isBlank()) ? role : resolvedRole;
-                                    return forwardDownstream(exchange, chain, sanitizedRequest, userId, requestedClientOrgId.trim(), effectiveRole, permissions);
+                                    return forwardDownstream(exchange, chain, sanitizedRequest, userId, targetOrg, effectiveRole, permissions, null, "ORGANIZATION");
                                 })
                                 .switchIfEmpty(Mono.defer(() -> {
-                                    log.warn("Access denied: user {} is NOT a member of requested org {}", userId, requestedClientOrgId);
+                                    log.warn("Access denied: user {} is NOT a member of requested org {}", userId, targetOrg);
                                     exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
                                     return exchange.getResponse().setComplete();
                                 }));
                     }
 
-                    // No org context requested
-                    return forwardDownstream(exchange, chain, sanitizedRequest, userId, null, role, permissions);
+                    // Personal workspace context on resource routes:
+                    if (requestedClientWsId != null && !requestedClientWsId.isBlank()) {
+                        try {
+                            java.util.UUID.fromString(requestedClientWsId.trim());
+                        } catch (IllegalArgumentException ex) {
+                            log.warn("Blocked malformed X-Workspace-Id header: {}", requestedClientWsId);
+                            exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
+                            return exchange.getResponse().setComplete();
+                        }
+                        String wsScope = (requestedClientWsScope != null && !requestedClientWsScope.isBlank()) ? requestedClientWsScope.trim() : "PERSONAL";
+                        return forwardDownstream(exchange, chain, sanitizedRequest, userId, null, role, permissions, requestedClientWsId.trim(), wsScope);
+                    }
+
+                    // No org and no workspace context
+                    return forwardDownstream(exchange, chain, sanitizedRequest, userId, null, role, permissions, null, null);
                 })
                 .onErrorResume(e -> {
                     log.warn("Invalid JWT presented at Gateway: {}", e.getMessage());
@@ -215,7 +237,9 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                                         String userId,
                                         String orgId,
                                         String role,
-                                        List<String> permissions) {
+                                        List<String> permissions,
+                                        String workspaceId,
+                                        String workspaceScope) {
         ServerHttpRequest.Builder requestBuilder = sanitizedRequest.mutate();
 
         if (userId != null && !userId.isBlank()) {
@@ -224,6 +248,12 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
         if (orgId != null && !orgId.isBlank()) {
             requestBuilder.header("X-Org-Id", orgId);
             requestBuilder.header("X-Organization-Id", orgId);
+        }
+        if (workspaceId != null && !workspaceId.isBlank()) {
+            requestBuilder.header("X-Workspace-Id", workspaceId);
+        }
+        if (workspaceScope != null && !workspaceScope.isBlank()) {
+            requestBuilder.header("X-Workspace-Scope", workspaceScope);
         }
         if (role != null && !role.isBlank()) {
             requestBuilder.header("X-User-Roles", role);
@@ -234,9 +264,20 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
         requestBuilder.header("X-ForgeAI-Internal", "attested");
 
         ServerHttpRequest downstreamRequest = requestBuilder.build();
-        log.debug("Attested tenant context propagated downstream: user={}, org={}, role={}", userId, orgId, role);
+        log.debug("Attested tenant context propagated downstream: user={}, org={}, ws={}, scope={}, role={}", 
+                userId, orgId, workspaceId, workspaceScope, role);
 
         return chain.filter(exchange.mutate().request(downstreamRequest).build());
+    }
+
+    private Mono<Void> forwardDownstream(ServerWebExchange exchange,
+                                        GatewayFilterChain chain,
+                                        ServerHttpRequest sanitizedRequest,
+                                        String userId,
+                                        String orgId,
+                                        String role,
+                                        List<String> permissions) {
+        return forwardDownstream(exchange, chain, sanitizedRequest, userId, orgId, role, permissions, orgId, orgId != null ? "ORGANIZATION" : null);
     }
 
     @Override

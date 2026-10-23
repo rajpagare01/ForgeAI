@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     USER_HEADER_NAME: str = "X-User-Id"
     PERMISSIONS_HEADER_NAME: str = "X-Permissions"
 
+    # Internal attestation settings (ADV2-006)
+    ENFORCE_INTERNAL_MARKER: bool = True
+    INTERNAL_MARKER_HEADER: str = "X-ForgeAI-Internal"
+    INTERNAL_MARKER_EXPECTED: str = "attested"
+
     # Cross-Repository & Distributed Intelligence Settings
     MAX_CROSS_REPO_DEPTH: int = 2
 

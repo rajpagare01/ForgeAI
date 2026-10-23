@@ -32,14 +32,22 @@ public class TestIngestionService {
 
     @Transactional
     public int ingestBatch(UUID organizationId, UUID runId, List<RecordTestResultItem> items) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        return ingestBatch(organizationId, organizationId, "ORGANIZATION", runId, items);
+    }
+
+    @Transactional
+    public int ingestBatch(UUID workspaceId, UUID organizationId, String scope, UUID runId, List<RecordTestResultItem> items) {
+        UUID effectiveWsId = workspaceId != null ? workspaceId : organizationId;
+        if (effectiveWsId == null) {
+            throw new IllegalArgumentException("Workspace ID or Organization ID must be provided via tenant context");
         }
+        String effectiveScope = scope != null ? scope : (organizationId != null ? "ORGANIZATION" : "PERSONAL");
+
         if (items == null || items.isEmpty()) {
             return 0;
         }
 
-        TestRun run = testRunRepository.findByIdAndOrganizationId(runId, organizationId)
+        TestRun run = testRunRepository.findByIdAndWorkspaceId(runId, effectiveWsId)
                 .orElseThrow(() -> new ResourceNotFoundException("Test run not found: " + runId));
 
         Map<String, TestSuite> suiteCache = new HashMap<>();
@@ -54,9 +62,11 @@ public class TestIngestionService {
 
             // 1. Get or create TestSuite
             TestSuite suite = suiteCache.computeIfAbsent(suiteName, name ->
-                    testSuiteRepository.findByOrganizationIdAndRepositoryIdAndName(organizationId, run.getRepositoryId(), name)
+                    testSuiteRepository.findByWorkspaceIdAndRepositoryIdAndName(effectiveWsId, run.getRepositoryId(), name)
                             .orElseGet(() -> testSuiteRepository.save(TestSuite.builder()
                                     .organizationId(organizationId)
+                                    .workspaceId(effectiveWsId)
+                                    .scope(effectiveScope)
                                     .repositoryId(run.getRepositoryId())
                                     .name(name)
                                     .framework("JUNIT")
@@ -78,6 +88,8 @@ public class TestIngestionService {
                             })
                             .orElseGet(() -> testCaseRepository.save(TestCase.builder()
                                     .organizationId(organizationId)
+                                    .workspaceId(effectiveWsId)
+                                    .scope(effectiveScope)
                                     .suiteId(suite.getId())
                                     .name(item.testName())
                                     .classname(item.classname())
@@ -90,6 +102,8 @@ public class TestIngestionService {
             // 3. Assemble TestResult
             TestResult result = TestResult.builder()
                     .organizationId(organizationId)
+                    .workspaceId(effectiveWsId)
+                    .scope(effectiveScope)
                     .testRunId(run.getId())
                     .testCaseId(testCase.getId())
                     .status(item.status())
@@ -103,12 +117,17 @@ public class TestIngestionService {
         }
 
         testResultRepository.saveAll(resultsToSave);
-        log.info("Ingested {} test results for runId={}, orgId={}", resultsToSave.size(), runId, organizationId);
+        log.info("Ingested {} test results for runId={}, wsId={}, orgId={}", resultsToSave.size(), runId, effectiveWsId, organizationId);
         return resultsToSave.size();
     }
 
     @Transactional
     public int ingestJunitXml(UUID organizationId, UUID runId, byte[] xmlBytes) {
+        return ingestJunitXml(organizationId, organizationId, "ORGANIZATION", runId, xmlBytes);
+    }
+
+    @Transactional
+    public int ingestJunitXml(UUID workspaceId, UUID organizationId, String scope, UUID runId, byte[] xmlBytes) {
         List<JunitXmlParser.ParsedSuite> parsedSuites = junitXmlParser.parse(xmlBytes);
         List<RecordTestResultItem> items = new ArrayList<>();
 
@@ -127,6 +146,6 @@ public class TestIngestionService {
             }
         }
 
-        return ingestBatch(organizationId, runId, items);
+        return ingestBatch(workspaceId, organizationId, scope, runId, items);
     }
 }

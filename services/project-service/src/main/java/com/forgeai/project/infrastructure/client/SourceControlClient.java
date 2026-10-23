@@ -80,11 +80,19 @@ public class SourceControlClient {
     }
 
     public List<RemoteRepositoryDto> listRepositories(UUID organizationId) {
-        if (organizationId == null) {
+        return listRepositories(organizationId, organizationId);
+    }
+
+    public List<RemoteRepositoryDto> listRepositories(UUID workspaceId, UUID organizationId) {
+        if (workspaceId == null && organizationId == null) {
             return Collections.emptyList();
         }
         return circuitBreaker.execute(() -> {
-            HttpRequest request = buildRequest("/api/v1/repositories", organizationId);
+            String path = "/api/v1/repositories";
+            if (organizationId == null && workspaceId != null) {
+                path += "?workspaceId=" + workspaceId;
+            }
+            HttpRequest request = buildRequest(path, workspaceId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteRepositoryDto>>() {});
@@ -95,11 +103,19 @@ public class SourceControlClient {
     }
 
     public Optional<RemoteRepositoryDto> getRepository(UUID organizationId, UUID repositoryId) {
-        if (organizationId == null || repositoryId == null) {
+        return getRepository(organizationId, organizationId, repositoryId);
+    }
+
+    public Optional<RemoteRepositoryDto> getRepository(UUID workspaceId, UUID organizationId, UUID repositoryId) {
+        if ((workspaceId == null && organizationId == null) || repositoryId == null) {
             return Optional.empty();
         }
         return circuitBreaker.execute(() -> {
-            HttpRequest request = buildRequest("/api/v1/repositories/" + repositoryId, organizationId);
+            String path = "/api/v1/repositories/" + repositoryId;
+            if (organizationId == null && workspaceId != null) {
+                path += "?workspaceId=" + workspaceId;
+            }
+            HttpRequest request = buildRequest(path, workspaceId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return Optional.of(objectMapper.readValue(response.body(), RemoteRepositoryDto.class));
@@ -110,14 +126,27 @@ public class SourceControlClient {
     }
 
     public List<RemotePullRequestDto> listPullRequests(UUID organizationId, UUID repositoryId) {
-        if (organizationId == null) {
+        return listPullRequests(organizationId, organizationId, repositoryId);
+    }
+
+    public List<RemotePullRequestDto> listPullRequests(UUID workspaceId, UUID organizationId, UUID repositoryId) {
+        if (workspaceId == null && organizationId == null) {
             return Collections.emptyList();
         }
         return circuitBreaker.execute(() -> {
-            String path = repositoryId != null
-                    ? "/api/v1/repositories/" + repositoryId + "/pull-requests"
-                    : "/api/v1/pull-requests";
-            HttpRequest request = buildRequest(path, organizationId);
+            StringBuilder path = new StringBuilder();
+            if (repositoryId != null) {
+                path.append("/api/v1/repositories/").append(repositoryId).append("/pull-requests");
+                if (organizationId == null && workspaceId != null) {
+                    path.append("?workspaceId=").append(workspaceId);
+                }
+            } else {
+                path.append("/api/v1/pull-requests");
+                if (organizationId == null && workspaceId != null) {
+                    path.append("?workspaceId=").append(workspaceId);
+                }
+            }
+            HttpRequest request = buildRequest(path.toString(), workspaceId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemotePullRequestDto>>() {});
@@ -128,11 +157,19 @@ public class SourceControlClient {
     }
 
     public List<RemoteCommitDto> listCommits(UUID organizationId, UUID repositoryId) {
-        if (organizationId == null || repositoryId == null) {
+        return listCommits(organizationId, organizationId, repositoryId);
+    }
+
+    public List<RemoteCommitDto> listCommits(UUID workspaceId, UUID organizationId, UUID repositoryId) {
+        if ((workspaceId == null && organizationId == null) || repositoryId == null) {
             return Collections.emptyList();
         }
         return circuitBreaker.execute(() -> {
-            HttpRequest request = buildRequest("/api/v1/repositories/" + repositoryId + "/commits", organizationId);
+            String path = "/api/v1/repositories/" + repositoryId + "/commits";
+            if (organizationId == null && workspaceId != null) {
+                path += "?workspaceId=" + workspaceId;
+            }
+            HttpRequest request = buildRequest(path, workspaceId, organizationId);
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteCommitDto>>() {});
@@ -142,7 +179,7 @@ public class SourceControlClient {
         }, Collections.emptyList());
     }
 
-    private HttpRequest buildRequest(String path, UUID organizationId) throws Exception {
+    private HttpRequest buildRequest(String path, UUID workspaceId, UUID organizationId) throws Exception {
         String traceId = MDC.get("traceId");
         String correlationId = MDC.get("correlationId");
         if (correlationId == null || correlationId.isBlank()) {
@@ -158,13 +195,27 @@ public class SourceControlClient {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
                 .header("Accept", "application/json")
-                .header("X-Org-Id", organizationId.toString())
-                .header("X-Organization-Id", organizationId.toString())
                 .header("X-ForgeAI-Internal", "attested")
                 .header("X-Correlation-Id", correlationId)
                 .header("traceparent", traceparent)
                 .timeout(Duration.ofSeconds(5))
                 .GET();
+
+        if (organizationId != null) {
+            builder.header("X-Org-Id", organizationId.toString());
+            builder.header("X-Organization-Id", organizationId.toString());
+            builder.header("X-Workspace-Id", (workspaceId != null ? workspaceId : organizationId).toString());
+            builder.header("X-Workspace-Scope", "ORGANIZATION");
+        } else if (workspaceId != null) {
+            builder.header("X-Workspace-Id", workspaceId.toString());
+            builder.header("X-Workspace-Scope", "PERSONAL");
+        }
+
+        UUID userId = com.forgeai.project.infrastructure.security.TenantContext.getUserId();
+        if (userId != null) {
+            builder.header("X-User-Id", userId.toString());
+        }
+
         return builder.build();
     }
 }

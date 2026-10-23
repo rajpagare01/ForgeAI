@@ -28,26 +28,34 @@ public class TraceabilityController {
 
     @GetMapping
     public ResponseEntity<ProjectTraceabilityResponse> getTraceability(@PathVariable UUID projectId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.getProjectTraceability(orgId, projectId));
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        return ResponseEntity.ok(traceabilityAggregationService.getProjectTraceability(orgId, projectId, userId));
     }
 
     @GetMapping("/health")
     public ResponseEntity<ProjectHealth> getHealth(@PathVariable UUID projectId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.getProjectHealth(orgId, projectId));
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        return ResponseEntity.ok(traceabilityAggregationService.getProjectHealth(orgId, projectId, userId));
     }
 
     @GetMapping("/gaps")
     public ResponseEntity<List<TraceabilityGap>> getGaps(@PathVariable UUID projectId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.getProjectGaps(orgId, projectId));
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        return ResponseEntity.ok(traceabilityAggregationService.getProjectGaps(orgId, projectId, userId));
     }
 
     @PostMapping("/sync")
     public ResponseEntity<Map<String, Object>> syncTraceability(@PathVariable UUID projectId) {
-        UUID orgId = getRequiredOrgId();
-        int synced = traceabilityAggregationService.syncTraceability(orgId, projectId);
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        int synced = traceabilityAggregationService.syncTraceability(orgId, projectId, userId);
         return ResponseEntity.ok(Map.of(
                 "projectId", projectId,
                 "syncedLinks", synced,
@@ -59,8 +67,10 @@ public class TraceabilityController {
     public ResponseEntity<TraceabilityLinkDto> createLink(
             @PathVariable UUID projectId,
             @Valid @RequestBody CreateTraceabilityLinkRequest request) {
-        UUID orgId = getRequiredOrgId();
-        TraceabilityLink link = traceabilityAggregationService.createLink(orgId, projectId, request);
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        TraceabilityLink link = traceabilityAggregationService.createLink(orgId, projectId, userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(TraceabilityLinkDto.from(link));
     }
 
@@ -68,8 +78,10 @@ public class TraceabilityController {
     public ResponseEntity<Void> deleteLink(
             @PathVariable UUID projectId,
             @PathVariable UUID linkId) {
-        UUID orgId = getRequiredOrgId();
-        traceabilityAggregationService.deleteLink(orgId, linkId);
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        traceabilityAggregationService.deleteLink(orgId, linkId, userId);
         return ResponseEntity.noContent().build();
     }
 
@@ -77,36 +89,40 @@ public class TraceabilityController {
     public ResponseEntity<TraceabilitySnapshotResponse> createSnapshot(
             @PathVariable UUID projectId,
             @RequestBody(required = false) CreateSnapshotRequest request) {
-        UUID orgId = getRequiredOrgId();
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
         String name = request != null ? request.snapshotName() : null;
         Integer prNumber = request != null ? request.prNumber() : null;
         String commitSha = request != null ? request.commitSha() : null;
         UUID repositoryId = request != null ? request.repositoryId() : null;
         TraceabilitySnapshot snapshot = traceabilityAggregationService.createSnapshot(
-                orgId, projectId, name, prNumber, commitSha, repositoryId
+                orgId, projectId, userId, name, prNumber, commitSha, repositoryId
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(TraceabilitySnapshotResponse.from(snapshot));
     }
 
     @GetMapping("/snapshots")
     public ResponseEntity<List<TraceabilitySnapshotResponse>> listSnapshots(@PathVariable UUID projectId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.listSnapshots(orgId, projectId));
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        return ResponseEntity.ok(traceabilityAggregationService.listSnapshots(orgId, projectId, userId));
     }
 
     @GetMapping("/snapshots/{snapshotId}")
     public ResponseEntity<TraceabilitySnapshotResponse> getSnapshot(
             @PathVariable UUID projectId,
             @PathVariable UUID snapshotId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.getSnapshot(orgId, snapshotId));
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        validateTenantContext(orgId, userId);
+        return ResponseEntity.ok(traceabilityAggregationService.getSnapshot(orgId, snapshotId, userId));
     }
 
-    private UUID getRequiredOrgId() {
-        UUID orgId = TenantContext.getOrganizationId();
-        if (orgId == null) {
-            throw new IllegalArgumentException("Missing required X-Org-Id tenant context header");
+    private void validateTenantContext(UUID orgId, UUID userId) {
+        if (orgId == null && userId == null) {
+            throw new IllegalArgumentException("Missing required tenant context: either X-Org-Id or X-User-Id must be provided");
         }
-        return orgId;
     }
 }

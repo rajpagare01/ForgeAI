@@ -8,8 +8,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "traceability_links", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_trace_link", columnNames = {
-        "organization_id", "project_id", "source_type", "source_id", "target_type", "target_id", "link_origin"
+    @UniqueConstraint(name = "uq_trace_link_workspace", columnNames = {
+        "workspace_id", "project_id", "source_type", "source_id", "target_type", "target_id", "link_origin"
     })
 })
 @Getter
@@ -23,7 +23,10 @@ public class TraceabilityLinkJpaEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "organization_id", nullable = false)
+    @Column(name = "workspace_id", nullable = false)
+    private UUID workspaceId;
+
+    @Column(name = "organization_id")
     private UUID organizationId;
 
     @Column(name = "project_id", nullable = false)

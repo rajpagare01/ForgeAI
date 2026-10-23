@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public class TraceabilitySnapshot {
     private UUID id;
+    private UUID workspaceId;
     private UUID organizationId;
     private UUID projectId;
     private String snapshotName;
@@ -19,11 +20,12 @@ public class TraceabilitySnapshot {
 
     public TraceabilitySnapshot() {}
 
-    public TraceabilitySnapshot(UUID id, UUID organizationId, UUID projectId, String snapshotName,
+    public TraceabilitySnapshot(UUID id, UUID workspaceId, UUID organizationId, UUID projectId, String snapshotName,
                                 Integer prNumber, String commitSha, UUID repositoryId,
                                 String createdBy, String schemaVersion,
                                 String snapshotData, Instant createdAt) {
         this.id = id;
+        this.workspaceId = workspaceId;
         this.organizationId = organizationId;
         this.projectId = projectId;
         this.snapshotName = snapshotName;
@@ -42,6 +44,9 @@ public class TraceabilitySnapshot {
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
+
+    public UUID getWorkspaceId() { return workspaceId; }
+    public void setWorkspaceId(UUID workspaceId) { this.workspaceId = workspaceId; }
 
     public UUID getOrganizationId() { return organizationId; }
     public void setOrganizationId(UUID organizationId) { this.organizationId = organizationId; }
@@ -75,6 +80,7 @@ public class TraceabilitySnapshot {
 
     public static class Builder {
         private UUID id;
+        private UUID workspaceId;
         private UUID organizationId;
         private UUID projectId;
         private String snapshotName;
@@ -87,6 +93,7 @@ public class TraceabilitySnapshot {
         private Instant createdAt;
 
         public Builder id(UUID id) { this.id = id; return this; }
+        public Builder workspaceId(UUID workspaceId) { this.workspaceId = workspaceId; return this; }
         public Builder organizationId(UUID organizationId) { this.organizationId = organizationId; return this; }
         public Builder projectId(UUID projectId) { this.projectId = projectId; return this; }
         public Builder snapshotName(String snapshotName) { this.snapshotName = snapshotName; return this; }
@@ -99,7 +106,7 @@ public class TraceabilitySnapshot {
         public Builder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
 
         public TraceabilitySnapshot build() {
-            return new TraceabilitySnapshot(id, organizationId, projectId, snapshotName, prNumber, commitSha, repositoryId, createdBy, schemaVersion, snapshotData, createdAt);
+            return new TraceabilitySnapshot(id, workspaceId, organizationId, projectId, snapshotName, prNumber, commitSha, repositoryId, createdBy, schemaVersion, snapshotData, createdAt);
         }
     }
 }

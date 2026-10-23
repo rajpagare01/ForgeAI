@@ -199,6 +199,7 @@ public final class EntityDomainMapper {
         if (entity == null) return null;
         return TraceabilityLink.builder()
                 .id(entity.getId())
+                .workspaceId(entity.getWorkspaceId())
                 .organizationId(entity.getOrganizationId())
                 .projectId(entity.getProjectId())
                 .sourceType(TraceabilityType.valueOf(entity.getSourceType()))
@@ -221,6 +222,7 @@ public final class EntityDomainMapper {
         Instant now = Instant.now();
         return TraceabilityLinkJpaEntity.builder()
                 .id(domain.getId())
+                .workspaceId(domain.getWorkspaceId())
                 .organizationId(domain.getOrganizationId())
                 .projectId(domain.getProjectId())
                 .sourceType(domain.getSourceType() != null ? domain.getSourceType().name() : TraceabilityType.REQUIREMENT.name())
@@ -268,6 +270,7 @@ public final class EntityDomainMapper {
         if (entity == null) return null;
         return TraceabilitySnapshot.builder()
                 .id(entity.getId())
+                .workspaceId(entity.getWorkspaceId())
                 .organizationId(entity.getOrganizationId())
                 .projectId(entity.getProjectId())
                 .snapshotName(entity.getSnapshotName())
@@ -285,6 +288,7 @@ public final class EntityDomainMapper {
         if (domain == null) return null;
         return TraceabilitySnapshotJpaEntity.builder()
                 .id(domain.getId())
+                .workspaceId(domain.getWorkspaceId())
                 .organizationId(domain.getOrganizationId())
                 .projectId(domain.getProjectId())
                 .snapshotName(domain.getSnapshotName())

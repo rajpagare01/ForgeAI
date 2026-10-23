@@ -13,5 +13,11 @@ public interface SpringDataTraceabilitySnapshotRepository extends JpaRepository<
 
     Optional<TraceabilitySnapshotJpaEntity> findByOrganizationIdAndId(UUID organizationId, UUID id);
 
+    Optional<TraceabilitySnapshotJpaEntity> findByWorkspaceIdAndId(UUID workspaceId, UUID id);
+
     List<TraceabilitySnapshotJpaEntity> findByOrganizationIdAndProjectIdOrderByCreatedAtDesc(UUID organizationId, UUID projectId);
+
+    List<TraceabilitySnapshotJpaEntity> findByWorkspaceIdAndProjectIdOrderByCreatedAtDesc(UUID workspaceId, UUID projectId);
+
+    List<TraceabilitySnapshotJpaEntity> findByProjectIdOrderByCreatedAtDesc(UUID projectId);
 }

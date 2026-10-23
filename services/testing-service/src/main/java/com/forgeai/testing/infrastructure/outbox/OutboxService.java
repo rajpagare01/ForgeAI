@@ -36,6 +36,15 @@ public class OutboxService {
             EventEnvelope<T> envelope = EventEnvelope.from(event, traceId);
             String payloadJson = objectMapper.writeValueAsString(envelope);
 
+            String scope = event.getScope();
+            if (scope == null) {
+                scope = event.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL";
+            }
+            UUID workspaceId = event.getWorkspaceId();
+            if (workspaceId == null) {
+                workspaceId = event.getOrganizationId();
+            }
+
             OutboxEventEntity entity = OutboxEventEntity.builder()
                     .aggregateType(event.getAggregateType())
                     .aggregateId(event.getAggregateId())
@@ -44,6 +53,9 @@ public class OutboxService {
                     .traceId(traceId != null ? traceId : UUID.randomUUID().toString())
                     .createdAt(Instant.now())
                     .attemptCount(0)
+                    .organizationId(event.getOrganizationId())
+                    .workspaceId(workspaceId)
+                    .scope(scope)
                     .build();
 
             OutboxEventEntity saved = outboxEventRepository.save(entity);

@@ -25,18 +25,24 @@ public class RequirementTraceabilityService {
 
     @Transactional(readOnly = true)
     public RequirementTraceabilityResponse getTraceabilityForRequirement(UUID organizationId, String requirementKey) {
-        if (organizationId == null) {
-            throw new IllegalArgumentException("Organization ID must be provided via tenant context");
+        return getTraceabilityForRequirement(organizationId, organizationId, requirementKey);
+    }
+
+    @Transactional(readOnly = true)
+    public RequirementTraceabilityResponse getTraceabilityForRequirement(UUID workspaceId, UUID organizationId, String requirementKey) {
+        UUID effectiveWsId = workspaceId != null ? workspaceId : organizationId;
+        if (effectiveWsId == null) {
+            throw new IllegalArgumentException("Workspace ID or Organization ID must be provided via tenant context");
         }
 
-        List<TestCase> testCases = testCaseRepository.findAllByOrganizationIdAndRequirementKey(organizationId, requirementKey.toUpperCase());
+        List<TestCase> testCases = testCaseRepository.findAllByWorkspaceIdAndRequirementKey(effectiveWsId, requirementKey.toUpperCase());
 
         int passedCount = 0;
         int failedCount = 0;
         List<RequirementTraceabilityResponse.TestCaseTraceSummary> summaries = new ArrayList<>();
 
         for (TestCase tc : testCases) {
-            List<TestResultJpaEntity> latestResults = springDataTestResultRepository.findLatestByTestCaseId(organizationId, tc.getId());
+            List<TestResultJpaEntity> latestResults = springDataTestResultRepository.findLatestByTestCaseId(effectiveWsId, tc.getId());
 
             TestResultStatus latestStatus = null;
             Long latestDuration = null;

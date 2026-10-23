@@ -24,7 +24,9 @@ public class TestRunController {
     @PostMapping
     public ResponseEntity<TestRun> createTestRun(@Valid @RequestBody CreateTestRunCommand command) {
         UUID organizationId = TenantContext.getOrganizationId();
-        TestRun run = testRunApplicationService.createTestRun(organizationId, command);
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        String scope = TenantContext.getWorkspaceScope();
+        TestRun run = testRunApplicationService.createTestRun(workspaceId, organizationId, scope, command);
         return ResponseEntity.status(HttpStatus.CREATED).body(run);
     }
 
@@ -33,28 +35,32 @@ public class TestRunController {
             @RequestParam(required = false) UUID repositoryId,
             @RequestParam(required = false) String commitSha) {
         UUID organizationId = TenantContext.getOrganizationId();
-        java.util.List<TestRun> runs = testRunApplicationService.listTestRuns(organizationId, repositoryId, commitSha);
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        java.util.List<TestRun> runs = testRunApplicationService.listTestRuns(workspaceId, organizationId, repositoryId, commitSha);
         return ResponseEntity.ok(runs);
     }
 
     @GetMapping("/{runId}")
     public ResponseEntity<TestRun> getTestRun(@PathVariable UUID runId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        TestRun run = testRunApplicationService.getTestRun(organizationId, runId);
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        TestRun run = testRunApplicationService.getTestRun(workspaceId, organizationId, runId);
         return ResponseEntity.ok(run);
     }
 
     @GetMapping("/{runId}/results")
     public ResponseEntity<java.util.List<com.forgeai.testing.domain.model.TestResult>> getTestResults(@PathVariable UUID runId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        java.util.List<com.forgeai.testing.domain.model.TestResult> results = testRunApplicationService.getTestResults(organizationId, runId);
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        java.util.List<com.forgeai.testing.domain.model.TestResult> results = testRunApplicationService.getTestResults(workspaceId, organizationId, runId);
         return ResponseEntity.ok(results);
     }
 
     @PostMapping("/{runId}/complete")
     public ResponseEntity<TestRun> completeTestRun(@PathVariable UUID runId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        TestRun run = testRunApplicationService.completeTestRun(organizationId, runId);
+        UUID workspaceId = TenantContext.getWorkspaceId();
+        TestRun run = testRunApplicationService.completeTestRun(workspaceId, organizationId, runId);
         return ResponseEntity.ok(run);
     }
 }

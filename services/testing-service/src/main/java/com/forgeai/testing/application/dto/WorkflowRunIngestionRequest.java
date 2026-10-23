@@ -29,6 +29,12 @@ public class WorkflowRunIngestionRequest {
     /** ForgeAI organization UUID — trusted: derived from installation mapping in Source Control. */
     private UUID organizationId;
 
+    /** ForgeAI workspace UUID. */
+    private UUID workspaceId;
+
+    /** Scope: PERSONAL or ORGANIZATION. */
+    private String scope;
+
     /** Real GitHub workflow_run id. */
     private Long workflowRunId;
 

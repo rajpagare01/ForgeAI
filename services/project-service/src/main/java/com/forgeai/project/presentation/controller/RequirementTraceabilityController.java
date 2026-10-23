@@ -23,15 +23,11 @@ public class RequirementTraceabilityController {
 
     @GetMapping("/{requirementId}/traceability")
     public ResponseEntity<TraceabilitySpineChainDto> getRequirementTraceability(@PathVariable UUID requirementId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.getRequirementTraceability(orgId, requirementId));
-    }
-
-    private UUID getRequiredOrgId() {
         UUID orgId = TenantContext.getOrganizationId();
-        if (orgId == null) {
-            throw new IllegalArgumentException("Missing required X-Org-Id tenant context header");
+        UUID userId = TenantContext.getUserId();
+        if (orgId == null && userId == null) {
+            throw new IllegalArgumentException("Missing required tenant context: either X-Org-Id or X-User-Id must be provided");
         }
-        return orgId;
+        return ResponseEntity.ok(traceabilityAggregationService.getRequirementTraceability(orgId, requirementId, userId));
     }
 }

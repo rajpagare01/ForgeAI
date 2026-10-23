@@ -31,15 +31,11 @@ public class TaskTraceabilityController {
 
     @GetMapping("/{taskId}/traceability")
     public ResponseEntity<TaskTraceabilityResponse> getTaskTraceability(@PathVariable UUID taskId) {
-        UUID orgId = getRequiredOrgId();
-        return ResponseEntity.ok(traceabilityAggregationService.getTaskTraceability(orgId, taskId));
-    }
-
-    private UUID getRequiredOrgId() {
         UUID orgId = TenantContext.getOrganizationId();
-        if (orgId == null) {
-            throw new IllegalArgumentException("Missing required X-Org-Id tenant context header");
+        UUID userId = TenantContext.getUserId();
+        if (orgId == null && userId == null) {
+            throw new IllegalArgumentException("Missing required tenant context: either X-Org-Id or X-User-Id must be provided");
         }
-        return orgId;
+        return ResponseEntity.ok(traceabilityAggregationService.getTaskTraceability(orgId, taskId, userId));
     }
 }

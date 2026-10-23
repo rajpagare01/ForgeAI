@@ -2,7 +2,12 @@ import logging
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, HTTPException
-from app.presentation.dependencies import get_tenant_org_id, get_trace_id, check_ai_quota
+from app.presentation.dependencies import (
+    get_tenant_org_id,
+    get_trace_id,
+    check_ai_quota,
+    verify_internal_attestation,
+)
 from app.presentation.dtos import (
     EnqueueIndexJobRequest,
     EnqueueIndexJobResponse,
@@ -73,7 +78,11 @@ from app.workers.index_worker import DurableIndexWorker
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/ai", tags=["AI Core"])
+router = APIRouter(
+    prefix="/api/v1/ai",
+    tags=["AI Core"],
+    dependencies=[Depends(verify_internal_attestation)],
+)
 
 # Global worker instance (initialized in lifespan)
 index_worker: DurableIndexWorker | None = None

@@ -27,11 +27,16 @@ public class RepositoryController {
 
     private final RepositoryApplicationService repositoryApplicationService;
 
+    private UUID resolveWorkspaceId(UUID workspaceId) {
+        return workspaceId != null ? workspaceId : TenantContext.getWorkspaceId();
+    }
+
     @GetMapping
     public ResponseEntity<List<Repository>> listRepositories(
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listRepositories(organizationId, workspaceId));
+        return ResponseEntity.ok(repositoryApplicationService.listRepositories(
+                organizationId, resolveWorkspaceId(workspaceId), TenantContext.getUserId()));
     }
 
     @GetMapping("/{id}")
@@ -39,7 +44,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getRepository(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.getRepository(
+                organizationId, resolveWorkspaceId(workspaceId), id, TenantContext.getUserId()));
     }
 
     @GetMapping("/{id}/sync-status")
@@ -47,7 +53,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getSyncStatus(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.getSyncStatus(
+                organizationId, resolveWorkspaceId(workspaceId), id));
     }
 
     @PostMapping("/{id}/reconcile")
@@ -55,7 +62,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.reconcileRepository(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.reconcileRepository(
+                organizationId, resolveWorkspaceId(workspaceId), id));
     }
 
     @GetMapping("/{id}/pull-requests")
@@ -63,7 +71,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(
+                organizationId, resolveWorkspaceId(workspaceId), id, TenantContext.getUserId()));
     }
 
     @PostMapping("/{id}/sync/pull-requests")
@@ -71,7 +80,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.syncPullRequests(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.syncPullRequests(
+                organizationId, resolveWorkspaceId(workspaceId), id));
     }
 
     @GetMapping("/{id}/commits")
@@ -79,7 +89,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listCommits(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.listCommits(
+                organizationId, resolveWorkspaceId(workspaceId), id));
     }
 
     @PostMapping("/{id}/sync/commits")
@@ -87,7 +98,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.syncCommits(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.syncCommits(
+                organizationId, resolveWorkspaceId(workspaceId), id));
     }
 
     @GetMapping("/{id}/branches")
@@ -95,7 +107,8 @@ public class RepositoryController {
             @PathVariable UUID id,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listBranches(organizationId, workspaceId, id));
+        return ResponseEntity.ok(repositoryApplicationService.listBranches(
+                organizationId, resolveWorkspaceId(workspaceId), id));
     }
 
     /**
@@ -106,7 +119,8 @@ public class RepositoryController {
     public ResponseEntity<List<GitHubRepositoryMetadata>> listAvailableRepositories(
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listAvailableRepositories(organizationId, workspaceId));
+        return ResponseEntity.ok(repositoryApplicationService.listAvailableRepositories(
+                organizationId, resolveWorkspaceId(workspaceId), TenantContext.getUserId()));
     }
 
     /**
@@ -124,7 +138,9 @@ public class RepositoryController {
         if (request == null || request.fullName() == null || request.fullName().isBlank()) {
             throw new IllegalArgumentException("fullName is required (format: owner/repo)");
         }
-        Repository repo = repositoryApplicationService.connectRepository(organizationId, request.workspaceId(), request.fullName());
+        UUID effectiveWsId = request.workspaceId() != null ? request.workspaceId() : TenantContext.getWorkspaceId();
+        Repository repo = repositoryApplicationService.connectRepository(
+                organizationId, effectiveWsId, request.fullName(), TenantContext.getUserId());
         return ResponseEntity.ok(repo);
     }
 }

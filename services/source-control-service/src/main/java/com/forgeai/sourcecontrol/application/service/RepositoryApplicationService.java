@@ -50,6 +50,13 @@ public class RepositoryApplicationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.forgeai.sourcecontrol.infrastructure.metrics.InstallationTelemetryReconciler telemetryReconciler;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository;
+
+    public void setWorkspaceRepository(com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository) {
+        this.workspaceRepository = workspaceRepository;
+    }
+
     public RepositoryApplicationService(
             RepositoryRepository repositoryRepository,
             GitHubInstallationRepository installationRepository,
@@ -104,9 +111,16 @@ public class RepositoryApplicationService {
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        return listPullRequests(organizationId, workspaceId, repositoryId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
+            UUID organizationId, UUID workspaceId, UUID repositoryId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
         if (repositoryId != null) {
-            getRepository(organizationId, effectiveWsId, repositoryId);
+            getRepository(organizationId, effectiveWsId, repositoryId, callerUserId);
             return pullRequestRepository.findAllByRepositoryId(repositoryId);
         }
         if (organizationId != null) {
@@ -126,7 +140,13 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public List<Repository> listRepositories(UUID organizationId, UUID workspaceId) {
+        return listRepositories(organizationId, workspaceId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Repository> listRepositories(UUID organizationId, UUID workspaceId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
         if (organizationId != null) {
             return repositoryRepository.findAllByOrganizationId(organizationId);
         }
@@ -142,7 +162,13 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public Repository getRepository(UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        return getRepository(organizationId, workspaceId, repositoryId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public Repository getRepository(UUID organizationId, UUID workspaceId, UUID repositoryId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
         if (organizationId != null) {
             return repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
                     .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
@@ -152,6 +178,7 @@ public class RepositoryApplicationService {
         if (repo.getOrganizationId() != null || !"PERSONAL".equalsIgnoreCase(repo.getScope())) {
             throw new ResourceNotFoundException("Repository not found: " + repositoryId);
         }
+        validateWorkspaceAccess(repo.getWorkspaceId(), organizationId, callerUserId);
         return repo;
     }
 
@@ -436,10 +463,16 @@ public class RepositoryApplicationService {
 
     @Transactional
     public GitHubInstallation claimInstallation(UUID organizationId, UUID workspaceId, Long installationId) {
+        return claimInstallation(organizationId, workspaceId, installationId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+    }
+
+    @Transactional
+    public GitHubInstallation claimInstallation(UUID organizationId, UUID workspaceId, Long installationId, UUID callerUserId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
+        UUID targetWorkspaceId = workspaceId != null ? workspaceId : organizationId;
+        validateWorkspaceAccess(targetWorkspaceId, organizationId, callerUserId);
         gitHubAppConfig.requireConfigured();
 
-        UUID targetWorkspaceId = workspaceId != null ? workspaceId : organizationId;
         String scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
 
         // Must not be already claimed by this or another real org / workspace
@@ -518,10 +551,17 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId) {
+        return listAvailableRepositories(organizationId, workspaceId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId, UUID callerUserId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
+        UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
         gitHubAppConfig.requireConfigured();
 
-        GitHubInstallation installation = getClaimedInstallation(organizationId, workspaceId);
+        GitHubInstallation installation = getClaimedInstallation(organizationId, workspaceId, callerUserId);
         return gitHubAppClient.listInstallationRepositories(installation.getInstallationId());
     }
 
@@ -539,7 +579,14 @@ public class RepositoryApplicationService {
 
     @Transactional
     public Repository connectRepository(UUID organizationId, UUID workspaceId, String fullName) {
+        return connectRepository(organizationId, workspaceId, fullName, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+    }
+
+    @Transactional
+    public Repository connectRepository(UUID organizationId, UUID workspaceId, String fullName, UUID callerUserId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
+        UUID targetWorkspaceId = workspaceId != null ? workspaceId : organizationId;
+        validateWorkspaceAccess(targetWorkspaceId, organizationId, callerUserId);
         gitHubAppConfig.requireConfigured();
 
         if (fullName == null || fullName.isBlank() || !fullName.contains("/")) {
@@ -547,10 +594,9 @@ public class RepositoryApplicationService {
                     "fullName must be in 'owner/repo' format, e.g. 'acme/my-service'");
         }
 
-        UUID targetWorkspaceId = workspaceId != null ? workspaceId : organizationId;
         String scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
 
-        GitHubInstallation installation = getClaimedInstallation(organizationId, workspaceId);
+        GitHubInstallation installation = getClaimedInstallation(organizationId, workspaceId, callerUserId);
 
         // Fetch authoritative metadata from GitHub and verify access
         GitHubRepositoryMetadata ghRepo = gitHubAppClient.getVerifiedRepository(
@@ -625,7 +671,13 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId) {
+        return getClaimedInstallation(organizationId, workspaceId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+    }
+
+    @Transactional(readOnly = true)
+    public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
+        validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
         Optional<GitHubInstallation> opt;
         if (organizationId != null) {
             opt = installationRepository.findByOrganizationId(organizationId);
@@ -784,6 +836,19 @@ public class RepositoryApplicationService {
 
     private void requireTenantOrWorkspace(UUID organizationId, UUID workspaceId) {
         resolveEffectiveWorkspaceId(organizationId, workspaceId);
+    }
+
+    private void validateWorkspaceAccess(UUID workspaceId, UUID organizationId, UUID callerUserId) {
+        if (workspaceId == null || workspaceRepository == null) {
+            return;
+        }
+        workspaceRepository.findById(workspaceId).ifPresent(ws -> {
+            if ("PERSONAL".equalsIgnoreCase(ws.getType())) {
+                if (callerUserId == null || !callerUserId.equals(ws.getOwnerUserId())) {
+                    throw new GitHubAccessDeniedException("Access denied: You do not own this personal workspace");
+                }
+            }
+        });
     }
 }
 
