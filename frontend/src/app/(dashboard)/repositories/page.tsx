@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Repository, GitHubHealth, GitHubInstallation, AvailableRepository } from "@/types";
 import { useTenant } from "@/lib/tenant-context";
 import { apiClient } from "@/lib/api-client";
@@ -23,7 +24,9 @@ import {
   KeyRound,
   Check,
   ServerOff,
+  Sparkles,
 } from "lucide-react";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -538,21 +541,47 @@ export default function RepositoriesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-xs font-bold text-white">
-                      {repo.openPullRequestsCount}
+                      {repo.openPullRequestsCount > 0 ? (
+                        <Link
+                          href={`/ai-insights?repoId=${repo.id}`}
+                          className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300 hover:underline"
+                          title="Open PRs in AI Engineering Health"
+                        >
+                          <GitPullRequest className="h-3.5 w-3.5" />
+                          <span>{repo.openPullRequestsCount} Open</span>
+                        </Link>
+                      ) : (
+                        <span className="text-slate-500">0</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-400">
                       {formatDate(repo.lastSyncAt)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-400 hover:text-white"
-                        onClick={() => window.open(`https://github.com/${repo.fullName}`, "_blank")}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/ai-insights?repoId=${repo.id}`}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40 gap-1"
+                            title="Open Engineering Health for this repository"
+                          >
+                            <Sparkles className="h-3 w-3 text-indigo-400" />
+                            AI Health
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-400 hover:text-white"
+                          onClick={() => window.open(`https://github.com/${repo.fullName}`, "_blank")}
+                          title="Open on GitHub"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
+
                   </TableRow>
                 ))}
               </TableBody>

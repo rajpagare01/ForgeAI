@@ -269,10 +269,12 @@ class SecurityIntelligenceEngine:
 
         for f in target_files:
             file_path = f.get("filename") or f.get("file_path") or ""
-            # We examine patch and content
             patch = f.get("patch") or ""
             content = f.get("content") or ""
-            combined_text = f"{patch}\n{content}"
+            if patch and content:
+                combined_text = f"{patch}\n{content}"
+            else:
+                combined_text = patch or content
 
             if not combined_text.strip():
                 continue
@@ -370,8 +372,39 @@ class SecurityIntelligenceEngine:
                                 is_blocker=rule["is_blocker"],
                             )
                         )
+        # 4. Dependency Vulnerability Scanning
+        from app.application.dependency_vulnerability_scanner import DependencyVulnerabilityScanner
+        dep_scanner = DependencyVulnerabilityScanner(is_external_configured=dependency_scanner_configured)
+        dep_result = dep_scanner.scan_files(target_files)
 
-        # 4. Cross-Repository Security Propagation
+        for df in dep_result.findings:
+            rule_id = f"SEC_DEP_{df.vulnerability_id.replace('-', '_')}"
+            findings.append(
+                SecurityFinding(
+                    organization_id=organization_id,
+                    repository_id=repository_id,
+                    pr_number=pr_number,
+                    commit_sha=commit_sha,
+                    category=SecurityCategory.DEPENDENCY_RISK.value,
+                    rule_id=rule_id,
+                    severity=df.severity,
+                    confidence="HIGH",
+                    title=f"Vulnerable Dependency: {df.package}@{df.version} ({df.vulnerability_id})",
+                    description=f"{df.title}: {df.description} (Affected: {df.affected_version_range})",
+                    file_path=df.file_path,
+                    line_number=1,
+                    redacted_evidence=f"Manifest {df.file_path}: dependency {df.package}@{df.version} matches {df.vulnerability_id}",
+                    remediation=df.remediation,
+                    is_blocker=df.severity in (FindingSeverity.CRITICAL.value, FindingSeverity.HIGH.value),
+                    metadata={
+                        "vulnerability_id": df.vulnerability_id,
+                        "fixed_version": df.fixed_version,
+                        "ecosystem": df.ecosystem,
+                    },
+                )
+            )
+
+        # 5. Cross-Repository Security Propagation
         # If source repo has critical/high security issues and downstream repos depend on it
         if target_deps and any(f.severity in (FindingSeverity.CRITICAL.value, FindingSeverity.HIGH.value) for f in findings):
             affected_repo_names = [
@@ -398,7 +431,7 @@ class SecurityIntelligenceEngine:
                 )
             )
 
-        # 5. Dependency Vulnerability Source Truthfulness
+        # 6. Dependency Vulnerability Source Truthfulness
         evidence_status = EvidenceStatus.AVAILABLE.value
         if not dependency_scanner_configured:
             # We explicitly record partial evidence because dependency CVE scanning is unavailable
@@ -451,7 +484,105 @@ class SecurityIntelligenceEngine:
             low_count=low_count,
             findings=findings,
             summary=summary,
+            metadata={
+                "dependency_scan": dep_result.model_dump(),
+            },
         )
+
+    @classmethod
+    def scan_repository_snapshot(
+        cls,
+        organization_id: UUID,
+        repository_id: UUID,
+        files: List[Dict[str, Any]],
+        commit_sha: str = "",
+        dependency_scanner_configured: bool = False,
+    ) -> SecurityAssessment:
+        """
+        Executes complete deterministic security scan across repository snapshot files.
+        Detects hardcoded secrets, dangerous configuration, code-level patterns, and dependency CVEs.
+        """
+        return cls.analyze_security(
+            organization_id=organization_id,
+            repository_id=repository_id,
+            pr_number=0,
+            commit_sha=commit_sha,
+            files=files,
+            changed_files=files,
+            dependency_scanner_configured=dependency_scanner_configured,
+        )
+
+    @classmethod
+    def scan_repository_for_secrets(
+        cls,
+        organization_id: UUID,
+        repository_id: UUID,
+        files: List[Dict[str, Any]],
+        commit_sha: str = "",
+    ) -> Dict[str, Any]:
+        """
+        On-demand dedicated secret scan across files or repository snapshot.
+        Guarantees zero raw secret exposure — all evidence strictly redacted.
+        """
+        findings: List[SecurityFinding] = []
+        files_scanned = len(files)
+
+        for f in files:
+            file_path = f.get("filename") or f.get("file_path") or ""
+            content = f.get("content") or f.get("patch") or ""
+            if not content.strip():
+                continue
+
+            lines = content.splitlines()
+            for rule in cls._SECRET_RULES:
+                for line_idx, line in enumerate(lines, start=1):
+                    match = rule["pattern"].search(line)
+                    if match:
+                        matched_str = match.group(1) if match.groups() else match.group(0)
+                        val_lower = (matched_str or "").lower()
+                        if val_lower in cls._SAFE_PLACEHOLDERS or any(w in val_lower for w in ("example", "dummy", "placeholder", "changeme", "mock_key")):
+                            continue
+
+                        if rule["rule_id"] == "SEC_SECRET_PRIVATE_KEY":
+                            key_type = (match.group(1) or "").upper() if match.groups() else ""
+                            redacted = f"[REDACTED_{key_type}_KEY]" if key_type else "[REDACTED_RSA_KEY]"
+                        else:
+                            redacted = cls._redact_value(matched_str)
+
+                        findings.append(
+                            SecurityFinding(
+                                organization_id=organization_id,
+                                repository_id=repository_id,
+                                pr_number=0,
+                                commit_sha=commit_sha,
+                                category=rule["category"],
+                                rule_id=rule["rule_id"],
+                                severity=rule["severity"],
+                                confidence=rule["confidence"],
+                                title=rule["title"],
+                                description=rule["description"],
+                                file_path=file_path,
+                                line_number=line_idx,
+                                redacted_evidence=f"Line {line_idx}: matched {rule['rule_id']}: {redacted}",
+                                remediation=rule["remediation"],
+                                is_blocker=rule["is_blocker"],
+                            )
+                        )
+
+        critical_count = sum(1 for f in findings if f.severity == FindingSeverity.CRITICAL.value)
+        high_count = sum(1 for f in findings if f.severity == FindingSeverity.HIGH.value)
+        warning_count = sum(1 for f in findings if f.severity not in (FindingSeverity.CRITICAL.value, FindingSeverity.HIGH.value))
+
+        return {
+            "secrets_found": len(findings),
+            "critical_count": critical_count,
+            "high_count": high_count,
+            "warning_count": warning_count,
+            "files_scanned": files_scanned,
+            "commit_sha": commit_sha,
+            "findings": [f.model_dump() for f in findings],
+            "status": "ACTIVE_EXPOSURE" if critical_count > 0 or high_count > 0 else "CLEAN",
+        }
 
     @classmethod
     def scan_content_for_secrets(cls, content: str, file_path: str = "patch") -> List[SecurityFinding]:

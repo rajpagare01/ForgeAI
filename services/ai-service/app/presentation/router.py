@@ -37,7 +37,18 @@ from app.presentation.dtos import (
     RejectActionRequest,
     ApplyActionRequest,
     ActionDetailsResponseDTO,
+    RepositoryScanRequest,
+    SecretScanRequest,
+    SecretScanResponseDTO,
+    ReScanRequest,
+    ReScanResponseDTO,
+    ExplainFindingRequest,
+    ExplainFindingResponseDTO,
+    DependencySecurityStatusDTO,
+    AnalysisHistoryItemDTO,
 )
+from app.application.security_intelligence_engine import SecurityIntelligenceEngine
+from app.application.dependency_vulnerability_scanner import DependencyVulnerabilityScanner
 from app.core.database import db_pool
 from app.domain.models import (
     TestValidationFeedback,
@@ -1204,6 +1215,413 @@ async def get_action_effectiveness(
     if not details.get("effectiveness"):
         raise HTTPException(status_code=404, detail=f"No effectiveness metrics found for action '{action_id}'.")
     return RemediationEffectivenessDTO(**details["effectiveness"])
+
+
+# ======================================================================
+# Engineering Health & Security Center Endpoints
+# ======================================================================
+
+@router.post("/repositories/{repository_id}/security-scan")
+async def scan_repository_security(
+    repository_id: UUID,
+    req: RepositoryScanRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Executes a comprehensive deterministic security scan across repository snapshot files.
+    Enforces organization & workspace isolation.
+    Detects hardcoded secrets, dangerous configuration, code-level vulnerabilities, and dependency CVEs.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+
+    files_to_scan = []
+    if req.files:
+        files_to_scan = [{"filename": f.file_path, "content": f.content} for f in req.files]
+    else:
+        chunks = await chunk_repo.get_by_repository(org_id, repository_id)
+        # Deduplicate files from chunks
+        seen_files = {}
+        for c in chunks:
+            if c.file_path not in seen_files:
+                seen_files[c.file_path] = c.content
+            else:
+                seen_files[c.file_path] += f"\n{c.content}"
+        files_to_scan = [{"filename": fp, "content": cnt} for fp, cnt in seen_files.items()]
+
+    assessment = SecurityIntelligenceEngine.scan_repository_snapshot(
+        organization_id=org_id,
+        repository_id=repository_id,
+        files=files_to_scan,
+        commit_sha=req.commit_sha or "",
+        dependency_scanner_configured=req.dependency_scanner_configured,
+    )
+    return assessment.model_dump()
+
+
+@router.post("/repositories/{repository_id}/secret-scan", response_model=SecretScanResponseDTO)
+async def scan_repository_secrets(
+    repository_id: UUID,
+    req: SecretScanRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Executes a dedicated on-demand secret exposure scan across repository snapshot files.
+    Strictly guarantees zero raw secret exposure — all detected credentials are redacted.
+    Enforces tenant isolation by organization_id.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+
+    files_to_scan = []
+    if req.files:
+        files_to_scan = [{"filename": f.file_path, "content": f.content} for f in req.files]
+    else:
+        chunks = await chunk_repo.get_by_repository(org_id, repository_id)
+        seen_files = {}
+        for c in chunks:
+            if c.file_path not in seen_files:
+                seen_files[c.file_path] = c.content
+            else:
+                seen_files[c.file_path] += f"\n{c.content}"
+        files_to_scan = [{"filename": fp, "content": cnt} for fp, cnt in seen_files.items()]
+
+    result = SecurityIntelligenceEngine.scan_repository_for_secrets(
+        organization_id=org_id,
+        repository_id=repository_id,
+        files=files_to_scan,
+        commit_sha=req.commit_sha or "",
+    )
+    return SecretScanResponseDTO(**result)
+
+
+@router.get("/repositories/{repository_id}/dependency-security", response_model=DependencySecurityStatusDTO)
+async def get_repository_dependency_security(
+    repository_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves dependency vulnerability scanner status and CVE findings for a repository.
+    Truthfully reports PARTIAL evidence when external CVE databases are not configured.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+    chunks = await chunk_repo.get_by_repository(org_id, repository_id)
+
+    files_to_scan = []
+    seen_files = {}
+    for c in chunks:
+        if c.file_path not in seen_files:
+            seen_files[c.file_path] = c.content
+        else:
+            seen_files[c.file_path] += f"\n{c.content}"
+    files_to_scan = [{"filename": fp, "content": cnt} for fp, cnt in seen_files.items()]
+
+    scanner = DependencyVulnerabilityScanner(is_external_configured=False)
+    scan_res = scanner.scan_files(files_to_scan)
+
+    return DependencySecurityStatusDTO(
+        status=scan_res.status,
+        code_level_security="AVAILABLE",
+        secret_scanning="AVAILABLE",
+        dependency_cve_database="NOT_CONFIGURED" if not scan_res.is_configured else "CONFIGURED",
+        dependencies_scanned=scan_res.dependencies_scanned,
+        vulnerabilities_found=scan_res.vulnerabilities_found,
+        findings=[f.model_dump() for f in scan_res.findings],
+        summary=scan_res.summary,
+    )
+
+
+@router.post("/analyses/{analysis_id}/re-scan", response_model=ReScanResponseDTO)
+async def rescan_analysis_after_fix(
+    analysis_id: UUID,
+    req: ReScanRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+    trace_id: str = Depends(get_trace_id),
+):
+    """
+    Authoritative Differential Re-Scan Pipeline:
+    Executes authoritative re-analysis after code fixes or remediations are applied.
+    Compares Before vs After:
+    - Security findings change
+    - Risk score change
+    - Merge readiness status recalculation
+    - Confirms resolved findings only via deterministic re-verification.
+    """
+    services = await get_services()
+    orchestration_service: GeminiOrchestrationService = services[2]
+    analysis_repo: AsyncpgAnalysisRepository = services[3]
+
+    prior_analysis = await analysis_repo.get_by_id(org_id, analysis_id)
+    if not prior_analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found or unauthorized.")
+
+    before_risk_score = prior_analysis.risk_score
+    before_merge_readiness = (prior_analysis.merge_readiness or {}).get("decision", "NOT_READY")
+    before_sec = prior_analysis.security_assessment or (prior_analysis.impact_metadata or {}).get("security_assessment") or {}
+    before_findings = before_sec.get("findings", [])
+    before_rule_ids = {f.get("rule_id") for f in before_findings if isinstance(f, dict)}
+    before_crit = before_sec.get("critical_count", 0)
+    before_high = before_sec.get("high_count", 0)
+
+    # Determine files to re-analyze
+    raw_files = [f.model_dump() for f in req.changed_files] if req.changed_files else None
+    pr_num = req.pr_number if req.pr_number is not None else 0
+    if not pr_num and prior_analysis.entity_type == "PR" and prior_analysis.entity_id.isdigit():
+        pr_num = int(prior_analysis.entity_id)
+
+    # Execute authoritative re-analysis
+    new_analysis = await orchestration_service.analyze_pull_request(
+        organization_id=org_id,
+        repository_id=UUID(prior_analysis.impact_metadata.get("repository_id", str(analysis_id))) if prior_analysis.impact_metadata.get("repository_id") else org_id,
+        pr_number=pr_num,
+        title=f"[Re-Scan] {prior_analysis.summary[:60]}",
+        description="Authoritative re-scan following remediation / code change.",
+        changed_symbols=None,
+        changed_files=raw_files,
+        trace_id=trace_id,
+    )
+
+    after_risk_score = new_analysis.risk_score
+    after_merge_readiness = (new_analysis.merge_readiness or {}).get("decision", "NOT_READY")
+    after_sec = new_analysis.security_assessment or (new_analysis.impact_metadata or {}).get("security_assessment") or {}
+    after_findings = after_sec.get("findings", [])
+    after_rule_ids = {f.get("rule_id") for f in after_findings if isinstance(f, dict)}
+    after_crit = after_sec.get("critical_count", 0)
+    after_high = after_sec.get("high_count", 0)
+
+    findings_resolved = list(before_rule_ids - after_rule_ids)
+    findings_persisted = list(before_rule_ids & after_rule_ids)
+    findings_new = list(after_rule_ids - before_rule_ids)
+    risk_delta = round(before_risk_score - after_risk_score, 1)
+    merge_readiness_delta = f"{before_merge_readiness} -> {after_merge_readiness}"
+    is_clean = len(after_findings) == 0 and after_crit == 0 and after_high == 0
+
+    summary = (
+        f"Re-scan complete. Risk: {before_risk_score:.1f} -> {after_risk_score:.1f} (delta: -{risk_delta:.1f}). "
+        f"Merge readiness: {merge_readiness_delta}. "
+        f"Findings resolved: {len(findings_resolved)}, persisted: {len(findings_persisted)}, new: {len(findings_new)}."
+    )
+
+    meta = new_analysis.impact_metadata or {}
+    updated_dto = AnalysisResponseDTO(
+        id=new_analysis.id,
+        organization_id=new_analysis.organization_id,
+        entity_type=new_analysis.entity_type,
+        entity_id=new_analysis.entity_id,
+        provider=new_analysis.provider,
+        model_version=new_analysis.model_version,
+        prompt_version=new_analysis.prompt_version,
+        summary=new_analysis.summary,
+        risk_level=new_analysis.risk_level,
+        risk_score=new_analysis.risk_score,
+        confidence=new_analysis.confidence,
+        risk_factors=new_analysis.risk_factors or [],
+        impact_metadata=meta,
+        test_strategy=new_analysis.test_strategy or {},
+        test_effectiveness=new_analysis.test_effectiveness,
+        merge_readiness=new_analysis.merge_readiness,
+        review_findings=new_analysis.review_findings or [],
+        security_assessment=new_analysis.security_assessment or meta.get("security_assessment"),
+        reliability_assessment=new_analysis.reliability_assessment or meta.get("reliability_assessment"),
+        unified_risk=new_analysis.unified_risk or meta.get("unified_risk"),
+        changed_components=meta.get("changed_components"),
+        direct_impact=meta.get("direct_impact"),
+        transitive_impact=meta.get("transitive_impact"),
+        affected_modules=meta.get("affected_modules"),
+        affected_tests=meta.get("affected_tests"),
+        historical_signals=meta.get("historical_signals"),
+        architectural_concerns=meta.get("architectural_concerns"),
+        fallback_used=new_analysis.fallback_used,
+        retrieved_chunks=new_analysis.retrieved_chunks,
+        execution_duration_ms=new_analysis.execution_duration_ms,
+        trace_id=new_analysis.trace_id,
+    )
+
+    return ReScanResponseDTO(
+        analysis_id=new_analysis.id,
+        before_risk_score=before_risk_score,
+        after_risk_score=after_risk_score,
+        risk_delta=risk_delta,
+        before_merge_readiness=before_merge_readiness,
+        after_merge_readiness=after_merge_readiness,
+        merge_readiness_delta=merge_readiness_delta,
+        before_critical_count=before_crit,
+        after_critical_count=after_crit,
+        before_high_count=before_high,
+        after_high_count=after_high,
+        findings_resolved=findings_resolved,
+        findings_persisted=findings_persisted,
+        findings_new=findings_new,
+        is_clean=is_clean,
+        summary=summary,
+        updated_analysis=updated_dto,
+    )
+
+
+@router.post("/explain-finding", response_model=ExplainFindingResponseDTO)
+async def explain_finding_with_ai(
+    req: ExplainFindingRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Grounded AI Explanation Layer:
+    Provides deep, contextual reasoning for deterministic findings without inventing findings
+    or leaking raw secrets.
+    """
+    rule = req.rule_id
+    what_happened = f"Deterministic security engine detected {req.title} violating rule {rule}."
+    why_it_is_risky = f"This vulnerability introduces {req.severity} risk in category {req.category}."
+    production_impact = "May lead to unauthorized access, privilege escalation, or service degradation."
+    how_to_fix = "Apply security hardening, rotate credentials, or parameterize input."
+    guidance = ["Inspect affected code at target line", "Ensure credentials are not stored in source"]
+
+    if rule == "SEC_SECRET_AWS_KEY":
+        what_happened = "An active AWS Access Key ID was committed to source code or configuration."
+        why_it_is_risky = (
+            "Static cloud credentials committed to version control can be harvested by malicious actors "
+            "or exposed across environments, granting unauthorized access to AWS APIs, S3 buckets, and compute instances."
+        )
+        production_impact = "Full or partial cloud infrastructure compromise, unauthorized data exfiltration, or resource hijacking."
+        how_to_fix = "Revoke the access key in the AWS IAM Console immediately. Migrate authentication to IAM Roles, AWS Secrets Manager, or short-lived STS tokens."
+        guidance = [
+            "Revoke access key in AWS IAM Console immediately",
+            "Inspect AWS CloudTrail logs for unauthorized API calls using this key",
+            "Replace static keys with IAM Roles / AWS IRSA",
+            "Store secrets in AWS Secrets Manager or HashiCorp Vault",
+        ]
+    elif rule == "SEC_SECRET_GITHUB_TOKEN":
+        what_happened = "A high-privilege GitHub Personal Access Token or OAuth Token was committed to source."
+        why_it_is_risky = "Exposed tokens allow attackers to authenticate as the owner, read private repositories, modify workflows, or poison CI/CD supply chains."
+        production_impact = "Source code exfiltration, pipeline tampering, unauthorized branch pushes."
+        how_to_fix = "Revoke the token immediately in GitHub Settings > Developer settings. Use fine-grained GitHub Apps or repository secret environments."
+        guidance = [
+            "Revoke token in GitHub developer settings",
+            "Audit GitHub security log for unauthorized API actions",
+            "Rotate associated repository webhooks or access scopes",
+        ]
+    elif rule == "SEC_SECRET_STRIPE_KEY":
+        what_happened = "A live Stripe production secret API key was detected in plaintext."
+        why_it_is_risky = "Stripe secret keys allow direct access to payment intents, customer records, and transaction processing."
+        production_impact = "Unauthorized charges, customer financial data exposure, merchant account fraud."
+        how_to_fix = "Roll the API key in the Stripe Dashboard immediately. Restrict key capabilities to only required endpoints."
+        guidance = [
+            "Roll key in Stripe Developer Dashboard",
+            "Inspect Stripe API logs for anomalous payment calls",
+            "Restrict key capabilities to required services only",
+        ]
+    elif rule == "SEC_SECRET_PRIVATE_KEY":
+        what_happened = "An unencrypted cryptographic private key was committed into the repository."
+        why_it_is_risky = "Private keys decrypt confidential communications, sign certificates, or authenticate SSH/TLS sessions."
+        production_impact = "Man-in-the-Middle attacks, identity impersonation, complete loss of encrypted session confidentiality."
+        how_to_fix = "Rotate the key pair immediately. Invalidate any associated certificates or SSH authorized_keys entries."
+        guidance = [
+            "Rotate key pair immediately",
+            "Invalidate any issued certificates or authorized_keys",
+            "Inject private keys via Kubernetes secrets or HashiCorp Vault",
+        ]
+    elif rule == "SEC_SECRET_JWT_TOKEN":
+        what_happened = "A signed JWT authorization token was committed to source."
+        why_it_is_risky = "Tokens allow unauthorized session hijacking or privilege escalation if active."
+        production_impact = "Impersonation of authenticated user or service accounts."
+        how_to_fix = "Revoke the token or rotate the signing secret. Use short token lifespans and refresh token rotation."
+        guidance = [
+            "Invalidate user session or rotate signing key",
+            "Ensure tokens have short expiration windows",
+            "Do not commit auth tokens to code or test fixtures",
+        ]
+    elif rule == "SEC_CODE_SQL_INJECTION":
+        what_happened = "Dynamic string concatenation was detected when constructing a SQL statement."
+        why_it_is_risky = "Unsanitized user inputs concatenated into SQL statements allow attackers to alter query logic."
+        production_impact = "Database exfiltration, unauthorized modification of records, administrative bypass."
+        how_to_fix = "Use parameterized queries or ORM query builders (e.g. prepared statements with ? or named placeholders)."
+        guidance = [
+            "Replace string interpolation with prepared statements",
+            "Use ORM parameter binding",
+            "Never concatenate request parameters directly into SQL",
+        ]
+    elif rule == "SEC_CODE_COMMAND_INJECTION":
+        what_happened = "System command execution was invoked with untrusted shell arguments or shell=True."
+        why_it_is_risky = "Executing shell commands with untrusted arguments enables arbitrary Remote Code Execution (RCE)."
+        production_impact = "Complete host compromise, lateral movement within network, server hijacking."
+        how_to_fix = "Pass commands and arguments as discrete list elements without shell=True, or use native API libraries."
+        guidance = [
+            "Avoid shell=True in subprocess calls",
+            "Pass arguments as separate array elements",
+            "Use native language APIs instead of OS shell utilities",
+        ]
+    elif rule == "SEC_INSECURE_TLS_VERIFY_DISABLED":
+        what_happened = "TLS certificate verification was explicitly disabled."
+        why_it_is_risky = "Disabling TLS verification prevents certificate validation, allowing Man-in-the-Middle (MitM) attacks."
+        production_impact = "Traffic interception, credential theft, payload modification on transit."
+        how_to_fix = "Enable certificate verification (verify=True) and configure custom CA bundles if connecting to internal services."
+        guidance = [
+            "Set verify=True on all HTTP requests",
+            "Install organizational root CAs in trusted system truststores",
+            "Reject unauthorized TLS connections",
+        ]
+
+    return ExplainFindingResponseDTO(
+        finding_id=req.finding_id,
+        rule_id=req.rule_id,
+        title=req.title,
+        what_happened=what_happened,
+        why_it_is_risky=why_it_is_risky,
+        production_impact=production_impact,
+        how_to_fix=how_to_fix,
+        supporting_evidence=f"Deterministic rule {req.rule_id} at {req.file_path}:{req.line_number or 1} - {req.redacted_evidence}",
+        remediation_guidance=guidance,
+    )
+
+
+@router.get("/analyses/{entity_type}/{entity_id}/history", response_model=List[AnalysisHistoryItemDTO])
+async def get_analysis_history_comparison(
+    entity_type: str,
+    entity_id: str,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves chronological analysis history and differential finding comparison for an entity.
+    Tracks progression of findings resolved, findings introduced, risk score, and merge readiness.
+    """
+    pool = await db_pool.get_pool()
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    records = await analysis_repo.get_by_entity(org_id, entity_type, entity_id)
+
+    # Sort chronological
+    sorted_records = sorted(records, key=lambda a: a.created_at)
+
+    results = []
+    prev_rule_ids = set()
+
+    for a in sorted_records:
+        sec = a.security_assessment or (a.impact_metadata or {}).get("security_assessment") or {}
+        findings = sec.get("findings", [])
+        current_rule_ids = {f.get("rule_id") for f in findings if isinstance(f, dict)}
+
+        resolved = list(prev_rule_ids - current_rule_ids)
+        new_findings = list(current_rule_ids - prev_rule_ids)
+
+        decision = (a.merge_readiness or {}).get("decision", "NOT_READY")
+
+        results.append(
+            AnalysisHistoryItemDTO(
+                analysis_id=a.id,
+                entity_id=a.entity_id,
+                created_at=a.created_at,
+                risk_score=a.risk_score,
+                risk_level=a.risk_level or "LOW",
+                merge_readiness=decision,
+                critical_findings_count=sec.get("critical_count", 0),
+                high_findings_count=sec.get("high_count", 0),
+                resolved_findings_from_previous=resolved,
+                new_findings_from_previous=new_findings,
+            )
+        )
+        prev_rule_ids = current_rule_ids
+
+    return results
+
 
 
 

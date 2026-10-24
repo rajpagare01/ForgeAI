@@ -471,4 +471,104 @@ class ActionDetailsResponseDTO(BaseModel):
     write_mode: str = "ADVISORY_ONLY"
 
 
+# ======================================================================
+# Engineering Health & Security Center DTOs
+# ======================================================================
+
+class RepositoryScanRequest(BaseModel):
+    commit_sha: Optional[str] = ""
+    files: Optional[List[IndexFileInput]] = None
+    dependency_scanner_configured: bool = False
+
+
+class SecretScanRequest(BaseModel):
+    commit_sha: Optional[str] = ""
+    files: Optional[List[IndexFileInput]] = None
+
+
+class SecretScanResponseDTO(BaseModel):
+    secrets_found: int = 0
+    critical_count: int = 0
+    high_count: int = 0
+    warning_count: int = 0
+    files_scanned: int = 0
+    commit_sha: str = ""
+    status: str = "CLEAN"  # ACTIVE_EXPOSURE, CLEAN
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ReScanRequest(BaseModel):
+    pr_number: Optional[int] = None
+    commit_sha: Optional[str] = None
+    changed_files: Optional[List[IndexFileInput]] = None
+
+
+class ReScanResponseDTO(BaseModel):
+    analysis_id: UUID
+    before_risk_score: float
+    after_risk_score: float
+    risk_delta: float
+    before_merge_readiness: str
+    after_merge_readiness: str
+    merge_readiness_delta: str
+    before_critical_count: int
+    after_critical_count: int
+    before_high_count: int
+    after_high_count: int
+    findings_resolved: List[str] = Field(default_factory=list)
+    findings_persisted: List[str] = Field(default_factory=list)
+    findings_new: List[str] = Field(default_factory=list)
+    is_clean: bool = False
+    summary: str
+    updated_analysis: Optional[AnalysisResponseDTO] = None
+
+
+class ExplainFindingRequest(BaseModel):
+    finding_id: Optional[str] = None
+    rule_id: str
+    category: str
+    severity: str
+    title: str
+    file_path: str
+    line_number: Optional[int] = None
+    redacted_evidence: str
+
+
+class ExplainFindingResponseDTO(BaseModel):
+    finding_id: Optional[str] = None
+    rule_id: str
+    title: str
+    what_happened: str
+    why_it_is_risky: str
+    production_impact: str
+    how_to_fix: str
+    supporting_evidence: str
+    remediation_guidance: List[str] = Field(default_factory=list)
+
+
+class DependencySecurityStatusDTO(BaseModel):
+    status: str = "PARTIAL"  # AVAILABLE or PARTIAL
+    code_level_security: str = "AVAILABLE"
+    secret_scanning: str = "AVAILABLE"
+    dependency_cve_database: str = "NOT_CONFIGURED"  # CONFIGURED or NOT_CONFIGURED
+    dependencies_scanned: int = 0
+    vulnerabilities_found: int = 0
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: str = ""
+
+
+class AnalysisHistoryItemDTO(BaseModel):
+    analysis_id: UUID
+    entity_id: str
+    created_at: datetime
+    risk_score: float
+    risk_level: str
+    merge_readiness: str
+    critical_findings_count: int = 0
+    high_findings_count: int = 0
+    resolved_findings_from_previous: List[str] = Field(default_factory=list)
+    new_findings_from_previous: List[str] = Field(default_factory=list)
+
+
+
 

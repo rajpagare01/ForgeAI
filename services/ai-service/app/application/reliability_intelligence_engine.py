@@ -89,10 +89,83 @@ class ReliabilityIntelligenceEngine:
             "category": ReliabilityCategory.RESOURCE_LEAK.value,
             "severity": FindingSeverity.MEDIUM.value,
             "confidence": "MEDIUM",
+            "detection_status": "SUSPICIOUS",
             "title": "File Resource Opened Without Context Manager",
             "pattern": re.compile(r"""(?<!with\s)[a-zA-Z0-9_]+\s*=\s*open\([^)]+\)(?![\s\S]*?\bclose\(\))"""),
             "description": "Opening file handles without 'with' context manager or guaranteed close risks file descriptor leakage.",
             "remediation": "Use 'with open(...) as f:' context manager to guarantee deterministic closure.",
+            "is_blocker": False,
+        },
+        {
+            "rule_id": "REL_UNSAFE_OPTIONAL_DEREF",
+            "category": ReliabilityCategory.NULLABILITY.value,
+            "severity": FindingSeverity.HIGH.value,
+            "confidence": "HIGH",
+            "detection_status": "LIKELY",
+            "title": "Unchecked Optional Dereference Pattern",
+            "pattern": re.compile(r"""\b[a-zA-Z0-9_]+\.get\(\)"""),
+            "description": "Calling .get() directly on an Optional or container without verifying presence triggers runtime NoSuchElementException if value is absent.",
+            "remediation": "Use .orElse(...), .orElseGet(...), or check .isPresent() before calling .get().",
+            "is_blocker": False,
+        },
+        {
+            "rule_id": "REL_SWALLOWED_PROMISE_REJECTION",
+            "category": ReliabilityCategory.ERROR_HANDLING.value,
+            "severity": FindingSeverity.HIGH.value,
+            "confidence": "HIGH",
+            "detection_status": "DETECTED",
+            "title": "Swallowed Promise Rejection Handler",
+            "pattern": re.compile(r"""\.catch\(\s*(?:\([^)]*\)|[a-zA-Z0-9_]+)?\s*=>\s*\{\s*\}\)"""),
+            "description": "Empty promise .catch() callback silently swallows asynchronous exceptions and rejects error propagation.",
+            "remediation": "Log the rejected error or rethrow/handle it gracefully.",
+            "is_blocker": False,
+        },
+        {
+            "rule_id": "REL_GENERIC_EXCEPTION_THROW",
+            "category": ReliabilityCategory.ERROR_HANDLING.value,
+            "severity": FindingSeverity.MEDIUM.value,
+            "confidence": "HIGH",
+            "detection_status": "REQUIRES REVIEW",
+            "title": "Broad Generic Exception Thrown",
+            "pattern": re.compile(r"""(?:throw\s+new\s+(?:Exception|Throwable)\s*\(|raise\s+Exception\s*\()"""),
+            "description": "Throwing raw generic Exception obscures specific failure modes and forces callers into overly broad catch clauses.",
+            "remediation": "Throw a domain-specific or standard typed exception (e.g. IllegalArgumentException, ValueError).",
+            "is_blocker": False,
+        },
+        {
+            "rule_id": "REL_MISSING_HTTP_TIMEOUT_JAVA",
+            "category": ReliabilityCategory.TIMEOUT.value,
+            "severity": FindingSeverity.HIGH.value,
+            "confidence": "HIGH",
+            "detection_status": "DETECTED",
+            "title": "Outbound Java HTTP Connection Without Explicit Timeout",
+            "pattern": re.compile(r"""(?:HttpURLConnection\s+[a-zA-Z0-9_]+\s*=\s*\(HttpURLConnection\)|new\s+RestTemplate\(\)|HttpClient\.newHttpClient\(\))"""),
+            "description": "Default HTTP clients in Java lack connect/read timeouts, which can stall threads indefinitely on slow responses.",
+            "remediation": "Configure explicit connectTimeout and readTimeout on client instances or RequestConfig.",
+            "is_blocker": False,
+        },
+        {
+            "rule_id": "REL_DANGEROUS_INPUT_DESERIALIZATION",
+            "category": ReliabilityCategory.FAILURE_RISK.value,
+            "severity": FindingSeverity.HIGH.value,
+            "confidence": "HIGH",
+            "detection_status": "DETECTED",
+            "title": "Dangerous Unvalidated Object Deserialization",
+            "pattern": re.compile(r"""(?:new\s+ObjectInputStream\s*\(|pickle\.loads?\s*\()"""),
+            "description": "Direct deserialization of raw byte streams without type filtering can trigger remote code execution or process crashes.",
+            "remediation": "Use safe serialization formats (JSON, Protobuf) or enforce strict LookAheadObjectInputStream filtering.",
+            "is_blocker": True,
+        },
+        {
+            "rule_id": "REL_UNCLOSED_RESOURCE_JDBC",
+            "category": ReliabilityCategory.RESOURCE_LEAK.value,
+            "severity": FindingSeverity.HIGH.value,
+            "confidence": "HIGH",
+            "detection_status": "SUSPICIOUS",
+            "title": "Database Statement Created Without Resource Management",
+            "pattern": re.compile(r"""(?:Statement|PreparedStatement|ResultSet)\s+[a-zA-Z0-9_]+\s*=\s*[a-zA-Z0-9_]+\.(?:createStatement|prepareStatement|executeQuery)"""),
+            "description": "JDBC resources allocated outside try-with-resources risk connection pool exhaustion and memory leaks.",
+            "remediation": "Wrap JDBC Statement, Connection, and ResultSet declarations in try-with-resources blocks.",
             "is_blocker": False,
         },
     ]
@@ -132,6 +205,7 @@ class ReliabilityIntelligenceEngine:
             lines = combined_text.splitlines()
 
             for rule in cls._RELIABILITY_RULES:
+                detection_status = rule.get("detection_status", "DETECTED")
                 if rule["rule_id"] in cls._MULTILINE_RULES:
                     m = rule["pattern"].search(combined_text)
                     if m:
@@ -151,9 +225,10 @@ class ReliabilityIntelligenceEngine:
                                 description=rule["description"],
                                 file_path=file_path,
                                 line_number=line_idx,
-                                evidence=f"Line {line_idx}: {matched_snippet}",
+                                evidence=f"Line {line_idx}: [{detection_status}] {matched_snippet}",
                                 remediation=rule["remediation"],
                                 is_blocker=rule["is_blocker"],
+                                metadata={"detection_status": detection_status},
                             )
                         )
                 else:
@@ -175,11 +250,13 @@ class ReliabilityIntelligenceEngine:
                                     description=rule["description"],
                                     file_path=file_path,
                                     line_number=line_idx,
-                                    evidence=f"Line {line_idx}: {line.strip()[:160]}",
+                                    evidence=f"Line {line_idx}: [{detection_status}] {line.strip()[:160]}",
                                     remediation=rule["remediation"],
                                     is_blocker=rule["is_blocker"],
+                                    metadata={"detection_status": detection_status},
                                 )
                             )
+
 
         # Historical Reliability Signals Integration
         for sig in historical_signals:
@@ -265,6 +342,7 @@ class ReliabilityIntelligenceEngine:
         lines = content.splitlines()
         # Single-line rules
         for rule in cls._RELIABILITY_RULES:
+            detection_status = rule.get("detection_status", "DETECTED")
             if rule["rule_id"] in cls._MULTILINE_RULES:
                 continue
             for line_idx, line in enumerate(lines, start=1):
@@ -279,13 +357,15 @@ class ReliabilityIntelligenceEngine:
                             description=rule["description"],
                             file_path=file_path,
                             line_number=line_idx,
-                            evidence=f"Line {line_idx}: {line.strip()[:160]}",
+                            evidence=f"Line {line_idx}: [{detection_status}] {line.strip()[:160]}",
                             remediation=rule["remediation"],
                             is_blocker=rule["is_blocker"],
+                            metadata={"detection_status": detection_status},
                         )
                     )
         # Multi-line rules
         for rule in cls._RELIABILITY_RULES:
+            detection_status = rule.get("detection_status", "DETECTED")
             if rule["rule_id"] in cls._MULTILINE_RULES:
                 if rule["pattern"].search(content):
                     findings.append(
@@ -298,10 +378,12 @@ class ReliabilityIntelligenceEngine:
                             description=rule["description"],
                             file_path=file_path,
                             line_number=1,
-                            evidence=f"Rule {rule['rule_id']} pattern detected in {file_path}",
+                            evidence=f"Rule {rule['rule_id']} [{detection_status}] detected in {file_path}",
                             remediation=rule["remediation"],
                             is_blocker=rule["is_blocker"],
+                            metadata={"detection_status": detection_status},
                         )
                     )
+
         return findings
 

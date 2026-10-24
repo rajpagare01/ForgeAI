@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Tag,
   User,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -169,7 +170,7 @@ function ProjectDetailContent() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -180,14 +181,21 @@ function ProjectDetailContent() {
             Add Task
           </Button>
           <Link href={`/projects/${projectId}/traceability`}>
+            <Button variant="outline" size="sm" className="gap-2 border-slate-700 text-slate-300">
+              <Layers className="h-4 w-4 text-purple-400" />
+              Traceability Matrix
+            </Button>
+          </Link>
+          <Link href={`/ai-insights`}>
             <Button variant="glow" size="sm" className="gap-2">
-              <Layers className="h-4 w-4" />
-              Open Traceability Spine Matrix
+              <Sparkles className="h-4 w-4 text-indigo-300" />
+              AI Engineering Health
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </Link>
         </div>
       </div>
+
 
       {/* Kanban Board Columns */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -254,13 +262,19 @@ function ProjectDetailContent() {
                     {/* PR & Assignee */}
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
                       {task.linkedPrNumber ? (
-                        <span className="flex items-center gap-1 font-mono text-sky-400">
+                        <Link
+                          href={`/ai-insights?pr=${task.linkedPrNumber}`}
+                          className="flex items-center gap-1 font-mono text-sky-400 hover:text-sky-300 hover:underline transition-colors"
+                          title="Open in AI Engineering Health"
+                        >
                           <GitPullRequest className="h-3 w-3" />
                           #{task.linkedPrNumber}
-                        </span>
+                          <ArrowRight className="h-2.5 w-2.5 opacity-60" />
+                        </Link>
                       ) : (
                         <span className="text-slate-600">No PR yet</span>
                       )}
+
 
                       <span className="flex items-center gap-1 text-slate-300">
                         <User className="h-3 w-3 text-slate-500" />

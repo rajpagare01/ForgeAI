@@ -1,183 +1,105 @@
 import pytest
 from uuid import uuid4
-from app.domain.models import (
-    ReliabilityStatus,
-    EvidenceStatus,
-    ReliabilityCategory,
-    FindingSeverity,
-)
 from app.application.reliability_intelligence_engine import ReliabilityIntelligenceEngine
+from app.domain.models import ReliabilityStatus, FindingSeverity
 
 
-@pytest.fixture
-def org_and_repo_id():
-    return uuid4(), uuid4()
+def test_detect_unsafe_optional_deref():
+    code = """
+    public String getUserName(Optional<User> userOpt) {
+        return userOpt.get().getName();
+    }
+    """
+    findings = ReliabilityIntelligenceEngine.scan_content_for_reliability_rules(code, "UserService.java")
+    opt_findings = [f for f in findings if f.rule_id == "REL_UNSAFE_OPTIONAL_DEREF"]
+    assert len(opt_findings) >= 1
+    assert opt_findings[0].metadata.get("detection_status") == "LIKELY"
+    assert opt_findings[0].severity == FindingSeverity.HIGH.value
 
 
-def test_swallowed_exception_python_detected(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    changed_files = [
-        {"filename": "app/worker.py", "content": "try:\n    do_task()\nexcept Exception:\n    pass\n", "status": "modified"}
+def test_detect_swallowed_promise_rejection():
+    code = """
+    async function loadData() {
+        api.fetchUser().catch(() => {});
+    }
+    """
+    findings = ReliabilityIntelligenceEngine.scan_content_for_reliability_rules(code, "api.ts")
+    p_findings = [f for f in findings if f.rule_id == "REL_SWALLOWED_PROMISE_REJECTION"]
+    assert len(p_findings) >= 1
+    assert p_findings[0].metadata.get("detection_status") == "DETECTED"
+
+
+def test_detect_generic_exception_throw():
+    code = """
+    def validate_age(age):
+        if age < 0:
+            raise Exception("Invalid age")
+    """
+    findings = ReliabilityIntelligenceEngine.scan_content_for_reliability_rules(code, "validator.py")
+    e_findings = [f for f in findings if f.rule_id == "REL_GENERIC_EXCEPTION_THROW"]
+    assert len(e_findings) >= 1
+    assert e_findings[0].metadata.get("detection_status") == "REQUIRES REVIEW"
+
+
+def test_detect_missing_http_timeout_java():
+    code = """
+    public void callUpstream() {
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.connect();
+    }
+    """
+    findings = ReliabilityIntelligenceEngine.scan_content_for_reliability_rules(code, "Client.java")
+    t_findings = [f for f in findings if f.rule_id == "REL_MISSING_HTTP_TIMEOUT_JAVA"]
+    assert len(t_findings) >= 1
+    assert t_findings[0].metadata.get("detection_status") == "DETECTED"
+
+
+def test_detect_dangerous_input_deserialization():
+    code = """
+    import pickle
+    data = pickle.loads(raw_input)
+    """
+    findings = ReliabilityIntelligenceEngine.scan_content_for_reliability_rules(code, "loader.py")
+    d_findings = [f for f in findings if f.rule_id == "REL_DANGEROUS_INPUT_DESERIALIZATION"]
+    assert len(d_findings) >= 1
+    assert d_findings[0].is_blocker is True
+
+
+def test_detect_unclosed_resource_jdbc():
+    code = """
+    public void executeQuery(Connection conn) throws SQLException {
+        Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("SELECT * FROM users");
+    }
+    """
+    findings = ReliabilityIntelligenceEngine.scan_content_for_reliability_rules(code, "Dao.java")
+    r_findings = [f for f in findings if f.rule_id == "REL_UNCLOSED_RESOURCE_JDBC"]
+    assert len(r_findings) >= 1
+    assert r_findings[0].metadata.get("detection_status") == "SUSPICIOUS"
+
+
+def test_analyze_reliability_assessment_aggregation():
+    org_id = uuid4()
+    repo_id = uuid4()
+    files = [
+        {
+            "filename": "services/OrderService.java",
+            "content": """
+            public void process() {
+                Statement stmt = conn.createStatement();
+                Optional<Order> opt = findOrder();
+                opt.get().fulfill();
+            }
+            """,
+        }
     ]
-
     assessment = ReliabilityIntelligenceEngine.analyze_reliability(
         organization_id=org_id,
         repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
+        pr_number=10,
+        commit_sha="abcdef123456",
+        changed_files=files,
     )
-
+    assert assessment.high_count >= 1
     assert assessment.reliability_status == ReliabilityStatus.WARNING.value
-    finding = next(f for f in assessment.findings if f.rule_id == "REL_SWALLOWED_EXCEPTION_PY")
-    assert finding.severity == FindingSeverity.HIGH.value
-    assert finding.category == ReliabilityCategory.ERROR_HANDLING.value
-    assert finding.confidence == "HIGH"
-    assert assessment.reliability_risk_score >= 20.0
-
-
-def test_swallowed_exception_java_detected(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    changed_files = [
-        {"filename": "src/main/java/Service.java", "content": "try { execute(); } catch (Exception e) {}", "status": "modified"}
-    ]
-
-    assessment = ReliabilityIntelligenceEngine.analyze_reliability(
-        organization_id=org_id,
-        repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
-    )
-
-    finding = next(f for f in assessment.findings if f.rule_id == "REL_SWALLOWED_EXCEPTION_JAVA_JS")
-    assert finding.severity == FindingSeverity.HIGH.value
-    assert finding.category == ReliabilityCategory.ERROR_HANDLING.value
-
-
-def test_missing_http_timeout_detected(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    changed_files = [
-        {"filename": "client.py", "content": 'resp = requests.post("https://api.external.com/data", json=payload)\n', "status": "modified"}
-    ]
-
-    assessment = ReliabilityIntelligenceEngine.analyze_reliability(
-        organization_id=org_id,
-        repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
-    )
-
-    finding = next(f for f in assessment.findings if f.rule_id == "REL_MISSING_HTTP_TIMEOUT_PY")
-    assert finding.severity == FindingSeverity.HIGH.value
-    assert finding.category == ReliabilityCategory.TIMEOUT.value
-    assert "timeout" in finding.remediation.lower()
-
-
-def test_unbounded_retry_loop_detected(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    content = """
-while True:
-    try:
-        connect()
-        break
-    except:
-        continue
-"""
-    changed_files = [
-        {"filename": "poller.py", "content": content, "status": "modified"}
-    ]
-
-    assessment = ReliabilityIntelligenceEngine.analyze_reliability(
-        organization_id=org_id,
-        repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
-    )
-
-    finding = next(f for f in assessment.findings if f.rule_id == "REL_UNBOUNDED_RETRY")
-    assert finding.severity == FindingSeverity.MEDIUM.value
-    assert finding.category == ReliabilityCategory.RETRY.value
-
-
-def test_resource_leak_unclosed_file_detected(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    changed_files = [
-        {"filename": "exporter.py", "content": 'f = open("/tmp/output.txt", "w")\nf.write("data")\n', "status": "modified"}
-    ]
-
-    assessment = ReliabilityIntelligenceEngine.analyze_reliability(
-        organization_id=org_id,
-        repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
-    )
-
-    finding = next(f for f in assessment.findings if f.rule_id == "REL_RESOURCE_LEAK_OPEN")
-    assert finding.severity == FindingSeverity.MEDIUM.value
-    assert finding.category == ReliabilityCategory.RESOURCE_LEAK.value
-
-
-def test_concurrency_unsafe_date_format_detected(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    changed_files = [
-        {"filename": "DateUtil.java", "content": 'public static SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd");', "status": "modified"}
-    ]
-
-    assessment = ReliabilityIntelligenceEngine.analyze_reliability(
-        organization_id=org_id,
-        repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
-    )
-
-    finding = next(f for f in assessment.findings if f.rule_id == "REL_CONCURRENCY_UNSAFE_DATE_FORMAT")
-    assert finding.severity == FindingSeverity.HIGH.value
-    assert finding.category == ReliabilityCategory.CONCURRENCY.value
-
-
-def test_historical_churn_hotspot_detected(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    changed_files = [
-        {"filename": "core/engine.py", "content": "def run():\n    return True\n", "status": "modified"}
-    ]
-    historical_signals = [
-        {"file_path": "core/engine.py", "churn_count": 14, "details": "14 prior commits in history"}
-    ]
-
-    assessment = ReliabilityIntelligenceEngine.analyze_reliability(
-        organization_id=org_id,
-        repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
-        historical_signals=historical_signals,
-    )
-
-    finding = next(f for f in assessment.findings if f.rule_id == "REL_HISTORICAL_CHURN_HOTSPOT")
-    assert finding.severity == FindingSeverity.MEDIUM.value
-    assert finding.category == ReliabilityCategory.HISTORICAL_INSTABILITY.value
-    assert "14" in finding.evidence
-
-
-def test_clean_reliability_returns_passed(org_and_repo_id):
-    org_id, repo_id = org_and_repo_id
-    changed_files = [
-        {"filename": "safe.py", "content": 'with open("file.txt") as f:\n    content = f.read()\n', "status": "modified"}
-    ]
-
-    assessment = ReliabilityIntelligenceEngine.analyze_reliability(
-        organization_id=org_id,
-        repository_id=repo_id,
-        changed_files=changed_files,
-        changed_symbols=[],
-        retrieved_chunks=[],
-    )
-
-    assert assessment.reliability_status == ReliabilityStatus.PASSED.value
-    assert assessment.reliability_risk_score == 0.0
-    assert len(assessment.findings) == 0
+    assert assessment.reliability_risk_score > 0

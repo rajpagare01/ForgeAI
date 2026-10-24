@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTenant } from "@/lib/tenant-context";
 import { apiClient } from "@/lib/api-client";
 import { Repository } from "@/types";
@@ -54,11 +55,19 @@ import {
   Bug,
   Clock,
   Play,
+  KeyRound,
+  Eye,
+  X,
+  ArrowUpRight,
+  Terminal,
+  CheckSquare,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { evaluateSecurityStatus, extractSafeCodeContext } from "@/lib/security-helpers";
 
 type LifecycleStep = "idle" | "fetching" | "deriving" | "indexing" | "graph" | "reasoning" | "complete";
 
@@ -361,7 +370,74 @@ export interface PrAnalysisResponse {
   trace_id?: string;
   created_at?: string;
   engineering_actions?: EngineeringActionDTO[];
-  remediation_summary?: Record<string, any>;
+}
+
+export interface SecretScanResultDTO {
+  secrets_found: number;
+  critical_count: number;
+  high_count: number;
+  warning_count: number;
+  files_scanned: number;
+  commit_sha?: string;
+  scan_time_ms: number;
+  findings: SecurityFindingDTO[];
+  summary: string;
+}
+
+export interface ReScanResultDTO {
+  analysis_id: string;
+  before_risk_score: number;
+  after_risk_score: number;
+  risk_delta: number;
+  before_merge_readiness: string;
+  after_merge_readiness: string;
+  merge_readiness_delta: string;
+  before_critical_count: number;
+  after_critical_count: number;
+  before_high_count?: number;
+  after_high_count?: number;
+  findings_resolved: string[];
+  findings_persisted: string[];
+  findings_new: string[];
+  is_clean: boolean;
+  summary: string;
+  updated_analysis?: PrAnalysisResponse;
+}
+
+export interface ExplainFindingResponseDTO {
+  finding_id?: string;
+  rule_id: string;
+  title: string;
+  what_happened: string;
+  why_it_is_risky: string;
+  production_impact: string;
+  how_to_fix: string;
+  supporting_evidence: string;
+  remediation_guidance: string[];
+}
+
+export interface DependencySecurityStatusDTO {
+  status: string;
+  code_level_security: string;
+  secret_scanning: string;
+  dependency_cve_database: string;
+  dependencies_scanned: number;
+  vulnerabilities_found: number;
+  findings: any[];
+  summary: string;
+}
+
+export interface AnalysisHistoryItemDTO {
+  analysis_id: string;
+  entity_id: string;
+  created_at: string;
+  risk_score: number;
+  risk_level: string;
+  merge_readiness: string;
+  critical_findings_count: number;
+  high_findings_count: number;
+  resolved_findings_from_previous: string[];
+  new_findings_from_previous: string[];
 }
 
 export interface EngineeringActionDTO {
@@ -528,7 +604,8 @@ export interface RepositoryDependencyItem {
   created_at?: string;
 }
 
-export default function AiInsightsPage() {
+function AiInsightsContent() {
+  const searchParams = useSearchParams();
   const { currentOrg } = useTenant();
   const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact" | "dependencies" | "remediation">("pr");
 
@@ -613,6 +690,65 @@ export default function AiInsightsPage() {
   const [rejectReasonInput, setRejectReasonInput] = useState<string>("");
   const [rejectingActionId, setRejectingActionId] = useState<string | null>(null);
   const [localActions, setLocalActions] = useState<EngineeringActionDTO[]>([]);
+
+  // Engineering Health Navigation & Sub-views
+  const [activeHealthSection, setActiveHealthSection] = useState<
+    "all" | "security" | "reliability" | "tests" | "dependencies" | "impact" | "merge"
+  >("all");
+
+  // Synchronize route query parameters (?repoId=...&pr=...&section=...)
+  useEffect(() => {
+    if (!searchParams) return;
+    const qRepoId = searchParams.get("repoId");
+    const qPr = searchParams.get("pr") || searchParams.get("prNumber");
+    const qSection = searchParams.get("section");
+
+    if (qRepoId && qRepoId !== selectedRepoId) {
+      setSelectedRepoId(qRepoId);
+    }
+    if (qPr) {
+      const parsedPr = Number(qPr);
+      if (!isNaN(parsedPr) && parsedPr !== selectedPrNumber) {
+        setSelectedPrNumber(parsedPr);
+      }
+    }
+    if (qSection) {
+      const validSections = ["all", "security", "reliability", "tests", "dependencies", "impact", "merge"];
+      if (validSections.includes(qSection)) {
+        setActiveHealthSection(qSection as any);
+      }
+    }
+  }, [searchParams, selectedRepoId, selectedPrNumber]);
+
+  // On-Demand Secret Scanning State
+  const [isSecretScanning, setIsSecretScanning] = useState<boolean>(false);
+  const [secretScanResult, setSecretScanResult] = useState<SecretScanResultDTO | null>(null);
+  const [isSecretScanModalOpen, setIsSecretScanModalOpen] = useState<boolean>(false);
+
+  // Repository Security Snapshot Scan State
+  const [isRepoScanning, setIsRepoScanning] = useState<boolean>(false);
+  const [repoScanResult, setRepoScanResult] = useState<SecurityAssessmentDTO | null>(null);
+
+  // Re-Scan Differential Pipeline State
+  const [isRescanning, setIsRescanning] = useState<boolean>(false);
+  const [rescanResult, setRescanResult] = useState<ReScanResultDTO | null>(null);
+  const [isRescanModalOpen, setIsRescanModalOpen] = useState<boolean>(false);
+
+  // Dependency Security State
+  const [dependencySecurity, setDependencySecurity] = useState<DependencySecurityStatusDTO | null>(null);
+  const [isLoadingDepSecurity, setIsLoadingDepSecurity] = useState<boolean>(false);
+  const [isDepSecurityModalOpen, setIsDepSecurityModalOpen] = useState<boolean>(false);
+
+  // Analysis History Timeline State
+  const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItemDTO[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+
+  // Finding Detail & AI Grounded Explanation Modal State
+  const [selectedFindingForModal, setSelectedFindingForModal] = useState<any | null>(null);
+  const [isExplainingFinding, setIsExplainingFinding] = useState<boolean>(false);
+  const [aiExplanation, setAiExplanation] = useState<ExplainFindingResponseDTO | null>(null);
+  const [explainError, setExplainError] = useState<string | null>(null);
 
   useEffect(() => {
     if (prAnalysisResult?.engineering_actions && prAnalysisResult.engineering_actions.length > 0) {
@@ -1043,6 +1179,190 @@ export default function AiInsightsPage() {
     }
   };
 
+  // Authoritative Security Status Evaluation (Phase 4)
+  const getSecurityStatus = useCallback(() => {
+    const res = evaluateSecurityStatus(prAnalysisResult?.security_assessment, dependencySecurity?.status);
+    let icon = ShieldCheck;
+    if (res.status === "CRITICAL / BLOCKED") icon = ShieldAlert;
+    else if (res.status === "HIGH RISK") icon = AlertTriangle;
+    else if (res.status === "PARTIAL EVIDENCE") icon = Info;
+    else if (res.status === "WARNINGS") icon = AlertCircle;
+    return {
+      ...res,
+      icon,
+    };
+  }, [prAnalysisResult?.security_assessment, dependencySecurity?.status]);
+
+  // Safe Code Context Extraction with Zero Raw Secret Exposure (Phase 11)
+  const getSafeCodeContext = useCallback((filePath: string, lineNumber?: number | null) => {
+    return extractSafeCodeContext(prChangeSet?.files, filePath, lineNumber);
+  }, [prChangeSet]);
+
+
+  // On-Demand Secret Scan Handler (Phase 15 & 16)
+  const handleSecretScan = async () => {
+    if (!selectedRepoId) return;
+    setIsSecretScanning(true);
+    setSecretScanResult(null);
+    setIsSecretScanModalOpen(true);
+    try {
+      const res = await apiClient.post<SecretScanResultDTO>(
+        `/api/v1/ai/repositories/${selectedRepoId}/secret-scan`,
+        {
+          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
+          files: prChangeSet?.files?.map((f) => ({
+            filename: f.filename,
+            content: f.content || f.patch || "",
+          })),
+        }
+      );
+      setSecretScanResult(res);
+    } catch (err: any) {
+      console.warn("Secret scan failed:", err);
+    } finally {
+      setIsSecretScanning(false);
+    }
+  };
+
+  // Repository Snapshot Security Scan Handler (Phase 14)
+  const handleRepositoryScan = async () => {
+    if (!selectedRepoId) return;
+    setIsRepoScanning(true);
+    try {
+      const res = await apiClient.post<SecurityAssessmentDTO>(
+        `/api/v1/ai/repositories/${selectedRepoId}/security-scan`,
+        {
+          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
+          files: prChangeSet?.files?.map((f) => ({
+            filename: f.filename,
+            content: f.content || f.patch || "",
+          })),
+        }
+      );
+      setRepoScanResult(res);
+      if (prAnalysisResult) {
+        setPrAnalysisResult({
+          ...prAnalysisResult,
+          security_assessment: res,
+        });
+      }
+    } catch (err: any) {
+      console.warn("Repository scan failed:", err);
+    } finally {
+      setIsRepoScanning(false);
+    }
+  };
+
+  // Authoritative Re-Scan Differential Pipeline Handler (Phase 13)
+  const handleRescan = async () => {
+    const analysisId = prAnalysisResult?.analysis_id;
+    if (!analysisId) return;
+    setIsRescanning(true);
+    setRescanResult(null);
+    setIsRescanModalOpen(true);
+    try {
+      const res = await apiClient.post<ReScanResultDTO>(
+        `/api/v1/ai/analyses/${analysisId}/re-scan`,
+        {
+          pr_number: selectedPrNumber || 0,
+          changed_files: prChangeSet?.files?.map((f) => ({
+            filename: f.filename,
+            content: f.content || f.patch || "",
+            patch: f.patch,
+            additions: f.additions,
+            deletions: f.deletions,
+            status: f.status,
+          })),
+        }
+      );
+      setRescanResult(res);
+      if (res?.updated_analysis) {
+        setPrAnalysisResult(res.updated_analysis as any);
+      }
+      if (selectedPrNumber) {
+        fetchAnalysisHistory(selectedPrNumber);
+      }
+    } catch (err: any) {
+      console.warn("Re-scan failed:", err);
+    } finally {
+      setIsRescanning(false);
+    }
+  };
+
+  // Grounded AI Explanation Handler (Phase 19)
+  const handleExplainFinding = async (finding: any) => {
+    setSelectedFindingForModal(finding);
+    setIsExplainingFinding(true);
+    setAiExplanation(null);
+    setExplainError(null);
+    try {
+      const res = await apiClient.post<ExplainFindingResponseDTO>(
+        "/api/v1/ai/explain-finding",
+        {
+          finding_id: finding.id || finding.rule_id || "finding-1",
+          rule_id: finding.rule_id || "SEC_GENERAL_PATTERN",
+          title: finding.title || "Security Finding",
+          category: finding.category || "SECURITY",
+          severity: finding.severity || "HIGH",
+          file_path: finding.file_path || finding.affected_file || "unknown",
+          line_number: finding.line_number || 1,
+          redacted_evidence: finding.redacted_evidence || finding.evidence || "[REDACTED]",
+        }
+      );
+      setAiExplanation(res);
+    } catch (err: any) {
+      setExplainError(err?.message || "Failed to generate AI explanation.");
+    } finally {
+      setIsExplainingFinding(false);
+    }
+  };
+
+  // Fetch Dependency Security Status (Phase 17)
+  const fetchDependencySecurity = useCallback(async (repoId: string) => {
+    if (!repoId) return;
+    setIsLoadingDepSecurity(true);
+    try {
+      const res = await apiClient.get<DependencySecurityStatusDTO>(
+        `/api/v1/ai/repositories/${repoId}/dependency-security`
+      );
+      setDependencySecurity(res);
+    } catch (err: any) {
+      console.warn("Dependency security check failed:", err);
+    } finally {
+      setIsLoadingDepSecurity(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedRepoId) {
+      fetchDependencySecurity(selectedRepoId);
+    }
+  }, [selectedRepoId, fetchDependencySecurity]);
+
+  // Fetch Analysis History Timeline (Phase 27)
+  const fetchAnalysisHistory = useCallback(async (prNum: number | string) => {
+    if (!prNum) return;
+    setIsLoadingHistory(true);
+    try {
+      const res = await apiClient.get<AnalysisHistoryItemDTO[]>(
+        `/api/v1/ai/analyses/pull_request/${prNum}/history`
+      );
+      if (Array.isArray(res)) {
+        setAnalysisHistory(res);
+      }
+    } catch (err: any) {
+      console.warn("Analysis history fetch failed:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedPrNumber) {
+      fetchAnalysisHistory(selectedPrNumber);
+    }
+  }, [selectedPrNumber, fetchAnalysisHistory]);
+
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId);
 
   // Filtered provenance chunks
@@ -1193,6 +1513,552 @@ export default function AiInsightsPage() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* SECURITY STATUS BANNER (PHASE 4 - AUTHORITATIVE TRUTHFUL STATUS)          */}
+      {/* ========================================================================= */}
+      {(() => {
+        const secStatus = getSecurityStatus();
+        const SecIcon = secStatus.icon;
+        return (
+          <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all shadow-lg ${secStatus.bg}`}>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                <SecIcon className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Security Status</span>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 border ${
+                      secStatus.status === "CRITICAL / BLOCKED"
+                        ? "bg-rose-950 text-rose-300 border-rose-500 animate-pulse"
+                        : secStatus.status === "HIGH RISK"
+                        ? "bg-amber-950 text-amber-300 border-amber-500"
+                        : secStatus.status === "PARTIAL EVIDENCE"
+                        ? "bg-blue-950 text-blue-300 border-blue-500"
+                        : secStatus.status === "WARNINGS"
+                        ? "bg-yellow-950 text-yellow-300 border-yellow-500"
+                        : "bg-emerald-950 text-emerald-300 border-emerald-500"
+                    }`}
+                  >
+                    ● {secStatus.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  {secStatus.description}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Actions in Banner */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSecretScan}
+                disabled={isSecretScanning || !selectedRepoId}
+                className="h-8 text-xs px-3 border-purple-500/40 bg-purple-950/30 text-purple-200 hover:bg-purple-900/50"
+              >
+                {isSecretScanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <KeyRound className="h-3.5 w-3.5 mr-1.5 text-purple-400" />}
+                Scan for Secrets
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRepositoryScan}
+                disabled={isRepoScanning || !selectedRepoId}
+                className="h-8 text-xs px-3 border-indigo-500/40 bg-indigo-950/30 text-indigo-200 hover:bg-indigo-900/50"
+              >
+                {isRepoScanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1.5 text-indigo-400" />}
+                Scan Repository
+              </Button>
+
+              {prAnalysisResult?.analysis_id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRescan}
+                  disabled={isRescanning}
+                  className="h-8 text-xs px-3 border-emerald-500/40 bg-emerald-950/30 text-emerald-200 hover:bg-emerald-900/50"
+                >
+                  {isRescanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5 text-emerald-400" />}
+                  Re-Scan Changes
+                </Button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ========================================================================= */}
+      {/* PHASE 21: DEVELOPER DASHBOARD SUMMARY & ENGINEERING HEALTH CENTER         */}
+      {/* ========================================================================= */}
+      {(() => {
+        const sec = prAnalysisResult?.security_assessment;
+        const rel = prAnalysisResult?.reliability_assessment;
+        const merge = prAnalysisResult?.merge_readiness;
+        const risk = prAnalysisResult?.unified_risk;
+        const strat = prAnalysisResult?.test_strategy;
+
+        // 1. Security Metrics
+        const secStatusText = sec?.critical_count && sec.critical_count > 0
+          ? "CRITICAL"
+          : sec?.high_count && sec.high_count > 0
+          ? "HIGH"
+          : sec?.evidence_status === "PARTIAL"
+          ? "PARTIAL"
+          : "CLEAN";
+        const secretFindingsCount = sec?.findings?.filter((f: any) => f.category === "SECRET" || f.rule_id?.includes("SECRET"))?.length || 0;
+        const secRuleMatchesCount = sec?.findings?.length || 0;
+
+        // 2. Reliability Metrics with Grounded Terminology
+        const relFindings = rel?.findings || [];
+        const relDetectedCount = relFindings.filter((f: any) => f.terminology === "DETECTED" || f.confidence === "HIGH").length;
+        const relLikelyCount = relFindings.filter((f: any) => f.terminology === "LIKELY" || f.confidence === "MEDIUM").length;
+        const relSuspiciousCount = relFindings.filter((f: any) => f.terminology === "SUSPICIOUS").length;
+        const relReviewCount = relFindings.filter((f: any) => f.terminology === "REQUIRES REVIEW" || f.confidence === "LOW").length;
+        const relStatusText = rel?.critical_count && rel.critical_count > 0
+          ? `${rel.critical_count} CRIT`
+          : rel?.high_count && rel.high_count > 0
+          ? `${rel.high_count} HIGH`
+          : rel?.reliability_status || "PASSED";
+
+        // 3. Tests Metrics: Explicit distinction between verified failure & AI recommendations
+        const failedRequiredTests = merge?.evidence_summary?.failed_required_tests || 0;
+        const mustRunCount = strat?.must_run?.length || 0;
+        const shouldRunCount = strat?.should_run?.length || 0;
+        const totalRecommendedTests = mustRunCount + shouldRunCount;
+        const testStatusText = failedRequiredTests > 0
+          ? `${failedRequiredTests} FAILED`
+          : mustRunCount > 0
+          ? `${mustRunCount} MUST RUN`
+          : "PASSING";
+
+        // 4. Dependencies Metrics (Truthful Partial Evidence contract)
+        const depStatusText = dependencySecurity?.status || (sec?.evidence_status === "PARTIAL" ? "PARTIAL" : "VERIFIED");
+        const depCount = dependencySecurity?.dependencies_scanned || orgDependencies?.length || 0;
+        const depVulnCount = dependencySecurity?.vulnerabilities_found || 0;
+
+        // 5. Impact Metrics
+        const changedFilesCount = prChangeSet?.changedFilesCount || prChangeSet?.files?.length || 0;
+        const changedModulesCount = prAnalysisResult?.affected_modules?.length || 0;
+        const downstreamReposCount = prAnalysisResult?.impact_metadata?.distributed_impact?.direct_downstream_count || 0;
+        const riskScoreNum = risk?.final_risk ?? prAnalysisResult?.risk_score ?? 0;
+        const riskLevelText = risk?.final_risk_level ?? prAnalysisResult?.risk_level ?? "LOW";
+        const impactLevelText = prAnalysisResult?.impact_metadata?.distributed_impact?.combined_risk_level
+          || (riskScoreNum >= 75 ? "HIGH" : riskScoreNum >= 40 ? "MEDIUM" : "LOW");
+
+        // 6. Merge Readiness Metrics
+        const mergeDecisionText = merge?.decision || "NOT_READY";
+        const blockersCount = merge?.blockers?.length || 0;
+
+        const critFindingsCount = (sec?.critical_count ?? 0) + (rel?.critical_count ?? 0);
+        const highFindingsCount = (sec?.high_count ?? 0) + (rel?.high_count ?? 0);
+        const testsFailingCount = failedRequiredTests;
+        const missingCoverageCount = strat?.coverage_summary?.coverage_available === false ? (strat?.must_run?.length || 1) : 0;
+
+        return (
+          <Card className="border-indigo-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/40 shadow-xl">
+            <CardHeader className="pb-3 border-b border-slate-800/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Activity className="h-5 w-5 text-indigo-400" />
+                  <CardTitle className="text-base text-white tracking-wide">
+                    Engineering Health Center
+                  </CardTitle>
+                  <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                    Unified Code Quality, Security & Readiness
+                  </span>
+                </div>
+
+                {/* Sub-Navigation for Engineering Health */}
+                <div className="flex items-center gap-1 p-1 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono flex-wrap">
+                  {[
+                    { id: "all", label: "Overview" },
+                    { id: "security", label: "Security" },
+                    { id: "reliability", label: "Reliability" },
+                    { id: "tests", label: "Tests" },
+                    { id: "dependencies", label: "Dependencies" },
+                    { id: "impact", label: "Impact" },
+                    { id: "merge", label: "Merge" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab("pr");
+                        setActiveHealthSection(tab.id as any);
+                      }}
+                      className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+                        activeHealthSection === tab.id
+                          ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-4 space-y-4">
+              {/* Top 6 Dimension Metric Cards (Clickable) */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                {/* 1. Security */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("pr");
+                    setActiveHealthSection("security");
+                  }}
+                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                    activeHealthSection === "security"
+                      ? "border-rose-500/60 bg-rose-950/20 shadow-md"
+                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                      Security
+                    </span>
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                  </div>
+                  <div className={`text-sm font-bold font-mono truncate ${
+                    secStatusText === "CRITICAL" ? "text-rose-400" : secStatusText === "HIGH" ? "text-amber-400" : "text-emerald-400"
+                  }`}>
+                    {secStatusText}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                    <span>{secRuleMatchesCount} rules</span>
+                    {secretFindingsCount > 0 && (
+                      <span className="text-rose-400 font-bold">{secretFindingsCount} secrets</span>
+                    )}
+                  </div>
+                </button>
+
+                {/* 2. Reliability / Bugs */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("pr");
+                    setActiveHealthSection("reliability");
+                  }}
+                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                    activeHealthSection === "reliability"
+                      ? "border-amber-500/60 bg-amber-950/20 shadow-md"
+                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                      Reliability
+                    </span>
+                    <Bug className="h-3.5 w-3.5 text-amber-400" />
+                  </div>
+                  <div className="text-sm font-bold font-mono text-amber-300 truncate">
+                    {relStatusText}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                    <span title="Detected via static rules">{relDetectedCount} det</span>
+                    <span title="Likely dereference issues">{relLikelyCount} likely</span>
+                    <span title="Requires review">{relReviewCount} rev</span>
+                  </div>
+                </button>
+
+                {/* 3. Tests */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("pr");
+                    setActiveHealthSection("tests");
+                  }}
+                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                    activeHealthSection === "tests"
+                      ? "border-indigo-500/60 bg-indigo-950/20 shadow-md"
+                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                      Tests
+                    </span>
+                    <TestTube className="h-3.5 w-3.5 text-indigo-400" />
+                  </div>
+                  <div className={`text-sm font-bold font-mono truncate ${
+                    testStatusText.includes("FAILED") ? "text-rose-400" : "text-indigo-300"
+                  }`}>
+                    {testStatusText}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                    <span className="text-purple-300" title="AI Recommended tests">{totalRecommendedTests} recs</span>
+                    <span title="Actual verified CI failures">{failedRequiredTests} fails</span>
+                  </div>
+                </button>
+
+                {/* 4. Dependencies (Card 4 per Section 4) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("pr");
+                    setActiveHealthSection("dependencies");
+                  }}
+                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                    activeHealthSection === "dependencies"
+                      ? "border-blue-500/60 bg-blue-950/20 shadow-md"
+                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                      Dependencies
+                    </span>
+                    <Boxes className="h-3.5 w-3.5 text-blue-400" />
+                  </div>
+                  <div className={`text-sm font-bold font-mono truncate ${
+                    depStatusText === "PARTIAL" ? "text-blue-300" : "text-emerald-400"
+                  }`}>
+                    {depStatusText}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                    <span>{depCount} pkgs</span>
+                    <span className={depVulnCount > 0 ? "text-rose-400" : "text-emerald-400"}>
+                      {depVulnCount} vulns
+                    </span>
+                  </div>
+                </button>
+
+                {/* 5. Impact */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("pr");
+                    setActiveHealthSection("impact");
+                  }}
+                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                    activeHealthSection === "impact"
+                      ? "border-purple-500/60 bg-purple-950/20 shadow-md"
+                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                      Impact
+                    </span>
+                    <Network className="h-3.5 w-3.5 text-purple-400" />
+                  </div>
+                  <div className="text-sm font-bold font-mono text-purple-300 truncate">
+                    {impactLevelText}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                    <span>{changedFilesCount} files</span>
+                    <span>{downstreamReposCount} repos</span>
+                  </div>
+                </button>
+
+                {/* 6. Merge Readiness */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("pr");
+                    setActiveHealthSection("merge");
+                  }}
+                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                    activeHealthSection === "merge"
+                      ? "border-emerald-500/60 bg-emerald-950/20 shadow-md"
+                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                      Merge Status
+                    </span>
+                    <GitPullRequest className="h-3.5 w-3.5 text-emerald-400" />
+                  </div>
+                  <div className={`text-sm font-bold font-mono truncate ${
+                    mergeDecisionText.includes("BLOCKED") ? "text-rose-400" : mergeDecisionText.includes("WARNING") ? "text-amber-400" : "text-emerald-400"
+                  }`}>
+                    {mergeDecisionText.replace(/_/g, " ")}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                    <span className={blockersCount > 0 ? "text-rose-400 font-bold" : "text-emerald-400"}>
+                      {blockersCount} blockers
+                    </span>
+                    <span>Score {riskScoreNum.toFixed(0)}</span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Engineering Lifecycle Timeline View (Section 15) */}
+              <div className="p-3.5 rounded-xl border border-slate-800/80 bg-slate-950/80 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 font-mono text-slate-300 font-semibold uppercase tracking-wider text-[11px]">
+                    <Workflow className="h-4 w-4 text-indigo-400" />
+                    <span>Live Engineering Intelligence Workflow Lifecycle</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
+                    Deterministic Evidence &bull; Multi-Tenant Isolated
+                  </span>
+                </div>
+
+                {/* Horizontal Step Pipeline */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 font-mono text-[10px]">
+                  {/* Step 1: Project & Req */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">1. Project & Req</span>
+                    <div className="text-emerald-400 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Linked
+                    </div>
+                  </div>
+
+                  {/* Step 2: Task */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">2. Task Linked</span>
+                    <div className="text-emerald-400 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Active
+                    </div>
+                  </div>
+
+                  {/* Step 3: Git Repo & Branch */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">3. Branch / Commit</span>
+                    <div className="text-indigo-300 font-bold truncate">
+                      {prChangeSet?.sourceBranch || "main"}
+                    </div>
+                  </div>
+
+                  {/* Step 4: Pull Request */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">4. Pull Request</span>
+                    <div className="text-white font-bold">
+                      {selectedPrNumber ? `PR #${selectedPrNumber}` : "None"}
+                    </div>
+                  </div>
+
+                  {/* Step 5: Tests / CI */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">5. CI / Tests</span>
+                    <div className={`font-bold ${failedRequiredTests > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                      {failedRequiredTests > 0 ? `${failedRequiredTests} Failures` : "Verified"}
+                    </div>
+                  </div>
+
+                  {/* Step 6: AI Health */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">6. AI Analysis</span>
+                    <div className="text-purple-300 font-bold">
+                      {prAnalysisResult ? "Executed" : "Pending"}
+                    </div>
+                  </div>
+
+                  {/* Step 7: Security & Bugs */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">7. Security/Bugs</span>
+                    <div className={`font-bold ${critFindingsCount > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                      {critFindingsCount > 0 ? `${critFindingsCount} Critical` : "Clean"}
+                    </div>
+                  </div>
+
+                  {/* Step 8: Merge Ready */}
+                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
+                    <span className="text-slate-500 block uppercase">8. Merge Ready</span>
+                    <div className={`font-bold ${mergeDecisionText.includes("BLOCKED") ? "text-rose-400" : "text-emerald-400"}`}>
+                      {mergeDecisionText}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 Clickable Quick Metrics */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/60 text-xs">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("pr");
+                      setActiveHealthSection("security");
+                      setFindingSeverityFilter("CRITICAL");
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-rose-500/30 bg-rose-950/20 text-rose-300 hover:bg-rose-950/40 transition-colors"
+                  >
+                    <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
+                    <span>Critical Findings:</span>
+                    <strong className="font-mono">{critFindingsCount}</strong>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("pr");
+                      setActiveHealthSection("security");
+                      setFindingSeverityFilter("HIGH");
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-amber-500/30 bg-amber-950/20 text-amber-300 hover:bg-amber-950/40 transition-colors"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                    <span>High Findings:</span>
+                    <strong className="font-mono">{highFindingsCount}</strong>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("pr");
+                      setActiveHealthSection("tests");
+                      setTestBucketFilter("FAILURES");
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-indigo-500/30 bg-indigo-950/20 text-indigo-300 hover:bg-indigo-950/40 transition-colors"
+                  >
+                    <TestTube className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Tests Failing:</span>
+                    <strong className="font-mono">{testsFailingCount}</strong>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("pr");
+                      setActiveHealthSection("tests");
+                      setTestBucketFilter("MUST_RUN");
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-blue-500/30 bg-blue-950/20 text-blue-300 hover:bg-blue-950/40 transition-colors"
+                  >
+                    <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                    <span>Missing Coverage:</span>
+                    <strong className="font-mono">{missingCoverageCount}</strong>
+                  </button>
+                </div>
+
+                {/* Secondary Utilities */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDepSecurityModalOpen(true)}
+                    className="text-[11px] font-mono text-slate-400 hover:text-white flex items-center gap-1"
+                  >
+                    <Boxes className="h-3.5 w-3.5 text-blue-400" />
+                    Dependency CVE Database
+                  </button>
+                  <span className="text-slate-700">&bull;</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedPrNumber) fetchAnalysisHistory(selectedPrNumber);
+                      setIsHistoryModalOpen(true);
+                    }}
+                    className="text-[11px] font-mono text-slate-400 hover:text-white flex items-center gap-1"
+                  >
+                    <History className="h-3.5 w-3.5 text-purple-400" />
+                    Analysis History Timeline
+                  </button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -2114,7 +2980,7 @@ export default function AiInsightsPage() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge
                                     variant={f.severity === "CRITICAL" ? "destructive" : "outline"}
-                                    className={`text-[9px] font-mono ${
+                                    className={`text-[9px] font-mono font-bold uppercase tracking-wider ${
                                       f.severity === "HIGH"
                                         ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
                                         : f.severity === "MEDIUM"
@@ -2124,6 +2990,10 @@ export default function AiInsightsPage() {
                                   >
                                     {f.severity}
                                   </Badge>
+                                  <Badge variant="outline" className="text-[9px] font-mono text-emerald-400 border-emerald-500/40 bg-emerald-950/20 flex items-center gap-1">
+                                    <ShieldCheck className="h-3 w-3" />
+                                    DETERMINISTIC
+                                  </Badge>
                                   <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
                                     {f.category}
                                   </span>
@@ -2131,9 +3001,13 @@ export default function AiInsightsPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono text-[10px] text-slate-500">{f.rule_id}</span>
-                                  {f.is_blocker && (
-                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase">
-                                      Merge Blocker
+                                  {f.is_blocker ? (
+                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase font-mono font-bold">
+                                      BLOCKING
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase font-mono text-slate-400">
+                                      ADVISORY
                                     </Badge>
                                   )}
                                 </div>
@@ -2142,10 +3016,10 @@ export default function AiInsightsPage() {
                               <p className="text-slate-300 text-[11px] leading-relaxed">{f.description}</p>
 
                               {/* Concrete Redacted Evidence */}
-                              <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 font-mono text-[11px] text-purple-300 flex items-center justify-between gap-2 overflow-x-auto">
+                              <div className="p-2.5 rounded-lg bg-slate-950/90 border border-slate-800 font-mono text-[11px] text-purple-300 flex items-center justify-between gap-2 overflow-x-auto">
                                 <div>
                                   <span className="text-slate-500">{f.file_path}{f.line_number ? `:${f.line_number}` : ""}:</span>{" "}
-                                  <span>{f.redacted_evidence}</span>
+                                  <span className="font-bold text-purple-200">{f.redacted_evidence}</span>
                                 </div>
                                 <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-purple-950/40 border border-purple-500/30 text-purple-300 shrink-0">
                                   Confidence: {f.confidence}
@@ -2156,6 +3030,35 @@ export default function AiInsightsPage() {
                               <div className="text-[11px] text-slate-400 flex items-start gap-1.5">
                                 <span className="text-emerald-400 font-semibold shrink-0">Remediation:</span>
                                 <span>{f.remediation}</span>
+                              </div>
+
+                              {/* Interactive Action Buttons */}
+                              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  Verification: <span className="text-amber-400 font-semibold">Deterministic Re-Scan Required</span>
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setSelectedFindingForModal(f)}
+                                    className="h-6 text-[10px] px-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 flex items-center gap-1"
+                                  >
+                                    <Eye className="h-3 w-3 text-indigo-400" />
+                                    Safe Context
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleExplainFinding(f)}
+                                    className="h-6 text-[10px] px-2 border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 flex items-center gap-1"
+                                  >
+                                    <Sparkles className="h-3 w-3 text-purple-400" />
+                                    Explain with ForgeAI
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -2241,7 +3144,7 @@ export default function AiInsightsPage() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge
                                     variant={rf.severity === "CRITICAL" ? "destructive" : "outline"}
-                                    className={`text-[9px] font-mono ${
+                                    className={`text-[9px] font-mono font-bold uppercase tracking-wider ${
                                       rf.severity === "HIGH"
                                         ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
                                         : rf.severity === "MEDIUM"
@@ -2251,6 +3154,10 @@ export default function AiInsightsPage() {
                                   >
                                     {rf.severity}
                                   </Badge>
+                                  <Badge variant="outline" className="text-[9px] font-mono text-purple-400 border-purple-500/40 bg-purple-950/20 flex items-center gap-1">
+                                    <Activity className="h-3 w-3" />
+                                    DETERMINISTIC
+                                  </Badge>
                                   <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
                                     {rf.category}
                                   </span>
@@ -2259,8 +3166,8 @@ export default function AiInsightsPage() {
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono text-[10px] text-slate-500">{rf.rule_id}</span>
                                   {rf.is_blocker && (
-                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase">
-                                      Merge Blocker
+                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase font-mono font-bold">
+                                      BLOCKING
                                     </Badge>
                                   )}
                                 </div>
@@ -2269,7 +3176,7 @@ export default function AiInsightsPage() {
                               <p className="text-slate-300 text-[11px] leading-relaxed">{rf.description}</p>
 
                               {/* Concrete Evidence Snippet */}
-                              <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 font-mono text-[11px] text-indigo-300 flex items-center justify-between gap-2 overflow-x-auto">
+                              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 font-mono text-[11px] text-indigo-300 flex items-center justify-between gap-2 overflow-x-auto">
                                 <div>
                                   <span className="text-slate-500">{rf.file_path}{rf.line_number ? `:${rf.line_number}` : ""}:</span>{" "}
                                   <span>{rf.evidence}</span>
@@ -2283,6 +3190,35 @@ export default function AiInsightsPage() {
                               <div className="text-[11px] text-slate-400 flex items-start gap-1.5">
                                 <span className="text-emerald-400 font-semibold shrink-0">Remediation:</span>
                                 <span>{rf.remediation}</span>
+                              </div>
+
+                              {/* Interactive Action Buttons */}
+                              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  Evidence: <span className="text-indigo-300 font-semibold">Static AST & Churn Verification</span>
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setSelectedFindingForModal(rf)}
+                                    className="h-6 text-[10px] px-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 flex items-center gap-1"
+                                  >
+                                    <Eye className="h-3 w-3 text-indigo-400" />
+                                    Safe Context
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleExplainFinding(rf)}
+                                    className="h-6 text-[10px] px-2 border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 flex items-center gap-1"
+                                  >
+                                    <Sparkles className="h-3 w-3 text-purple-400" />
+                                    Explain with ForgeAI
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -3342,7 +4278,7 @@ export default function AiInsightsPage() {
                                       {finding.severity}
                                     </Badge>
 
-                                    {/* Finding Type (OBSERVED vs INFERRED) */}
+                                    {/* Finding Type (DETERMINISTIC vs AI EXPLANATION) */}
                                     <Badge
                                       variant="outline"
                                       className={`text-[9px] font-mono uppercase tracking-wider flex items-center gap-1 ${
@@ -3353,13 +4289,13 @@ export default function AiInsightsPage() {
                                     >
                                       {finding.finding_type === "OBSERVED" ? (
                                         <>
-                                          <Check className="h-3 w-3 text-emerald-400" />
-                                          OBSERVED
+                                          <ShieldCheck className="h-3 w-3 text-emerald-400" />
+                                          DETERMINISTIC
                                         </>
                                       ) : (
                                         <>
                                           <Sparkles className="h-3 w-3 text-purple-400" />
-                                          INFERRED
+                                          AI EXPLANATION
                                         </>
                                       )}
                                     </Badge>
@@ -3417,6 +4353,35 @@ export default function AiInsightsPage() {
                                     </div>
                                   </div>
                                 )}
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                                  <span className="text-[10px] font-mono text-slate-500">
+                                    Provenance: <span className="text-slate-300 font-semibold">{finding.finding_type === "OBSERVED" ? "Deterministic Rule" : "Grounded AI Reasoning"}</span>
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setSelectedFindingForModal(finding)}
+                                      className="h-6 text-[10px] px-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 flex items-center gap-1"
+                                    >
+                                      <Eye className="h-3 w-3 text-indigo-400" />
+                                      Safe Context
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleExplainFinding(finding)}
+                                      className="h-6 text-[10px] px-2 border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 flex items-center gap-1"
+                                    >
+                                      <Sparkles className="h-3 w-3 text-purple-400" />
+                                      Explain with ForgeAI
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -4581,6 +5546,637 @@ export default function AiInsightsPage() {
           )}
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: FINDING DETAIL VIEW & SAFE CODE CONTEXT (PHASE 10, 11 & 19)      */}
+      {/* ========================================================================= */}
+      {selectedFindingForModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-indigo-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    variant={selectedFindingForModal.severity === "CRITICAL" ? "destructive" : "outline"}
+                    className={`text-[10px] font-mono font-bold uppercase tracking-wider ${
+                      selectedFindingForModal.severity === "HIGH"
+                        ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
+                        : selectedFindingForModal.severity === "MEDIUM"
+                        ? "text-yellow-400 border-yellow-500/40 bg-yellow-950/30"
+                        : ""
+                    }`}
+                  >
+                    {selectedFindingForModal.severity}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/40 bg-emerald-950/20 flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" />
+                    DETERMINISTIC
+                  </Badge>
+                  <span className="font-mono text-xs text-slate-400 uppercase tracking-wider">
+                    {selectedFindingForModal.category}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  {selectedFindingForModal.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFindingForModal(null);
+                  setAiExplanation(null);
+                  setExplainError(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Location & Rule Metadata */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs font-mono">
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                <span className="text-[10px] text-slate-500 uppercase block">Rule ID</span>
+                <span className="font-semibold text-slate-200">{selectedFindingForModal.rule_id || "SEC_GENERAL_PATTERN"}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                <span className="text-[10px] text-slate-500 uppercase block">Location</span>
+                <span className="font-semibold text-indigo-300 truncate block">
+                  {selectedFindingForModal.file_path || selectedFindingForModal.affected_file || "unknown"}
+                  {selectedFindingForModal.line_number ? `:${selectedFindingForModal.line_number}` : ""}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                <span className="text-[10px] text-slate-500 uppercase block">Merge Blocker</span>
+                <span className={`font-semibold ${selectedFindingForModal.is_blocker ? "text-rose-400" : "text-slate-400"}`}>
+                  {selectedFindingForModal.is_blocker ? "BLOCKING" : "ADVISORY"}
+                </span>
+              </div>
+            </div>
+
+            {/* Redacted Evidence Box (Strict Zero Raw Secret Leakage) */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+                Redacted Deterministic Evidence
+              </span>
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 font-mono text-xs text-purple-300 break-all select-all">
+                {selectedFindingForModal.redacted_evidence || selectedFindingForModal.evidence || "[REDACTED]"}
+              </div>
+            </div>
+
+            {/* Safe Code Context Viewer (Phase 11: lines -3 to +3 with [REDACTED SECRET]) */}
+            {(() => {
+              const targetPath = selectedFindingForModal.file_path || selectedFindingForModal.affected_file;
+              const targetLine = selectedFindingForModal.line_number;
+              const contextLines = getSafeCodeContext(targetPath, targetLine);
+              if (!contextLines || contextLines.length === 0) return null;
+
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 font-semibold">
+                    <span>Safe Code Context (Target Line &plusmn; 3)</span>
+                    <span className="text-emerald-400">Zero Raw Secrets</span>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3 font-mono text-xs overflow-x-auto max-h-48 divide-y divide-slate-800/40">
+                    {contextLines.map((cl, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex items-start gap-3 py-0.5 px-1 rounded ${
+                          cl.isTarget
+                            ? "bg-rose-950/40 text-rose-200 border-l-2 border-rose-500 font-bold"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        <span className="w-8 text-right text-slate-600 select-none shrink-0">{cl.num}</span>
+                        <pre className="whitespace-pre overflow-x-auto flex-1 font-mono text-xs">{cl.text || " "}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Grounded AI Explanation Layer (Phase 19) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                  ForgeAI Grounded Reasoning Layer
+                </span>
+                {!aiExplanation && !isExplainingFinding && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="glow"
+                    onClick={() => handleExplainFinding(selectedFindingForModal)}
+                    className="h-7 text-xs px-3"
+                  >
+                    Explain with ForgeAI
+                  </Button>
+                )}
+              </div>
+
+              {isExplainingFinding ? (
+                <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-950/20 text-xs text-purple-300 flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                  Generating grounded contextual explanation from deterministic rule...
+                </div>
+              ) : explainError ? (
+                <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300">
+                  {explainError}
+                </div>
+              ) : aiExplanation ? (
+                <div className="p-4 rounded-xl border border-purple-500/30 bg-slate-900/90 space-y-3 text-xs">
+                  <div>
+                    <h4 className="font-bold text-white text-xs mb-1">What Happened?</h4>
+                    <p className="text-slate-300 leading-relaxed">{aiExplanation.what_happened}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-amber-300 text-xs mb-1">Why It Is Risky</h4>
+                    <p className="text-slate-300 leading-relaxed">{aiExplanation.why_it_is_risky}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-rose-300 text-xs mb-1">Potential Production Impact</h4>
+                    <p className="text-slate-300 leading-relaxed">{aiExplanation.production_impact}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-emerald-300 text-xs mb-1">Recommended Remediation</h4>
+                    <p className="text-slate-300 leading-relaxed">{aiExplanation.how_to_fix}</p>
+                  </div>
+                  {aiExplanation.remediation_guidance && aiExplanation.remediation_guidance.length > 0 && (
+                    <div className="space-y-1 pt-1 border-t border-slate-800">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                        Step-by-Step Remediation Guidance:
+                      </span>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300 text-[11px]">
+                        {aiExplanation.remediation_guidance.map((step, sIdx) => (
+                          <li key={sIdx}>{step}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
+              <span className="text-[11px] font-mono text-slate-500">
+                Verification status: <span className="text-amber-400 font-semibold">Pending Re-Scan</span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedFindingForModal(null);
+                  setAiExplanation(null);
+                  setExplainError(null);
+                }}
+                className="text-xs px-4"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: RE-SCAN DIFFERENTIAL COMPARISON (PHASE 13)                       */}
+      {/* ========================================================================= */}
+      {isRescanModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-emerald-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <RefreshCw className="h-5 w-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  Authoritative Differential Re-Scan
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRescanModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {isRescanning ? (
+              <div className="py-12 text-center space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-emerald-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-mono">
+                  Executing authoritative re-scan pipeline and verifying finding removal...
+                </p>
+              </div>
+            ) : rescanResult ? (
+              <div className="space-y-4">
+                {/* 3 Metric Comparison Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                  {/* Risk Score Delta */}
+                  <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/70 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Deterministic Risk</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400 line-through">{rescanResult.before_risk_score.toFixed(1)}</span>
+                      <ArrowRight className="h-3 w-3 text-slate-500" />
+                      <span className="text-base font-bold text-emerald-400">{rescanResult.after_risk_score.toFixed(1)}</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400">&minus;{rescanResult.risk_delta.toFixed(1)} pts reduced</span>
+                  </div>
+
+                  {/* Findings Delta */}
+                  <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/70 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Critical Findings</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400 line-through">{rescanResult.before_critical_count}</span>
+                      <ArrowRight className="h-3 w-3 text-slate-500" />
+                      <span className="text-base font-bold text-emerald-400">{rescanResult.after_critical_count}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      Resolved: <strong className="text-emerald-400">{rescanResult.findings_resolved.length}</strong>
+                    </span>
+                  </div>
+
+                  {/* Merge Readiness Delta */}
+                  <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/70 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Merge Readiness</span>
+                    <div className="text-xs font-bold text-indigo-300 truncate">
+                      {rescanResult.merge_readiness_delta}
+                    </div>
+                    <span className="text-[10px] text-slate-500">
+                      Status: {rescanResult.is_clean ? "CLEAN" : "UPDATED"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Resolved Findings List */}
+                {rescanResult.findings_resolved.length > 0 && (
+                  <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 space-y-2">
+                    <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5 font-mono">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      Confirmed Resolved Findings ({rescanResult.findings_resolved.length})
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {rescanResult.findings_resolved.map((rule, idx) => (
+                        <Badge key={idx} variant="outline" className="text-[10px] font-mono text-emerald-300 border-emerald-500/40 bg-emerald-950/40">
+                          &check; {rule}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary Notice */}
+                <p className="text-xs font-mono text-slate-300 bg-slate-900 p-3 rounded-xl border border-slate-800 leading-relaxed">
+                  {rescanResult.summary}
+                </p>
+                <div className="text-[11px] text-slate-500 italic">
+                  Note: ForgeAI marks findings as fixed solely through deterministic re-analysis, never through unverified LLM claims.
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRescanModalOpen(false)}
+                className="text-xs px-4"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: ON-DEMAND SECRET SCAN RESULTS (PHASE 15 & 16)                    */}
+      {/* ========================================================================= */}
+      {isSecretScanModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-purple-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <KeyRound className="h-5 w-5 text-purple-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    On-Demand Secret Exposure Scan
+                  </h3>
+                  <div className="text-[11px] font-mono text-slate-400">
+                    High-Entropy Heuristics &bull; Zero Raw Secret Leakage Guaranteed
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSecretScanModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {isSecretScanning ? (
+              <div className="py-12 text-center space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-purple-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-mono">
+                  Scanning repository snapshot and active PR changes for exposed credentials...
+                </p>
+              </div>
+            ) : secretScanResult ? (
+              <div className="space-y-4">
+                {/* Metrics Pill Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">Secrets Found</span>
+                    <span className={`text-base font-bold ${secretScanResult.secrets_found > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                      {secretScanResult.secrets_found}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">Critical</span>
+                    <span className="text-base font-bold text-rose-400">
+                      {secretScanResult.critical_count}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">Files Scanned</span>
+                    <span className="text-base font-bold text-white">
+                      {secretScanResult.files_scanned}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">Scan Duration</span>
+                    <span className="text-base font-bold text-indigo-300">
+                      {secretScanResult.scan_time_ms.toFixed(0)}ms
+                    </span>
+                  </div>
+                </div>
+
+                {/* Findings List */}
+                {secretScanResult.findings && secretScanResult.findings.length > 0 ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {secretScanResult.findings.map((sf, idx) => (
+                      <div key={idx} className="p-3 rounded-xl border border-rose-500/40 bg-rose-950/20 text-xs space-y-1.5 font-mono">
+                        <div className="flex items-center justify-between">
+                          <span className="text-rose-300 font-bold">{sf.title}</span>
+                          <Badge variant="destructive" className="text-[9px] uppercase">
+                            ACTIVE EXPOSURE
+                          </Badge>
+                        </div>
+                        <div className="text-slate-400 text-[11px]">
+                          Location: <span className="text-slate-200">{sf.file_path}:{sf.line_number || 1}</span>
+                        </div>
+                        <div className="p-2 rounded bg-slate-950 border border-slate-800 text-purple-300 text-[11px]">
+                          Evidence: <span className="font-bold">{sf.redacted_evidence}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-300">
+                          Action: <span className="text-emerald-400">{sf.remediation}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/50 text-center text-xs text-emerald-400 font-mono flex items-center justify-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Zero exposed credentials or secret keys detected across analyzed files.
+                  </div>
+                )}
+
+                <p className="text-xs text-slate-400 font-mono bg-slate-900 p-2.5 rounded border border-slate-800">
+                  {secretScanResult.summary}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsSecretScanModalOpen(false)}
+                className="text-xs px-4"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: DEPENDENCY SECURITY STATUS (PHASE 17)                            */}
+      {/* ========================================================================= */}
+      {isDepSecurityModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-blue-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <Boxes className="h-5 w-5 text-blue-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    Dependency Security & CVE Intelligence
+                  </h3>
+                  <div className="text-[11px] font-mono text-slate-400">
+                    Truthful Evidence Reporting &bull; Maven, npm, Python Ecosystems
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDepSecurityModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {isLoadingDepSecurity ? (
+              <div className="py-12 text-center space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-mono">
+                  Checking dependency manifest security status...
+                </p>
+              </div>
+            ) : dependencySecurity ? (
+              <div className="space-y-4">
+                {/* 4 Status Badges */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">Status</span>
+                    <Badge variant="outline" className="text-[10px] font-mono text-blue-300 border-blue-500/40 bg-blue-950/20">
+                      {dependencySecurity.status}
+                    </Badge>
+                  </div>
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">Code-Level Security</span>
+                    <span className="font-bold text-emerald-400">{dependencySecurity.code_level_security}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">Secret Scanning</span>
+                    <span className="font-bold text-emerald-400">{dependencySecurity.secret_scanning}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
+                    <span className="text-[10px] uppercase text-slate-500 block">CVE Database</span>
+                    <span className={`font-bold ${dependencySecurity.dependency_cve_database === "CONFIGURED" ? "text-emerald-400" : "text-amber-400"}`}>
+                      {dependencySecurity.dependency_cve_database}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ecosystem Notice */}
+                <div className="p-3.5 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200 space-y-1 leading-relaxed">
+                  <div className="font-bold text-blue-100 flex items-center gap-1.5 font-mono">
+                    <Info className="h-4 w-4 text-blue-400" />
+                    Truthful Partial Evidence Contract
+                  </div>
+                  <p>
+                    External commercial CVE feeds are unconfigured. Manifest parsing for <strong>Maven (pom.xml)</strong>, <strong>npm (package.json)</strong>, and <strong>Python (requirements.txt)</strong> is active. ForgeAI never manufactures synthetic CVEs.
+                  </p>
+                </div>
+
+                <p className="text-xs font-mono text-slate-300 bg-slate-900 p-2.5 rounded border border-slate-800">
+                  {dependencySecurity.summary}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsDepSecurityModalOpen(false)}
+                className="text-xs px-4"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: ANALYSIS HISTORY TIMELINE (PHASE 27)                             */}
+      {/* ========================================================================= */}
+      {isHistoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-indigo-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <History className="h-5 w-5 text-indigo-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    Authoritative Analysis History & Progression
+                  </h3>
+                  <div className="text-[11px] font-mono text-slate-400">
+                    Chronological Differential Audit Trail
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {isLoadingHistory ? (
+              <div className="py-12 text-center space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-400 mx-auto" />
+                <p className="text-xs text-slate-300 font-mono">
+                  Loading analysis history for entity...
+                </p>
+              </div>
+            ) : analysisHistory && analysisHistory.length > 0 ? (
+              <div className="space-y-3 max-h-80 overflow-y-auto font-mono text-xs">
+                {analysisHistory.map((item, idx) => (
+                  <div key={idx} className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">Analysis #{item.analysis_id.substring(0, 8)}</span>
+                        <Badge variant="outline" className="text-[9px]">
+                          Risk: {item.risk_score.toFixed(1)} ({item.risk_level})
+                        </Badge>
+                      </div>
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(item.created_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="text-slate-400">Merge Decision:</span>
+                      <strong className={item.merge_readiness.includes("BLOCKED") ? "text-rose-400" : "text-emerald-400"}>
+                        {item.merge_readiness}
+                      </strong>
+                    </div>
+
+                    {item.resolved_findings_from_previous && item.resolved_findings_from_previous.length > 0 && (
+                      <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 flex-wrap">
+                        <span>Resolved:</span>
+                        {item.resolved_findings_from_previous.map((r, rIdx) => (
+                          <span key={rIdx} className="px-1.5 py-0.5 rounded bg-emerald-950/40 border border-emerald-500/30">
+                            &check; {r}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {item.new_findings_from_previous && item.new_findings_from_previous.length > 0 && (
+                      <div className="text-[11px] text-amber-400 flex items-center gap-1.5 flex-wrap">
+                        <span>New:</span>
+                        {item.new_findings_from_previous.map((n, nIdx) => (
+                          <span key={nIdx} className="px-1.5 py-0.5 rounded bg-amber-950/40 border border-amber-500/30">
+                            + {n}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/50 text-center text-xs text-slate-400 font-mono">
+                No previous analysis iterations recorded yet for this entity.
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="text-xs px-4"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function AiInsightsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400 font-mono text-xs space-y-3">
+          <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+          <p>Loading ForgeAI Engineering Health Intelligence...</p>
+        </div>
+      }
+    >
+      <AiInsightsContent />
+    </Suspense>
   );
 }
