@@ -31,8 +31,8 @@ export const OrgSwitcher: React.FC = () => {
   };
 
   const displayName = isPersonalWorkspace
-    ? activeWorkspace.name || "Personal Workspace"
-    : currentOrg.name;
+    ? activeWorkspace?.name || "Personal Workspace"
+    : currentOrg?.name || "Select Organization";
 
   return (
     <div className="relative">
@@ -63,7 +63,7 @@ export const OrgSwitcher: React.FC = () => {
               : "text-slate-400 border-slate-700"
           }`}
         >
-          {isPersonalWorkspace ? "PERSONAL" : currentOrg.role || "MEMBER"}
+          {isPersonalWorkspace ? "PERSONAL" : currentOrg?.role || "MEMBER"}
         </Badge>
         <ChevronDown className="h-4 w-4 text-slate-400" />
       </button>
@@ -119,7 +119,7 @@ export const OrgSwitcher: React.FC = () => {
                 </div>
               ) : (
                 organizations.map((org) => {
-                  const isSelected = !isPersonalWorkspace && org.id === currentOrg.id;
+                  const isSelected = !isPersonalWorkspace && org.id === currentOrg?.id;
                   return (
                     <button
                       key={org.id}

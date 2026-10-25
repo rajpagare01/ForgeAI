@@ -606,7 +606,8 @@ export interface RepositoryDependencyItem {
 
 function AiInsightsContent() {
   const searchParams = useSearchParams();
-  const { currentOrg } = useTenant();
+  const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
+  const workspaceDisplayName = isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Workspace";
   const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact" | "dependencies" | "remediation">("pr");
 
   // Authorized repositories
@@ -926,7 +927,7 @@ function AiInsightsContent() {
 
   useEffect(() => {
     fetchRepositories();
-  }, [currentOrg?.id, fetchRepositories]);
+  }, [currentOrg?.id, activeWorkspace?.id, fetchRepositories]);
 
   // Fetch repository sync status
   const fetchSyncStatus = useCallback(async () => {
@@ -1385,7 +1386,7 @@ function AiInsightsContent() {
           </div>
           <p className="text-xs text-slate-400 mt-1">
             Automatic real GitHub PR intelligence, AST static analysis, repository-scoped blast radius, and grounded LLM reasoning for{" "}
-            <span className="text-purple-300 font-medium">{currentOrg.name}</span>.
+            <span className="text-purple-300 font-medium">{workspaceDisplayName}</span>.
           </p>
         </div>
 
@@ -4519,7 +4520,7 @@ function AiInsightsContent() {
               <CardTitle className="text-base">Natural Language Code Search</CardTitle>
               <CardDescription>
                 Search across indexed repositories using pgvector cosine embeddings. Strict tenant isolation enforced for{" "}
-                <span className="text-purple-300">{currentOrg.name}</span>.
+                <span className="text-purple-300">{workspaceDisplayName}</span>.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -4666,7 +4667,7 @@ function AiInsightsContent() {
                   </CardTitle>
                   <CardDescription>
                     Deterministic static manifest discovery (pom.xml, requirements.txt, package.json, OpenAPI contracts, service URLs) strictly scoped to{" "}
-                    <span className="text-purple-300 font-semibold">{currentOrg.name}</span>.
+                    <span className="text-purple-300 font-semibold">{workspaceDisplayName}</span>.
                   </CardDescription>
                 </div>
 

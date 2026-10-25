@@ -40,7 +40,7 @@ import {
 import { formatDate } from "@/lib/utils";
 
 export default function TestRunsPage() {
-  const { currentOrg } = useTenant();
+  const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export default function TestRunsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentOrg.id]);
+  }, [currentOrg?.id, activeWorkspace?.id]);
 
   useEffect(() => {
     fetchRuns();
@@ -119,7 +119,9 @@ export default function TestRunsPage() {
           </div>
           <p className="text-xs text-slate-400 mt-1">
             Deterministic staging verification reports received from GitHub Actions via Testing Service for{" "}
-            <span className="text-emerald-300 font-medium">{currentOrg.name}</span>.
+            <span className="text-emerald-300 font-medium">
+              {isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Workspace"}
+            </span>.
           </p>
         </div>
 

@@ -66,41 +66,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (identifier: string, password: string) => {
     setIsLoading(true);
     try {
-      let data: any;
-      try {
-        data = await apiClient.post<any>(
-          "/api/v1/auth/login",
-          { identifier, password },
-          { skipAuth: true }
-        );
-      } catch (loginError: any) {
-        // If demo user doesn't exist yet, attempt automatic registration then retry login
-        if (identifier === "admin@forgeai.dev" || identifier === "admin_dev") {
-          try {
-            await apiClient.post<any>(
-              "/api/v1/auth/register",
-              {
-                email: "admin@forgeai.dev",
-                username: "admin_dev",
-                password: "password123",
-                firstName: "Forge",
-                lastName: "Admin",
-              },
-              { skipAuth: true }
-            );
-            data = await apiClient.post<any>(
-              "/api/v1/auth/login",
-              { identifier: "admin@forgeai.dev", password: "password123" },
-              { skipAuth: true }
-            );
-          } catch (regError) {
-            console.error("Auto-registration for demo user failed:", regError);
-            throw loginError;
-          }
-        } else {
-          throw loginError;
-        }
-      }
+      const data = await apiClient.post<any>(
+        "/api/v1/auth/login",
+        { identifier, password },
+        { skipAuth: true }
+      );
 
       const token = data.accessToken || data.tokens?.accessToken;
       const refreshToken = data.refreshToken || data.tokens?.refreshToken;

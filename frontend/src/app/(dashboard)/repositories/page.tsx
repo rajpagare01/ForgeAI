@@ -79,7 +79,7 @@ export default function RepositoriesPage() {
   const [selectedRepoNames, setSelectedRepoNames] = useState<string[]>([]);
   const [manualFullName, setManualFullName] = useState("");
 
-  const workspaceDisplayName = isPersonalWorkspace ? "Personal Workspace" : currentOrg.name;
+  const workspaceDisplayName = isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Organization Workspace";
 
   const fetchData = useCallback(async () => {
     if (isTenantLoading || !activeWorkspace?.id) return;
@@ -127,11 +127,11 @@ export default function RepositoriesPage() {
           scope: r.scope,
           name: r.name,
           fullName: r.fullName,
-          defaultBranch: r.defaultBranch || "main",
-          isPrivate: r.isPrivate ?? true,
-          webhookInstalled: true,
+          defaultBranch: r.defaultBranch || "Unknown",
+          isPrivate: r.isPrivate ?? false,
+          webhookInstalled: r.webhookInstalled ?? true,
           openPullRequestsCount: r.openPullRequestsCount ?? 0,
-          lastSyncAt: r.updatedAt || r.createdAt || new Date().toISOString(),
+          lastSyncAt: r.lastSyncedAt || r.updatedAt || "",
         }));
         setRepositories(mapped);
       } else {

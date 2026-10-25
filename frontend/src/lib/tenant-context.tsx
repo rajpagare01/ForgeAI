@@ -7,7 +7,7 @@ import { useAuth } from "./auth-context";
 
 export interface TenantContextType {
   // Workspace abstraction
-  activeWorkspace: Workspace;
+  activeWorkspace: Workspace | null;
   workspaces: Workspace[];
   isPersonalWorkspace: boolean;
   switchWorkspace: (workspaceId: string) => void;
@@ -15,7 +15,7 @@ export interface TenantContextType {
   refreshWorkspaces: () => Promise<void>;
 
   // Organization backwards compatibility
-  currentOrg: Organization;
+  currentOrg: Organization | null;
   organizations: Organization[];
   isLoading: boolean;
   switchOrganization: (orgId: string) => void;
@@ -23,34 +23,22 @@ export interface TenantContextType {
   refreshOrganizations: () => Promise<void>;
 }
 
-const FALLBACK_PERSONAL_WORKSPACE: Workspace = {
-  id: "00000000-0000-0000-0000-000000000001",
-  type: "PERSONAL",
-  name: "Personal Workspace",
-  ownerUserId: "",
-  organizationId: null,
-};
-
-const FALLBACK_DEFAULT_ORG: Organization = {
-  id: "cc28c8a3-2224-4bad-9ab2-ea36ede52577",
-  name: "ForgeAI Core Engineering",
-  slug: "forgeai-core",
-  role: "ADMIN",
-  projectsCount: 0,
-};
-
 const TenantContext = createContext<TenantContextType | undefined>(undefined);
 
 export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, user } = useAuth();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([FALLBACK_PERSONAL_WORKSPACE]);
-  const [activeWorkspace, setActiveWorkspace] = useState<Workspace>(FALLBACK_PERSONAL_WORKSPACE);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [currentOrgId, setCurrentOrgId] = useState<string>(FALLBACK_DEFAULT_ORG.id);
+  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const fetchWorkspacesAndOrgs = useCallback(async () => {
     if (!apiClient.getAccessToken()) {
+      setWorkspaces([]);
+      setActiveWorkspace(null);
+      setOrganizations([]);
+      setCurrentOrgId(null);
       setIsLoading(false);
       return;
     }
@@ -58,40 +46,35 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       setIsLoading(true);
 
-      // 1. Fetch workspaces for authenticated user
+      // 1. Fetch authoritative workspaces for authenticated user
       let loadedWorkspaces: Workspace[] = [];
       try {
         const wsData = await apiClient.get<Workspace[]>("/api/v1/workspaces");
         if (Array.isArray(wsData) && wsData.length > 0) {
           loadedWorkspaces = wsData;
         } else {
-          // Reconcile/fetch personal workspace
+          // Reconcile personal workspace from backend
           const personalWs = await apiClient.get<Workspace>("/api/v1/workspaces/personal");
           if (personalWs && personalWs.id) {
             loadedWorkspaces = [personalWs];
           }
         }
       } catch (wsErr) {
-        console.warn("Failed to load workspaces, falling back to personal workspace fetch:", wsErr);
+        console.warn("Failed to load /api/v1/workspaces, checking /api/v1/workspaces/personal:", wsErr);
         try {
           const personalWs = await apiClient.get<Workspace>("/api/v1/workspaces/personal");
           if (personalWs && personalWs.id) {
             loadedWorkspaces = [personalWs];
           }
-        } catch {
-          // fallback placeholder
-          loadedWorkspaces = [
-            {
-              ...FALLBACK_PERSONAL_WORKSPACE,
-              ownerUserId: user?.id || "",
-            },
-          ];
+        } catch (persErr) {
+          console.warn("Could not load personal workspace from backend:", persErr);
+          loadedWorkspaces = [];
         }
       }
 
       setWorkspaces(loadedWorkspaces);
 
-      // 2. Fetch organizations
+      // 2. Fetch authoritative organizations
       let loadedOrgs: Organization[] = [];
       try {
         const orgData = await apiClient.get<any[]>("/api/v1/organizations");
@@ -100,21 +83,25 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             id: item.id,
             name: item.name,
             slug: item.slug,
-            role: "ADMIN",
+            role: item.role || "ADMIN",
             projectsCount: item.projectsCount ?? 0,
           }));
         }
       } catch (orgErr) {
         console.warn("Failed to load organizations:", orgErr);
+        loadedOrgs = [];
       }
       setOrganizations(loadedOrgs);
 
       // 3. Determine active workspace
       const storedWsId = apiClient.getActiveWorkspaceId();
 
-      let selectedWs = loadedWorkspaces.find((w) => w.id === storedWsId);
-      if (!selectedWs) {
-        // Prefer personal workspace by default, or first loaded workspace
+      let selectedWs: Workspace | null = null;
+      if (storedWsId) {
+        selectedWs = loadedWorkspaces.find((w) => w.id === storedWsId) || null;
+      }
+      if (!selectedWs && loadedWorkspaces.length > 0) {
+        // Default to personal workspace or first loaded workspace
         selectedWs = loadedWorkspaces.find((w) => w.type === "PERSONAL") || loadedWorkspaces[0];
       }
 
@@ -127,13 +114,21 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setCurrentOrgId(selectedWs.organizationId);
           apiClient.setActiveOrgId(selectedWs.organizationId);
         } else {
-          // In personal workspace, clear active org so headers don't leak
+          // In personal workspace, clear active org header so headers don't leak
+          setCurrentOrgId(null);
           apiClient.setActiveOrgId(null);
         }
-      } else if (loadedOrgs.length > 0) {
-        const org = loadedOrgs[0];
-        setCurrentOrgId(org.id);
-        apiClient.setActiveOrgId(org.id);
+      } else {
+        setActiveWorkspace(null);
+        apiClient.setActiveWorkspaceId(null);
+        if (loadedOrgs.length > 0) {
+          const org = loadedOrgs[0];
+          setCurrentOrgId(org.id);
+          apiClient.setActiveOrgId(org.id);
+        } else {
+          setCurrentOrgId(null);
+          apiClient.setActiveOrgId(null);
+        }
       }
     } catch (err) {
       console.warn("Error initializing tenant context:", err);
@@ -159,6 +154,7 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setCurrentOrgId(target.organizationId);
         apiClient.setActiveOrgId(target.organizationId);
       } else {
+        setCurrentOrgId(null);
         apiClient.setActiveOrgId(null);
       }
     },
@@ -223,14 +219,11 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [fetchWorkspacesAndOrgs, switchOrganization]
   );
 
-  const isPersonalWorkspace = activeWorkspace.type === "PERSONAL";
+  const isPersonalWorkspace = activeWorkspace ? activeWorkspace.type === "PERSONAL" : true;
 
-  const currentOrg =
-    organizations.find((o) => o.id === currentOrgId) ||
-    organizations[0] || {
-      ...FALLBACK_DEFAULT_ORG,
-      name: isPersonalWorkspace ? "Personal Workspace" : FALLBACK_DEFAULT_ORG.name,
-    };
+  const currentOrg: Organization | null = isPersonalWorkspace
+    ? null
+    : organizations.find((o) => o.id === currentOrgId) || organizations[0] || null;
 
   return (
     <TenantContext.Provider

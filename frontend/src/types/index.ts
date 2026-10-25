@@ -101,11 +101,11 @@ export interface Project {
   key: string;
   name: string;
   description: string;
-  repositoryName: string;
-  repositoryUrl: string;
+  repositoryName?: string | null;
+  repositoryUrl?: string | null;
   requirementCount: number;
   taskCount: number;
-  healthScore: number;
+  healthScore?: number | null;
   updatedAt: string;
 }
 

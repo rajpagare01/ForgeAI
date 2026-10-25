@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { apiClient } from "@/lib/api-client";
-import { Cpu, ArrowRight, Lock, Mail, AlertCircle, Sparkles } from "lucide-react";
+import { Cpu, ArrowRight, Lock, Mail, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -60,11 +60,6 @@ export default function LoginPage() {
         setError(msg);
       }
     }
-  };
-
-  const fillDemo = () => {
-    setEmail("admin@forgeai.dev");
-    setPassword("password123");
   };
 
   return (
@@ -158,18 +153,6 @@ export default function LoginPage() {
             {loading ? "Authenticating..." : "Sign In to Workspace"}
             {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
           </Button>
-
-          {/* Quick Demo Credentials */}
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={fillDemo}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-950/30 py-2 text-xs font-medium text-indigo-300 hover:bg-indigo-900/40 transition-colors"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-              Autofill Demo Credentials (Admin)
-            </button>
-          </div>
         </form>
 
         <div className="mt-6 text-center text-xs text-slate-500">

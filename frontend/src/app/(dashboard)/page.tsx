@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default function OverviewDashboardPage() {
-  const { currentOrg } = useTenant();
+  const { currentOrg, activeWorkspace } = useTenant();
   const { user } = useAuth();
 
   const [projectCount, setProjectCount] = useState<number>(0);
@@ -62,7 +62,7 @@ export default function OverviewDashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [currentOrg.id]);
+  }, [currentOrg?.id, activeWorkspace?.id]);
 
   const metrics = [
     {
@@ -110,7 +110,7 @@ export default function OverviewDashboardPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Badge variant="default" className="font-mono text-[10px]">
-              TENANT: {currentOrg.slug}
+              TENANT: {currentOrg?.slug || activeWorkspace?.name || "PERSONAL"}
             </Badge>
             <span className="text-xs text-slate-400 flex items-center gap-1">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> Enterprise Policy Enforced
@@ -120,7 +120,7 @@ export default function OverviewDashboardPage() {
             Welcome back, {user?.fullName || "Lead Architect"}
           </h1>
           <p className="text-xs text-slate-400 max-w-xl">
-            Autonomous governance matrix is monitoring requirements, commits, automated JUnit suites, and AST blast radii across <strong>{currentOrg.name}</strong>.
+            Autonomous governance matrix is monitoring requirements, commits, automated JUnit suites, and AST blast radii across <strong>{currentOrg?.name || activeWorkspace?.name || "Workspace"}</strong>.
           </p>
         </div>
 

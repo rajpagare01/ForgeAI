@@ -52,15 +52,16 @@ export default function ProjectsPage() {
         const mapped: Project[] = data.map((p) => ({
           id: p.id,
           organizationId: p.organizationId,
+          workspaceId: p.workspaceId,
           key: p.key,
           name: p.name,
-          description: p.description || "Managed engineering project with active traceability.",
-          repositoryName: p.repositoryName || `repo/${p.key.toLowerCase()}`,
-          repositoryUrl: `https://github.com/forgeai/${p.key.toLowerCase()}`,
+          description: p.description || "",
+          repositoryName: p.repositoryName ?? null,
+          repositoryUrl: p.repositoryUrl ?? null,
           requirementCount: p.requirementCount ?? 0,
           taskCount: p.taskCount ?? 0,
-          healthScore: 100,
-          updatedAt: p.updatedAt || new Date().toISOString(),
+          healthScore: p.healthScore ?? null,
+          updatedAt: p.updatedAt || p.createdAt || "",
         }));
         setProjects(mapped);
       }
@@ -100,14 +101,15 @@ export default function ProjectsPage() {
       const newProj: Project = {
         id: res.id,
         organizationId: res.organizationId,
+        workspaceId: res.workspaceId || activeWorkspace.id,
         key: res.key,
         name: res.name,
-        description: res.description || "Managed engineering project with active traceability.",
-        repositoryName: repoName || `forgeai/${cleanKey.toLowerCase()}`,
-        repositoryUrl: `https://github.com/forgeai/${cleanKey.toLowerCase()}`,
+        description: res.description || description.trim() || "",
+        repositoryName: repoName.trim() || null,
+        repositoryUrl: null,
         requirementCount: 0,
         taskCount: 0,
-        healthScore: 100,
+        healthScore: null,
         updatedAt: res.createdAt || new Date().toISOString(),
       };
 
@@ -127,7 +129,7 @@ export default function ProjectsPage() {
 
   const workspaceDisplayName = isPersonalWorkspace
     ? "Personal Workspace"
-    : currentOrg.name;
+    : currentOrg?.name || "Organization Workspace";
 
   return (
     <div className="space-y-8">
@@ -199,17 +201,23 @@ export default function ProjectsPage() {
                   <Badge variant="default" className="font-mono font-bold text-xs">
                     {project.key}
                   </Badge>
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                    <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                    {project.healthScore}% Traceability
-                  </div>
+                  {project.healthScore !== null && project.healthScore !== undefined ? (
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                      <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                      {project.healthScore}% Traceability
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-500 font-medium">
+                      Traceability unavailable
+                    </span>
+                  )}
                 </div>
                 <div>
                   <CardTitle className="text-base group-hover:text-indigo-300 transition-colors">
                     {project.name}
                   </CardTitle>
                   <CardDescription className="line-clamp-2 mt-1">
-                    {project.description}
+                    {project.description || "No project description provided."}
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -228,10 +236,16 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
-                  <span className="truncate max-w-[180px]">{project.repositoryName}</span>
-                  <span className="text-indigo-400 flex items-center gap-0.5">
-                    Connected
+                  <span className="truncate max-w-[180px]">
+                    {project.repositoryName || "No repository linked"}
                   </span>
+                  {project.repositoryName ? (
+                    <span className="text-indigo-400 flex items-center gap-0.5">
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="text-slate-600">Unlinked</span>
+                  )}
                 </div>
 
                 <div className="pt-2 flex items-center gap-2">

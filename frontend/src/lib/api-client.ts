@@ -332,6 +332,18 @@ class ApiClient {
     });
   }
 
+  public patch<T = unknown>(
+    endpoint: string,
+    data?: unknown,
+    options: RequestOptions = {}
+  ): Promise<T> {
+    return this.request<T>(endpoint, {
+      ...options,
+      method: "PATCH",
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
   public delete<T = unknown>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: "DELETE" });
   }
@@ -391,6 +403,10 @@ class ApiClient {
 
   public getTaskTraceability<T = unknown>(taskId: string): Promise<T> {
     return this.get<T>(`/api/v1/tasks/${taskId}/traceability`);
+  }
+
+  public getBaseUrl(): string {
+    return this.baseUrl;
   }
 }
 

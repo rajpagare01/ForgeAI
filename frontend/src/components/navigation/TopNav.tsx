@@ -37,7 +37,8 @@ export const TopNav: React.FC = () => {
     let isMounted = true;
     const checkGateway = async () => {
       try {
-        await fetch("http://localhost:8080/actuator/health", {
+        const gatewayBase = apiClient.getBaseUrl();
+        await fetch(`${gatewayBase}/actuator/health`, {
           mode: "no-cors",
           cache: "no-store",
         });
@@ -102,6 +103,7 @@ export const TopNav: React.FC = () => {
             type="text"
             placeholder="Search tasks, PRs, requirements..."
             className="h-9 w-full rounded-lg border border-slate-800 bg-slate-900/90 pl-9 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+            aria-label="Search tasks, PRs, requirements"
           />
         </div>
       </div>
@@ -141,7 +143,7 @@ export const TopNav: React.FC = () => {
             }`}
           >
             {gatewayOnline === true
-              ? "ONLINE (8080)"
+              ? "ONLINE"
               : gatewayOnline === false
               ? "OFFLINE"
               : "CONNECTING"}
@@ -185,14 +187,13 @@ export const TopNav: React.FC = () => {
           </button>
         )}
 
-        {/* Notifications Icon */}
+        {/* Notifications Icon (No fake unread activity badge) */}
         <button
           type="button"
           className="relative rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
           title="Notifications"
         >
           <Bell className="h-4 w-4" />
-          <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500 ring-2 ring-slate-950" />
         </button>
 
         {/* User Profile */}
@@ -212,13 +213,15 @@ export const TopNav: React.FC = () => {
               />
             ) : (
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 text-xs font-semibold text-white shadow-sm">
-                {user?.fullName?.charAt(0) || "U"}
+                {user?.fullName?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "U"}
               </div>
             )}
             <div className="hidden lg:block text-left text-xs">
-              <div className="font-medium text-slate-200">{user?.fullName || "Engineer"}</div>
+              <div className="font-medium text-slate-200">
+                {user?.fullName || (user?.email ? user.email.split("@")[0] : "Signed In")}
+              </div>
               <div className="text-[10px] text-slate-500 truncate max-w-[110px]">
-                {user?.email || "admin@forgeai.dev"}
+                {user?.email || "Authenticated"}
               </div>
             </div>
           </button>
