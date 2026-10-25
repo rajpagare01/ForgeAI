@@ -1,9 +1,32 @@
+export interface GitHubIdentityDto {
+  githubUserId: number;
+  githubLogin: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+  profileUrl?: string;
+  linkedAt?: string;
+  lastSyncedAt?: string;
+}
+
+export interface GitHubStatusResponse {
+  linked: boolean;
+  identity?: GitHubIdentityDto | null;
+}
+
+export interface GitHubAppConfig {
+  configured: boolean;
+  clientId: string;
+}
+
 export interface User {
   id: string;
   email: string;
   fullName: string;
+  username?: string;
   avatarUrl?: string;
   roles: string[];
+  githubIdentity?: GitHubIdentityDto | null;
 }
 
 export interface AuthTokens {

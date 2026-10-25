@@ -52,3 +52,10 @@ outbox:
     batch-size: 50
     max-attempts: 5
 
+forgeai:
+  github:
+    client-id: ${GITHUB_CLIENT_ID:}
+    client-secret: ${GITHUB_CLIENT_SECRET:}
+    redirect-uri: ${GITHUB_REDIRECT_URI:http://localhost:3000/auth/github/callback}
+    token-encryption-key: ${GITHUB_TOKEN_ENCRYPTION_KEY:${JWT_SECRET_KEY:default-32-byte-encryption-key-for-dev}}
+
