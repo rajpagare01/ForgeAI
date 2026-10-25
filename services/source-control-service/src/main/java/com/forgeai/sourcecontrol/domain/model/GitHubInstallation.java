@@ -18,10 +18,16 @@ public class GitHubInstallation {
     private UUID workspaceId;
     private String scope;
     private Long installationId;
+    private Long githubAppId;
+    private Long accountId;
 
     private String accountLogin;
     private String accountType;
+    @Builder.Default
+    private String repositorySelection = "ALL";
+    private UUID claimedByUserId;
     private InstallationStatus status;
     private Instant createdAt;
     private Instant updatedAt;
+    private Instant lastSyncedAt;
 }

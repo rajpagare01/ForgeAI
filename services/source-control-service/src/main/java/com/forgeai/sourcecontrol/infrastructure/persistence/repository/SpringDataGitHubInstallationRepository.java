@@ -3,6 +3,7 @@ package com.forgeai.sourcecontrol.infrastructure.persistence.repository;
 import com.forgeai.sourcecontrol.infrastructure.persistence.entity.GitHubInstallationJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -10,5 +11,8 @@ public interface SpringDataGitHubInstallationRepository extends JpaRepository<Gi
     Optional<GitHubInstallationJpaEntity> findByInstallationId(Long installationId);
     Optional<GitHubInstallationJpaEntity> findByOrganizationId(UUID organizationId);
     Optional<GitHubInstallationJpaEntity> findByWorkspaceId(UUID workspaceId);
+    Optional<GitHubInstallationJpaEntity> findByAccountId(Long accountId);
+    List<GitHubInstallationJpaEntity> findByAccountLoginIgnoreCase(String accountLogin);
+    List<GitHubInstallationJpaEntity> findByStatus(String status);
+    List<GitHubInstallationJpaEntity> findByClaimedByUserId(UUID claimedByUserId);
 }
-

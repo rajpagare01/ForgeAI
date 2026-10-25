@@ -222,6 +222,13 @@ public class GitHubAppClient {
      * Returns the account login for the installation.
      */
     public String getInstallationAccountLogin(Long installationId) {
+        return getInstallationDetails(installationId).accountLogin();
+    }
+
+    /**
+     * Authoritatively fetches installation details directly from GitHub using the App JWT.
+     */
+    public GitHubInstallationDetails getInstallationDetails(Long installationId) {
         config.requireConfigured();
         String appJwt = buildAppJwt();
         String url = GITHUB_API + "/app/installations/" + installationId;
@@ -237,11 +244,136 @@ public class GitHubAppClient {
                 .build();
 
         JsonNode body = execute(request, "get installation id=" + installationId);
-        String login = body.path("account").path("login").asText();
-        if (login.isBlank()) {
-            throw new GitHubApiException("GitHub returned empty account.login for installation " + installationId);
+        return mapInstallationDetails(body);
+    }
+
+    /**
+     * Queries GitHub for a user account's installation of this GitHub App.
+     * Uses GET /users/{username}/installation with App JWT.
+     */
+    public Optional<GitHubInstallationDetails> findUserInstallation(String githubLogin) {
+        config.requireConfigured();
+        if (githubLogin == null || githubLogin.isBlank()) return Optional.empty();
+        String appJwt = buildAppJwt();
+        String url = GITHUB_API + "/users/" + githubLogin.trim() + "/installation";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + appJwt)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        try {
+            HttpResponse<String> response = executeRaw(request, "get user installation for " + githubLogin);
+            if (response.statusCode() == 200) {
+                JsonNode body = objectMapper.readTree(response.body());
+                return Optional.of(mapInstallationDetails(body));
+            } else if (response.statusCode() == 404) {
+                return Optional.empty();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch user installation for {}: {}", githubLogin, e.getMessage());
         }
-        return login;
+        return Optional.empty();
+    }
+
+    /**
+     * Queries GitHub for an organization account's installation of this GitHub App.
+     * Uses GET /orgs/{org}/installation with App JWT.
+     */
+    public Optional<GitHubInstallationDetails> findOrgInstallation(String orgLogin) {
+        config.requireConfigured();
+        if (orgLogin == null || orgLogin.isBlank()) return Optional.empty();
+        String appJwt = buildAppJwt();
+        String url = GITHUB_API + "/orgs/" + orgLogin.trim() + "/installation";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + appJwt)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+        try {
+            HttpResponse<String> response = executeRaw(request, "get org installation for " + orgLogin);
+            if (response.statusCode() == 200) {
+                JsonNode body = objectMapper.readTree(response.body());
+                return Optional.of(mapInstallationDetails(body));
+            } else if (response.statusCode() == 404) {
+                return Optional.empty();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch org installation for {}: {}", orgLogin, e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Lists all installations of this GitHub App using GET /app/installations.
+     */
+    public List<GitHubInstallationDetails> listAppInstallations() {
+        config.requireConfigured();
+        String appJwt = buildAppJwt();
+        List<GitHubInstallationDetails> results = new ArrayList<>();
+        String url = GITHUB_API + "/app/installations?per_page=100";
+
+        while (url != null) {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + appJwt)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", USER_AGENT)
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .GET()
+                    .timeout(Duration.ofSeconds(15))
+                    .build();
+
+            HttpResponse<String> response = executeRaw(request, "list app installations");
+            if (response.statusCode() != 200) {
+                break;
+            }
+            try {
+                JsonNode array = objectMapper.readTree(response.body());
+                if (array.isArray()) {
+                    for (JsonNode item : array) {
+                        results.add(mapInstallationDetails(item));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse app installations response: {}", e.getMessage());
+                break;
+            }
+            url = nextPageUrl(response);
+        }
+        return results;
+    }
+
+    private GitHubInstallationDetails mapInstallationDetails(JsonNode body) {
+        Long id = body.path("id").asLong();
+        Long appId = body.hasNonNull("app_id") ? body.path("app_id").asLong() : null;
+        JsonNode account = body.path("account");
+        Long accountId = account.hasNonNull("id") ? account.path("id").asLong() : null;
+        String accountLogin = account.path("login").asText();
+        String accountType = account.path("type").asText("User");
+        String repositorySelection = body.path("repository_selection").asText("all");
+        boolean suspended = body.hasNonNull("suspended_at") && !body.path("suspended_at").asText().isBlank();
+
+        return new GitHubInstallationDetails(
+                id,
+                appId,
+                accountId,
+                accountLogin,
+                accountType,
+                repositorySelection.toUpperCase(),
+                suspended
+        );
     }
 
     // -------------------------------------------------------------------------

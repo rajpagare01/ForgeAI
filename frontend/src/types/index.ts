@@ -257,11 +257,51 @@ export interface GitHubHealth {
 
 export interface GitHubInstallation {
   id: string;
-  organizationId: string;
+  organizationId?: string | null;
+  workspaceId?: string;
+  scope?: "ORGANIZATION" | "PERSONAL";
   installationId: number;
+  githubAppId?: number;
+  accountId?: number;
   accountLogin: string;
   accountType: string;
-  status: "ACTIVE" | "SUSPENDED" | "DELETED";
+  repositorySelection?: string;
+  claimedByUserId?: string;
+  status: "ACTIVE" | "SUSPENDED" | "DELETED" | "DISCOVERED" | "VALIDATING" | "CLAIMABLE" | "CLAIMED" | "QUARANTINED" | "REMOVED" | "DISCONNECTED";
+  createdAt?: string;
+  updatedAt?: string;
+  lastSyncedAt?: string;
+}
+
+export interface InstallationCandidate {
+  installationId: number;
+  accountId?: number;
+  accountLogin: string;
+  accountType: string;
+  repositorySelection: string;
+  alreadyAssociated: boolean;
+  associatedWorkspaceId?: string | null;
+  status: string;
+}
+
+export interface InstallationDiscovery {
+  currentInstallation: GitHubInstallation | null;
+  candidates: InstallationCandidate[];
+  userGitHubLogin?: string | null;
+  userGitHubId?: number | null;
+  gitHubConnected: boolean;
+  appInstallUrl: string;
+  message: string;
+}
+
+export interface ReconciliationReport {
+  installationId: number;
+  workspaceId: string;
+  accountLogin: string;
+  totalAccessible: number;
+  newlyAdded: number;
+  removedOrInaccessible: number;
+  timestamp: string;
 }
 
 export interface AvailableRepository {

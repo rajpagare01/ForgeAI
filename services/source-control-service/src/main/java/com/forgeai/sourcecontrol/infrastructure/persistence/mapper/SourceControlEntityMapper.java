@@ -15,11 +15,16 @@ public class SourceControlEntityMapper {
                 .workspaceId(entity.getWorkspaceId())
                 .scope(entity.getScope())
                 .installationId(entity.getInstallationId())
+                .githubAppId(entity.getGithubAppId())
+                .accountId(entity.getAccountId())
                 .accountLogin(entity.getAccountLogin())
                 .accountType(entity.getAccountType())
+                .repositorySelection(entity.getRepositorySelection() != null ? entity.getRepositorySelection() : "ALL")
+                .claimedByUserId(entity.getClaimedByUserId())
                 .status(entity.getStatus() != null ? InstallationStatus.valueOf(entity.getStatus()) : InstallationStatus.ACTIVE)
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
+                .lastSyncedAt(entity.getLastSyncedAt())
                 .build();
     }
 
@@ -31,11 +36,16 @@ public class SourceControlEntityMapper {
                 .workspaceId(domain.getWorkspaceId())
                 .scope(domain.getScope())
                 .installationId(domain.getInstallationId())
+                .githubAppId(domain.getGithubAppId())
+                .accountId(domain.getAccountId())
                 .accountLogin(domain.getAccountLogin())
                 .accountType(domain.getAccountType())
+                .repositorySelection(domain.getRepositorySelection() != null ? domain.getRepositorySelection() : "ALL")
+                .claimedByUserId(domain.getClaimedByUserId())
                 .status(domain.getStatus() != null ? domain.getStatus().name() : "ACTIVE")
                 .createdAt(domain.getCreatedAt())
                 .updatedAt(domain.getUpdatedAt())
+                .lastSyncedAt(domain.getLastSyncedAt())
                 .build();
     }
 

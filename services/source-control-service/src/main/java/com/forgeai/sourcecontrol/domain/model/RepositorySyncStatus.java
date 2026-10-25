@@ -4,5 +4,7 @@ public enum RepositorySyncStatus {
     SYNCED,
     SYNCING,
     STALE,
-    FAILED
+    FAILED,
+    INACCESSIBLE,
+    DISCONNECTED
 }

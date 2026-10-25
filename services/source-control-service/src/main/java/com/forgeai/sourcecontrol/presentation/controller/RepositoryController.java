@@ -143,5 +143,27 @@ public class RepositoryController {
                 organizationId, effectiveWsId, request.fullName(), TenantContext.getUserId());
         return ResponseEntity.ok(repo);
     }
+
+    /**
+     * Connects multiple GitHub repositories in a single batch operation.
+     */
+    public record BatchConnectRequest(List<String> repositoryNames, UUID workspaceId) {}
+
+    @PostMapping("/batch-connect")
+    public ResponseEntity<List<Repository>> batchConnectRepositories(@RequestBody BatchConnectRequest request) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        if (request == null || request.repositoryNames() == null || request.repositoryNames().isEmpty()) {
+            throw new IllegalArgumentException("repositoryNames list is required");
+        }
+        UUID effectiveWsId = request.workspaceId() != null ? request.workspaceId() : TenantContext.getWorkspaceId();
+        List<Repository> results = new java.util.ArrayList<>();
+        for (String fullName : request.repositoryNames()) {
+            if (fullName != null && !fullName.isBlank()) {
+                results.add(repositoryApplicationService.connectRepository(
+                        organizationId, effectiveWsId, fullName.trim(), TenantContext.getUserId()));
+            }
+        }
+        return ResponseEntity.ok(results);
+    }
 }
 

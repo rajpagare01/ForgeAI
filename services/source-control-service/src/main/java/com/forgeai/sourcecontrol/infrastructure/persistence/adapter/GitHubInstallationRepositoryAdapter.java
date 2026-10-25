@@ -1,6 +1,7 @@
 package com.forgeai.sourcecontrol.infrastructure.persistence.adapter;
 
 import com.forgeai.sourcecontrol.domain.model.GitHubInstallation;
+import com.forgeai.sourcecontrol.domain.model.InstallationStatus;
 import com.forgeai.sourcecontrol.domain.repository.GitHubInstallationRepository;
 import com.forgeai.sourcecontrol.infrastructure.persistence.entity.GitHubInstallationJpaEntity;
 import com.forgeai.sourcecontrol.infrastructure.persistence.mapper.SourceControlEntityMapper;
@@ -30,10 +31,19 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
                 entity.setOrganizationId(installation.getOrganizationId());
                 entity.setWorkspaceId(installation.getWorkspaceId());
                 entity.setScope(installation.getScope());
+                entity.setGithubAppId(installation.getGithubAppId());
+                entity.setAccountId(installation.getAccountId());
                 entity.setAccountLogin(installation.getAccountLogin());
                 entity.setAccountType(installation.getAccountType());
+                if (installation.getRepositorySelection() != null) {
+                    entity.setRepositorySelection(installation.getRepositorySelection());
+                }
+                entity.setClaimedByUserId(installation.getClaimedByUserId());
                 entity.setStatus(installation.getStatus() != null ? installation.getStatus().name() : entity.getStatus());
                 entity.setUpdatedAt(Instant.now());
+                if (installation.getLastSyncedAt() != null) {
+                    entity.setLastSyncedAt(installation.getLastSyncedAt());
+                }
                 return mapper.toDomain(jpaRepository.saveAndFlush(entity));
             }
         }
@@ -57,10 +67,35 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
     }
 
     @Override
+    public Optional<GitHubInstallation> findByAccountId(Long accountId) {
+        return jpaRepository.findByAccountId(accountId).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<GitHubInstallation> findByAccountLogin(String accountLogin) {
+        return jpaRepository.findByAccountLoginIgnoreCase(accountLogin).stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<GitHubInstallation> findByStatus(InstallationStatus status) {
+        return jpaRepository.findByStatus(status.name()).stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<GitHubInstallation> findByClaimedByUserId(UUID userId) {
+        return jpaRepository.findByClaimedByUserId(userId).stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<GitHubInstallation> findAll() {
         return jpaRepository.findAll().stream()
                 .map(mapper::toDomain)
                 .collect(Collectors.toList());
     }
 }
-
