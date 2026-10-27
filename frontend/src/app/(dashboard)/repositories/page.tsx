@@ -5,10 +5,10 @@ import Link from "next/link";
 import {
   Repository,
   GitHubHealth,
-  GitHubInstallation,
   AvailableRepository,
-  InstallationDiscovery,
   ReconciliationReport,
+  GitHubConnectionResponse,
+  GitHubConnectionState,
 } from "@/types";
 import { useTenant } from "@/lib/tenant-context";
 import { apiClient } from "@/lib/api-client";
@@ -36,6 +36,16 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
+  <svg className={`${className} fill-current`} viewBox="0 0 24 24">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+    />
+  </svg>
+);
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,72 +65,74 @@ import {
   DialogClose,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 
 export default function RepositoriesPage() {
   const { currentOrg, isLoading: isTenantLoading, activeWorkspace, isPersonalWorkspace } = useTenant();
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [githubHealth, setGithubHealth] = useState<GitHubHealth | null>(null);
-  const [currentInstallation, setCurrentInstallation] = useState<GitHubInstallation | null>(null);
-  const [discoveryData, setDiscoveryData] = useState<InstallationDiscovery | null>(null);
-  const [availableRepos, setAvailableRepos] = useState<AvailableRepository[]>([]);
   
+  // Core unified state
+  const [connection, setConnection] = useState<GitHubConnectionResponse | null>(null);
+  const [connectionState, setConnectionState] = useState<GitHubConnectionState>("CHECKING_APP_INSTALLATION");
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [availableRepos, setAvailableRepos] = useState<AvailableRepository[]>([]);
+  const [githubHealth, setGithubHealth] = useState<GitHubHealth | null>(null);
+
+  // Operation flags
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAvailable, setIsLoadingAvailable] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
-  const [isOnboarding, setIsOnboarding] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Modal & Selection states
+  // Modal & Selection state
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [selectedRepoNames, setSelectedRepoNames] = useState<string[]>([]);
-  const [manualFullName, setManualFullName] = useState("");
 
-  const workspaceDisplayName = isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Organization Workspace";
+  const workspaceDisplayName = isPersonalWorkspace
+    ? "Personal Workspace"
+    : currentOrg?.name || "Organization Workspace";
 
+  // Fetch unified connection status and repositories
   const fetchData = useCallback(async () => {
-    if (isTenantLoading || !activeWorkspace?.id) return;
+    if (isTenantLoading) return;
+    if (!activeWorkspace?.id) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
-    // 1. Fetch GitHub Health diagnostic
     try {
-      const health = await apiClient.get<GitHubHealth>("/api/v1/github/health");
-      setGithubHealth(health);
-    } catch (e: any) {
-      console.warn("Could not fetch GitHub health endpoint:", e);
-      setGithubHealth({
-        configured: false,
-        status: "UNREACHABLE",
-        httpStatus: e?.status || undefined,
-        message: e?.message || "GitHub health endpoint unreachable",
-      });
-    }
+      // 1. Fetch GitHub Health diagnostic
+      try {
+        const health = await apiClient.get<GitHubHealth>("/api/v1/github/health");
+        setGithubHealth(health);
+      } catch (e: any) {
+        setGithubHealth({
+          configured: false,
+          status: "UNREACHABLE",
+          httpStatus: e?.status || undefined,
+          message: e?.message || "GitHub health endpoint unreachable",
+        });
+      }
 
-    // 2. Fetch current claimed installation for this workspace
-    try {
-      const inst = await apiClient.get<GitHubInstallation>(`/api/v1/installations/current?workspaceId=${activeWorkspace.id}`);
-      setCurrentInstallation(inst);
-    } catch {
-      setCurrentInstallation(null);
-    }
+      // 2. Fetch unified GitHub connection orchestration endpoint
+      const conn = await apiClient.get<GitHubConnectionResponse>(
+        `/api/v1/github/connection?workspaceId=${activeWorkspace.id}`
+      );
+      setConnection(conn);
+      if (conn?.connectionState) {
+        setConnectionState(conn.connectionState);
+      }
 
-    // 3. Fetch automated discovery data (candidates, app URL, user GitHub identity)
-    try {
-      const disc = await apiClient.get<InstallationDiscovery>(`/api/v1/installations/discover?workspaceId=${activeWorkspace.id}`);
-      setDiscoveryData(disc);
-    } catch (e) {
-      console.warn("Could not fetch installation discovery:", e);
-    }
-
-    // 4. Fetch connected repositories
-    try {
-      const data = await apiClient.get<any[]>(`/api/v1/repositories?workspaceId=${activeWorkspace.id}`);
-      if (Array.isArray(data)) {
-        const mapped: Repository[] = data.map((r) => ({
+      // 3. Fetch connected repositories
+      const repoList = await apiClient.get<any[]>(
+        `/api/v1/repositories?workspaceId=${activeWorkspace.id}`
+      );
+      if (Array.isArray(repoList)) {
+        const mapped: Repository[] = repoList.map((r) => ({
           id: r.id,
           organizationId: r.organizationId,
           workspaceId: r.workspaceId,
@@ -137,132 +149,156 @@ export default function RepositoriesPage() {
       } else {
         setRepositories([]);
       }
-    } catch (err: any) {
-      console.warn("Failed to load repositories from Gateway:", err);
-      const status = err?.status;
-      let userFriendlyError = `Could not load repositories for ${workspaceDisplayName}.`;
 
-      if (status === 401 || status === 403) {
-        userFriendlyError = `Authorization error (HTTP ${status}): Access denied to repositories for this workspace.`;
-      } else if (status === 404) {
-        userFriendlyError = "Scope error (HTTP 404): Workspace or repository scope not found.";
-      } else if (status === 503) {
-        userFriendlyError = "Service unavailable (HTTP 503): GitHub integration service is temporarily unavailable.";
-      } else if (err?.isNetworkError || !status) {
-        userFriendlyError = "Service unreachable: Unable to connect to Gateway or Source Control service.";
+      // 4. If GitHub App is active, fetch accessible repositories live from GitHub
+      if (conn?.installationStatus === "ACTIVE") {
+        try {
+          const avail = await apiClient.get<AvailableRepository[]>(
+            `/api/v1/repositories/available?workspaceId=${activeWorkspace.id}`
+          );
+          setAvailableRepos(Array.isArray(avail) ? avail : []);
+        } catch {
+          setAvailableRepos([]);
+        }
       } else {
-        userFriendlyError = `Error loading repositories (HTTP ${status}): ${err.message || "Unexpected failure"}`;
+        setAvailableRepos([]);
       }
-
-      setError(userFriendlyError);
-      setRepositories([]);
+    } catch (err: any) {
+      console.warn("Failed to load GitHub connection or repositories:", err);
+      const status = err?.status;
+      if (status === 401 || status === 403) {
+        setConnectionState("INSTALLATION_NOT_AUTHORIZED");
+        setError("Authorization error: Access denied to repositories for this workspace.");
+      } else if (status === 503 || err?.isNetworkError) {
+        setConnectionState("GITHUB_UNAVAILABLE");
+        setError("Service unavailable: Unable to connect to GitHub service.");
+      } else {
+        setError(err?.message || "Failed to load GitHub connection.");
+      }
     } finally {
       setIsLoading(false);
     }
+  }, [activeWorkspace?.id, isTenantLoading]);
 
-    // 5. Fetch accessible repositories live from GitHub
-    try {
-      const avail = await apiClient.get<AvailableRepository[]>(`/api/v1/repositories/available?workspaceId=${activeWorkspace.id}`);
-      setAvailableRepos(Array.isArray(avail) ? avail : []);
-    } catch {
-      setAvailableRepos([]);
+  // Initial load
+  useEffect(() => {
+    if (!isTenantLoading) {
+      fetchData();
     }
-  }, [activeWorkspace?.id, isTenantLoading, workspaceDisplayName]);
+  }, [fetchData, isTenantLoading]);
 
-  // Handle GitHub App setup redirect URL (?installation_id=...) with strict cryptographic/API ownership check
+  // Auto-detect GitHub App Setup Callback from URL (?installation_id=...)
   useEffect(() => {
     if (typeof window === "undefined" || !activeWorkspace?.id) return;
     const params = new URLSearchParams(window.location.search);
-    const instIdParam = params.get("installation_id");
+    const installationIdStr = params.get("installation_id");
 
-    if (instIdParam) {
-      const parsedId = parseInt(instIdParam.trim(), 10);
+    if (installationIdStr) {
+      const parsedId = parseInt(installationIdStr, 10);
       if (!isNaN(parsedId) && parsedId > 0) {
-        setIsOnboarding(true);
+        setConnectionState("VERIFYING_INSTALLATION");
+        setIsConnecting(true);
         setError(null);
-        apiClient.post<GitHubInstallation>("/api/v1/installations/setup-callback", {
-          installationId: parsedId,
-          workspaceId: activeWorkspace.id,
-        })
-          .then((claimed) => {
-            setCurrentInstallation(claimed);
-            setSuccess(`Successfully verified and connected GitHub App installation for @${claimed.accountLogin}!`);
-            // Clean up URL query parameters without reloading
-            const cleanUrl = window.location.pathname;
-            window.history.replaceState({}, document.title, cleanUrl);
+
+        // Remove query parameters from URL cleanly
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        apiClient
+          .post<GitHubConnectionResponse>("/api/v1/github/connect", {
+            workspaceId: activeWorkspace.id,
+            installationId: parsedId,
+          })
+          .then((updatedConn) => {
+            setConnection(updatedConn);
+            setConnectionState("REPOSITORIES_READY");
+            setSuccess("GitHub App connected and verified successfully!");
             fetchData();
           })
-          .catch((err) => {
-            console.error("Setup callback failed:", err);
-            setError(err?.message || "Verification failed: Could not validate GitHub installation ownership.");
+          .catch((err: any) => {
+            console.error("Installation callback verification failed:", err);
+            setConnectionState("INSTALLATION_FAILED");
+            setError(err?.message || "Failed to verify GitHub App installation.");
           })
           .finally(() => {
-            setIsOnboarding(false);
+            setIsConnecting(false);
           });
       }
     }
   }, [activeWorkspace?.id, fetchData]);
 
-  useEffect(() => {
-    if (!isTenantLoading && activeWorkspace?.id) {
-      fetchData();
-    }
-  }, [fetchData, isTenantLoading, activeWorkspace?.id]);
-
-  // Automated One-Click Onboard flow (Zero manual installation ID required)
-  const handleAutoOnboard = async (candidateInstallationId?: number) => {
+  // Single primary user action: Connect GitHub / Continue GitHub Setup / Add Repositories
+  const handlePrimaryAction = async () => {
     if (!activeWorkspace?.id) return;
-    setIsOnboarding(true);
     setError(null);
     setSuccess(null);
 
-    try {
-      const onboarded = await apiClient.post<GitHubInstallation>("/api/v1/installations/auto-onboard", {
-        installationId: candidateInstallationId,
-        workspaceId: activeWorkspace.id,
-      });
-      setCurrentInstallation(onboarded);
-      setSuccess(`GitHub App installation for @${onboarded.accountLogin} connected and synchronized.`);
-      await fetchData();
-    } catch (err: any) {
-      console.error("Auto-onboarding failed:", err);
-      setError(err?.message || "Failed to onboard GitHub App installation.");
-    } finally {
-      setIsOnboarding(false);
+    // Case 1: GitHub user is not authenticated yet -> launch GitHub OAuth
+    if (!connection?.githubUserConnected) {
+      setConnectionState("AUTHENTICATING_GITHUB");
+      setIsConnecting(true);
+      try {
+        const callbackUri = `${window.location.origin}/auth/github/callback`;
+        const res = await apiClient.get<{ authorizationUrl: string; state: string }>(
+          `/api/v1/auth/github/start?redirectUri=${encodeURIComponent(callbackUri)}`
+        );
+        if (res?.authorizationUrl) {
+          window.location.href = res.authorizationUrl;
+        } else {
+          setConnectionState("AUTHENTICATION_FAILED");
+          setError("Unable to initiate GitHub OAuth session.");
+          setIsConnecting(false);
+        }
+      } catch (err: any) {
+        setConnectionState("AUTHENTICATION_FAILED");
+        setError(err?.message || "GitHub OAuth service is currently unavailable.");
+        setIsConnecting(false);
+      }
+      return;
     }
+
+    // Case 2: GitHub user is connected, but App is not installed -> launch GitHub App installation
+    if (connection?.installationRequired || connection?.installationStatus !== "ACTIVE") {
+      setConnectionState("GITHUB_APP_INSTALLING");
+      const installUrl =
+        connection?.appInstallUrl ||
+        "https://github.com/apps/forgeai-raj-dev/installations/new";
+      window.location.href = installUrl;
+      return;
+    }
+
+    // Case 3: App is already installed and verified -> Open Repository Import dialog
+    handleOpenConnectModal();
   };
 
-  // Idempotent reconciliation
+  // Reconcile repositories live from GitHub
   const handleReconcile = async () => {
-    if (!currentInstallation?.installationId || !activeWorkspace?.id) return;
+    if (!activeWorkspace?.id) return;
     setIsReconciling(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const report = await apiClient.post<ReconciliationReport>(
-        `/api/v1/installations/${currentInstallation.installationId}/reconcile?workspaceId=${activeWorkspace.id}`
-      );
-      setSuccess(
-        `Reconciliation complete: ${report.totalAccessible} accessible repositories live on GitHub (${report.newlyAdded} newly added, ${report.removedOrInaccessible} removed/inaccessible).`
-      );
+      const updatedConn = await apiClient.post<GitHubConnectionResponse>("/api/v1/github/reconcile", {
+        workspaceId: activeWorkspace.id,
+      });
+      setConnection(updatedConn);
+      setSuccess("Repository access reconciled and synchronized with GitHub.");
       await fetchData();
     } catch (err: any) {
       console.error("Reconciliation failed:", err);
-      setError(err?.message || "Reconciliation failed.");
+      setError(err?.message || "Failed to reconcile repository access.");
     } finally {
       setIsReconciling(false);
     }
   };
 
-  // Open repository import dialog and fetch available repositories live from GitHub
+  // Open multi-select repository import dialog
   const handleOpenConnectModal = async () => {
     setShowConnectModal(true);
     setSelectedRepoNames([]);
-    setManualFullName("");
     setError(null);
 
-    if (currentInstallation?.status === "ACTIVE" && activeWorkspace?.id) {
+    if (activeWorkspace?.id) {
       setIsLoadingAvailable(true);
       try {
         const repos = await apiClient.get<AvailableRepository[]>(
@@ -278,14 +314,16 @@ export default function RepositoriesPage() {
     }
   };
 
+  const existingRepoFullNames = new Set(repositories.map((r) => r.fullName.toLowerCase()));
+  const unimportedAvailable = availableRepos.filter(
+    (r) => !existingRepoFullNames.has(r.fullName.toLowerCase())
+  );
+
   const toggleSelectAll = () => {
-    const existingFullNames = new Set(repositories.map((r) => r.fullName.toLowerCase()));
-    const unimportedRepos = availableRepos.filter((r) => !existingFullNames.has(r.fullName.toLowerCase()));
-    
-    if (selectedRepoNames.length === unimportedRepos.length) {
+    if (selectedRepoNames.length === unimportedAvailable.length) {
       setSelectedRepoNames([]);
     } else {
-      setSelectedRepoNames(unimportedRepos.map((r) => r.fullName));
+      setSelectedRepoNames(unimportedAvailable.map((r) => r.fullName));
     }
   };
 
@@ -300,11 +338,7 @@ export default function RepositoriesPage() {
     e.preventDefault();
     if (!activeWorkspace?.id) return;
 
-    const reposToConnect = selectedRepoNames.length > 0 
-      ? selectedRepoNames 
-      : (manualFullName.trim() ? [manualFullName.trim()] : []);
-
-    if (reposToConnect.length === 0) {
+    if (selectedRepoNames.length === 0) {
       setError("Please select at least one repository to import.");
       return;
     }
@@ -315,14 +349,15 @@ export default function RepositoriesPage() {
 
     try {
       const res = await apiClient.post<any[]>("/api/v1/repositories/batch-connect", {
-        repositoryNames: reposToConnect,
+        repositoryNames: selectedRepoNames,
         workspaceId: activeWorkspace.id,
       });
 
       setShowConnectModal(false);
       setSelectedRepoNames([]);
-      setManualFullName("");
-      setSuccess(`Successfully imported and synchronized ${Array.isArray(res) ? res.length : reposToConnect.length} repository/repositories.`);
+      setSuccess(
+        `Successfully imported and synchronized ${Array.isArray(res) ? res.length : selectedRepoNames.length} repository/repositories.`
+      );
       await fetchData();
     } catch (err: any) {
       console.error("Batch repository import failed:", err);
@@ -332,6 +367,7 @@ export default function RepositoriesPage() {
     }
   };
 
+  // Single-repo 1-click connect
   const handleConnectSingle = async (fullName: string) => {
     if (!activeWorkspace?.id || !fullName) return;
     setIsImporting(true);
@@ -342,25 +378,32 @@ export default function RepositoriesPage() {
         fullName,
         workspaceId: activeWorkspace.id,
       });
-      setSuccess(`Repository '${fullName}' connected successfully.`);
+      setSuccess(`Repository '${fullName}' connected and synchronized.`);
       await fetchData();
     } catch (err: any) {
-      console.error("Connect failed:", err);
+      console.error("Single connect failed:", err);
       setError(err?.message || `Failed to connect repository '${fullName}'.`);
     } finally {
       setIsImporting(false);
     }
   };
 
-  const existingRepoFullNames = new Set(repositories.map((r) => r.fullName.toLowerCase()));
-  const unimportedAvailableCount = availableRepos.filter((r) => !existingRepoFullNames.has(r.fullName.toLowerCase())).length;
+  // Header primary button text based on connection state
+  const getPrimaryButtonText = () => {
+    if (isConnecting) return "Connecting...";
+    if (!connection?.githubUserConnected) return "Connect GitHub";
+    if (connection?.installationRequired || connection?.installationStatus !== "ACTIVE") {
+      return "Continue GitHub Setup";
+    }
+    return "Add Repositories";
+  };
 
   return (
     <div className="space-y-8">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <Radio className="h-6 w-6 text-sky-400" />
             <h1 className="text-2xl font-bold tracking-tight text-white">
               Connected Source Control Repositories
@@ -384,47 +427,40 @@ export default function RepositoriesPage() {
             Sync Now
           </Button>
 
-          {currentInstallation?.status === "ACTIVE" ? (
-            <Button
-              variant="glow"
-              size="sm"
-              onClick={handleOpenConnectModal}
-              className="gap-2"
-            >
+          <Button
+            variant="glow"
+            size="sm"
+            onClick={handlePrimaryAction}
+            disabled={isConnecting || isLoading}
+            className="gap-2"
+          >
+            {isConnecting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : connection?.installationStatus === "ACTIVE" ? (
               <Plus className="h-4 w-4" />
-              Import Repositories
-            </Button>
-          ) : discoveryData?.candidates && discoveryData.candidates.length > 0 ? (
-            <Button
-              variant="glow"
-              size="sm"
-              onClick={() => handleAutoOnboard(discoveryData.candidates[0].installationId)}
-              disabled={isOnboarding}
-              className="gap-2"
-            >
-              <Sparkles className="h-4 w-4 text-amber-300" />
-              {isOnboarding ? "Connecting..." : "Connect Discovered Installation"}
-            </Button>
-          ) : (
-            <a
-              href={discoveryData?.appInstallUrl || "https://github.com/apps/forgeai-raj-dev/installations/new"}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="glow" size="sm" className="gap-2">
-                <ExternalLink className="h-4 w-4" />
-                Install ForgeAI GitHub App
-              </Button>
-            </a>
-          )}
+            ) : (
+              <GitHubIcon className="h-4 w-4" />
+            )}
+            {getPrimaryButtonText()}
+          </Button>
         </div>
       </div>
 
       {/* Global Alerts */}
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{error}</span>
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchData}
+            className="text-xs text-rose-300 hover:text-white h-7 px-2"
+          >
+            Retry
+          </Button>
         </div>
       )}
 
@@ -435,94 +471,121 @@ export default function RepositoriesPage() {
         </div>
       )}
 
-      {/* Diagnostic & Lifecycle Status Banners */}
-      {githubHealth?.status === "UNREACHABLE" ? (
-        <Card className="border-rose-500/30 bg-rose-950/20">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
-            <div className="flex items-start md:items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                <ServerOff className="h-5 w-5" />
+      {/* Unified Connection Status Banner (Section 16 State Model) */}
+      {!connection?.githubUserConnected ? (
+        /* State 1: Not connected */
+        <Card className="border-sky-500/20 bg-slate-900/50">
+          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-6">
+            <div className="flex items-start md:items-center gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 border border-slate-700 text-slate-300">
+                <GitHubIcon className="h-6 w-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-white">GitHub Integration Unreachable</h4>
-                  <Badge variant="destructive" className="text-[10px]">Unreachable</Badge>
-                </div>
-                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                  Could not reach the GitHub health diagnostic endpoint. The API Gateway or Source Control service may be restarting.
-                </p>
-              </div>
-            </div>
-            <div className="text-xs font-mono text-rose-400 font-medium">
-              {githubHealth.httpStatus ? `Status: HTTP ${githubHealth.httpStatus}` : "Offline"}
-            </div>
-          </CardContent>
-        </Card>
-      ) : githubHealth?.status === "UNCONFIGURED" ? (
-        <Card className="border-amber-500/30 bg-amber-950/20">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
-            <div className="flex items-start md:items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-white">GitHub Integration Not Configured</h4>
-                  <Badge variant="warning" className="text-[10px]">Credentials Required</Badge>
-                </div>
-                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                  Server environment variables <code className="text-amber-300 font-mono">GITHUB_APP_ID</code> and{" "}
-                  <code className="text-amber-300 font-mono">GITHUB_PRIVATE_KEY</code> are required for automated discovery.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ) : currentInstallation?.status === "ACTIVE" ? (
-        /* Active Installation Banner with Metadata & Reconcile Button */
-        <Card className="border-emerald-500/30 bg-emerald-950/10">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-white">GitHub App Connected</h4>
-                  <Badge variant="success" className="text-[10px]">Active</Badge>
-                  <span className="text-xs font-mono text-emerald-300">
-                    @{currentInstallation.accountLogin}
-                  </span>
+                  <h4 className="text-base font-semibold text-white">GitHub</h4>
                   <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700">
-                    {currentInstallation.scope || "PERSONAL"}
+                    Not connected
                   </Badge>
-                  {currentInstallation.repositorySelection && (
-                    <Badge variant="outline" className="text-[10px] text-sky-400 border-sky-500/30">
-                      Access: {currentInstallation.repositorySelection}
-                    </Badge>
-                  )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Synchronized with ForgeAI. Webhooks verified with HMAC SHA-256. Short-lived access tokens generated on-demand.
+                <p className="text-xs text-slate-400 mt-1 max-w-xl leading-relaxed">
+                  Connect your GitHub account to enable automatic repository discovery, webhook verification, and workspace traceability.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <a
-                href={`https://github.com/settings/installations/${currentInstallation.installationId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs border-slate-700 hover:text-white"
+            <Button
+              variant="glow"
+              size="sm"
+              onClick={handlePrimaryAction}
+              disabled={isConnecting}
+              className="gap-2 shrink-0"
+            >
+              {isConnecting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <GitHubIcon className="h-4 w-4" />
+                  Connect GitHub
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : connection?.installationRequired || connection?.installationStatus !== "ACTIVE" ? (
+        /* State 2: OAuth connected, App missing */
+        <Card className="border-amber-500/30 bg-amber-950/20">
+          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-6">
+            <div className="flex items-start md:items-center gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-base font-semibold text-white">GitHub: Connected as @{connection.githubLogin}</h4>
+                  <Badge variant="outline" className="text-[10px] text-amber-300 border-amber-500/40">
+                    Needs repository access
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                  ForgeAI needs repository access through the GitHub App. Click below to approve repository permissions and complete your connection.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant="glow"
+              size="sm"
+              onClick={handlePrimaryAction}
+              className="gap-2 shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold"
+            >
+              <ArrowRight className="h-4 w-4" />
+              Continue GitHub Setup
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        /* State 3: App installed & Ready */
+        <Card className="border-emerald-500/30 bg-emerald-950/10">
+          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
+            <div className="flex items-start md:items-center gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-semibold text-white">GitHub: Connected as @{connection.githubLogin}</h4>
+                  <Badge variant="success" className="text-[10px]">
+                    ForgeAI App Connected
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] text-sky-400 border-sky-500/30 font-mono">
+                    {connection.repositoriesAvailable} repositories available
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700">
+                    {connection.workspaceScope}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Repositories synchronized with ForgeAI. Webhooks verified with HMAC SHA-256.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              {connection.installationId && (
+                <a
+                  href={`https://github.com/settings/installations/${connection.installationId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
-                  <ExternalLink className="h-3 w-3" />
-                  Configure on GitHub
-                </Button>
-              </a>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs border-slate-700 hover:text-white">
+                    <ExternalLink className="h-3 w-3" />
+                    Configure on GitHub
+                  </Button>
+                </a>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -539,214 +602,137 @@ export default function RepositoriesPage() {
                 onClick={handleOpenConnectModal}
                 className="gap-2 text-xs"
               >
-                <Layers className="h-3.5 w-3.5" />
-                Import Repositories
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : discoveryData?.candidates && discoveryData.candidates.length > 0 ? (
-        /* Discovered Installation Ready for Zero-Click Association */
-        <Card className="border-sky-500/40 bg-sky-950/20">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
-            <div className="flex items-start md:items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/40 animate-pulse">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-white">GitHub App Installation Detected</h4>
-                  <Badge variant="outline" className="text-[10px] text-amber-300 border-amber-500/40">Ready to Onboard</Badge>
-                  <span className="text-xs font-mono text-sky-300 font-semibold">
-                    @{discoveryData.candidates[0].accountLogin}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                  ForgeAI automatically discovered your GitHub App installation on account{" "}
-                  <strong className="text-white">@{discoveryData.candidates[0].accountLogin}</strong>.
-                  Connect it to <span className="text-sky-300 font-medium">{workspaceDisplayName}</span> without manually entering any IDs.
-                </p>
-              </div>
-            </div>
-
-            <Button
-              variant="glow"
-              size="sm"
-              onClick={() => handleAutoOnboard(discoveryData.candidates[0].installationId)}
-              disabled={isOnboarding}
-              className="gap-2 shrink-0 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold"
-            >
-              {isOnboarding ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <ArrowRight className="h-4 w-4" />
-                  Connect & Discover Repos
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        /* No Installation Detected — Direct Link to Install */
-        <Card className="border-sky-500/20 bg-slate-900/40">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
-            <div className="flex items-start md:items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                <ShieldAlert className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-white">Install ForgeAI GitHub App</h4>
-                  <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700">Not Installed</Badge>
-                </div>
-                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                  Install the ForgeAI GitHub App on your personal GitHub account or organization. Once installed, return here and ForgeAI will automatically detect and onboard your repositories.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <a
-                href={discoveryData?.appInstallUrl || "https://github.com/apps/forgeai-raj-dev/installations/new"}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="glow" size="sm" className="gap-2">
-                  <ExternalLink className="h-4 w-4" />
-                  Install on GitHub
-                </Button>
-              </a>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchData}
-                disabled={isLoading}
-                className="gap-2 text-xs"
-              >
-                <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
-                Check Installation
+                <Plus className="h-3.5 w-3.5" />
+                Add Repositories
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Repositories Table */}
+      {/* Connected Repositories Table */}
       <Card>
         <div className="flex items-center justify-between border-b border-slate-800 p-4">
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-sky-400" />
-            <h3 className="text-sm font-medium text-white">Repositories</h3>
+            <h3 className="text-sm font-medium text-white">Connected Repositories</h3>
             <Badge variant="outline" className="text-xs">{repositories.length}</Badge>
           </div>
-          {currentInstallation?.status === "ACTIVE" && (
+          {connection?.installationStatus === "ACTIVE" && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleOpenConnectModal}
-              className="gap-2 text-xs"
+              className="gap-1 text-xs"
             >
               <Plus className="h-3.5 w-3.5" />
-              Import Repositories
+              Add Repositories
             </Button>
           )}
         </div>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Repository</TableHead>
-              <TableHead>Visibility</TableHead>
-              <TableHead>Default Branch</TableHead>
-              <TableHead>Scope</TableHead>
-              <TableHead>Sync Status</TableHead>
-              <TableHead>Last Synchronized</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-slate-500">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-sky-400" />
-                  <p className="mt-2 text-xs">Loading repositories...</p>
-                </TableCell>
+        {repositories.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800/80 text-slate-400 mb-4 border border-slate-700">
+              <GitBranch className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-semibold text-white">No repositories connected yet</h3>
+            <p className="text-xs text-slate-400 max-w-sm mt-1 mb-6">
+              Connect your GitHub account or import accessible repositories to start tracking code, pull requests, and CI runs.
+            </p>
+            <Button
+              variant="glow"
+              size="sm"
+              onClick={handlePrimaryAction}
+              disabled={isConnecting}
+              className="gap-2"
+            >
+              {connection?.installationStatus === "ACTIVE" ? (
+                <>
+                  <Plus className="h-4 w-4" />
+                  Add Repositories
+                </>
+              ) : (
+                <>
+                  <GitHubIcon className="h-4 w-4" />
+                  Connect GitHub
+                </>
+              )}
+            </Button>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="border-slate-800 hover:bg-transparent">
+                <TableHead className="text-xs">Repository</TableHead>
+                <TableHead className="text-xs">Visibility</TableHead>
+                <TableHead className="text-xs">Default Branch</TableHead>
+                <TableHead className="text-xs">Scope</TableHead>
+                <TableHead className="text-xs">Sync Status</TableHead>
+                <TableHead className="text-xs">Last Synchronized</TableHead>
               </TableRow>
-            ) : repositories.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-slate-500">
-                  <Radio className="mx-auto h-8 w-8 text-slate-600 mb-2" />
-                  <p className="text-sm font-medium text-slate-400">No repositories imported yet</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {currentInstallation?.status === "ACTIVE"
-                      ? "Click 'Import Repositories' to select accessible repositories from GitHub."
-                      : "Install and connect the ForgeAI GitHub App to discover and import repositories."}
-                  </p>
-                </TableCell>
-              </TableRow>
-            ) : (
-              repositories.map((repo) => (
-                <TableRow key={repo.id}>
+            </TableHeader>
+            <TableBody>
+              {repositories.map((repo) => (
+                <TableRow key={repo.id} className="border-slate-800 hover:bg-slate-900/40">
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">{repo.fullName}</span>
-                      <a
-                        href={`https://github.com/${repo.fullName}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-slate-400 hover:text-white"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-sky-400 border border-slate-700/60">
+                        {repo.isPrivate ? <Lock className="h-4 w-4 text-amber-400" /> : <Globe className="h-4 w-4" />}
+                      </div>
+                      <div>
+                        <div className="font-medium text-white text-xs">{repo.fullName}</div>
+                        <a
+                          href={`https://github.com/${repo.fullName}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-slate-400 hover:text-sky-400 flex items-center gap-1 mt-0.5"
+                        >
+                          View on GitHub
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                      {repo.isPrivate ? (
-                        <>
-                          <Lock className="h-3.5 w-3.5 text-amber-400" />
-                          <span>Private</span>
-                        </>
-                      ) : (
-                        <>
-                          <Globe className="h-3.5 w-3.5 text-slate-400" />
-                          <span>Public</span>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono text-xs text-slate-300 border-slate-700">
-                      {repo.defaultBranch}
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${
+                        repo.isPrivate
+                          ? "border-amber-500/30 text-amber-400 bg-amber-500/10"
+                          : "border-slate-700 text-slate-300"
+                      }`}
+                    >
+                      {repo.isPrivate ? "Private" : "Public"}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-xs border-slate-700 text-slate-400">
-                      {repo.scope || (isPersonalWorkspace ? "PERSONAL" : "ORGANIZATION")}
+                    <span className="font-mono text-xs text-slate-300">{repo.defaultBranch}</span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-400">
+                      {repo.scope || "PERSONAL"}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-xs text-emerald-400 font-medium">Synchronized</span>
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Synchronized</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs text-slate-400">
-                    {formatDate(repo.lastSyncAt)}
+                  <TableCell className="text-xs text-slate-400 font-mono">
+                    {repo.lastSyncAt ? formatDate(repo.lastSyncAt) : "Just now"}
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
 
-      {/* Available Repositories on GitHub Account */}
+      {/* Available on GitHub Section */}
       {availableRepos.length > 0 && (
-        <Card className="border-slate-800">
+        <Card>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 p-4">
             <div>
               <div className="flex items-center gap-2">
@@ -757,24 +743,24 @@ export default function RepositoriesPage() {
                 </Badge>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Repositories found on your GitHub account (public and private). Click to connect and give access to this workspace.
+                Discovered from your GitHub account. Click to connect any repository to this workspace.
               </p>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {currentInstallation && (
+              {connection?.installationId && (
                 <a
-                  href={`https://github.com/settings/installations/${currentInstallation.installationId}`}
+                  href={`https://github.com/settings/installations/${connection.installationId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs">
                     <ExternalLink className="h-3.5 w-3.5" />
-                    Give Access on GitHub
+                    Configure on GitHub
                   </Button>
                 </a>
               )}
-              {unimportedAvailableCount > 0 && (
+              {unimportedAvailable.length > 0 && (
                 <Button
                   variant="glow"
                   size="sm"
@@ -782,7 +768,7 @@ export default function RepositoriesPage() {
                   className="gap-1.5 text-xs"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Import All / Select ({unimportedAvailableCount})
+                  Import Selected ({unimportedAvailable.length})
                 </Button>
               )}
             </div>
@@ -863,14 +849,14 @@ export default function RepositoriesPage() {
         </Card>
       )}
 
-      {/* Multi-Select Repository Import Modal (Section 20 UI) */}
+      {/* Multi-Select Repository Import Modal */}
       <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>
         <DialogHeader>
           <div className="flex items-center justify-between w-full">
             <div>
               <DialogTitle>Import GitHub Repositories</DialogTitle>
               <DialogDescription>
-                Select repositories accessible to your ForgeAI GitHub App installation to import into{" "}
+                Select repositories accessible on your GitHub account to import into{" "}
                 <span className="text-sky-300 font-medium">{workspaceDisplayName}</span>.
               </DialogDescription>
             </div>
@@ -892,62 +878,67 @@ export default function RepositoriesPage() {
                   onClick={toggleSelectAll}
                   className="flex items-center gap-2 hover:text-white transition-colors"
                 >
-                  {selectedRepoNames.length > 0 && selectedRepoNames.length === unimportedAvailableCount ? (
+                  {selectedRepoNames.length > 0 && selectedRepoNames.length === unimportedAvailable.length ? (
                     <CheckSquare className="h-4 w-4 text-sky-400" />
                   ) : (
                     <Square className="h-4 w-4 text-slate-500" />
                   )}
-                  <span>Select All Accessible Repositories</span>
+                  <span>Select All Repositories ({unimportedAvailable.length})</span>
                 </button>
-                <span className="font-mono text-slate-400">
-                  {selectedRepoNames.length} selected
-                </span>
+                <span>{selectedRepoNames.length} selected</span>
               </div>
 
-              <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
-                {availableRepos.map((r) => {
-                  const isAlreadyConnected = existingRepoFullNames.has(r.fullName.toLowerCase());
-                  const isSelected = selectedRepoNames.includes(r.fullName);
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-800/40">
+                {availableRepos.map((repo) => {
+                  const isConnected = existingRepoFullNames.has(repo.fullName.toLowerCase());
+                  const isChecked = selectedRepoNames.includes(repo.fullName);
 
                   return (
                     <div
-                      key={r.id}
-                      onClick={() => !isAlreadyConnected && toggleRepoSelection(r.fullName)}
-                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
-                        isAlreadyConnected
-                          ? "opacity-50 border-slate-800/60 bg-slate-900/20 cursor-not-allowed"
-                          : isSelected
-                          ? "border-sky-500/60 bg-sky-950/30 cursor-pointer"
-                          : "border-slate-800 bg-slate-900/40 hover:border-slate-700 cursor-pointer"
+                      key={repo.id}
+                      onClick={() => !isConnected && toggleRepoSelection(repo.fullName)}
+                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+                        isConnected
+                          ? "border-transparent bg-slate-900/20 opacity-50 cursor-not-allowed"
+                          : isChecked
+                          ? "border-sky-500/50 bg-sky-950/20"
+                          : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        {isAlreadyConnected ? (
-                          <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-                        ) : isSelected ? (
-                          <CheckSquare className="h-4 w-4 text-sky-400 shrink-0" />
-                        ) : (
-                          <Square className="h-4 w-4 text-slate-600 shrink-0" />
+                      <div className="flex items-center gap-2.5">
+                        {!isConnected && (
+                          <div className="text-sky-400">
+                            {isChecked ? (
+                              <CheckSquare className="h-4 w-4" />
+                            ) : (
+                              <Square className="h-4 w-4 text-slate-500" />
+                            )}
+                          </div>
                         )}
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-white">{r.fullName}</span>
-                            {r.isPrivate ? (
-                              <Lock className="h-3 w-3 text-amber-400" />
-                            ) : (
-                              <Globe className="h-3 w-3 text-slate-400" />
-                            )}
+                            <span className="text-xs font-semibold text-white">{repo.fullName}</span>
+                            <Badge
+                              variant="outline"
+                              className={`text-[9px] py-0 px-1.5 ${
+                                repo.isPrivate
+                                  ? "text-amber-400 border-amber-500/30"
+                                  : "text-slate-400 border-slate-700"
+                              }`}
+                            >
+                              {repo.isPrivate ? "Private" : "Public"}
+                            </Badge>
                           </div>
-                          <p className="text-[11px] text-slate-400">Default branch: {r.defaultBranch}</p>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            branch: {repo.defaultBranch}
+                          </span>
                         </div>
                       </div>
 
-                      {isAlreadyConnected ? (
+                      {isConnected && (
                         <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
-                          Connected
+                          Imported
                         </Badge>
-                      ) : (
-                        <span className="text-[11px] text-slate-500 font-mono">Ready to import</span>
                       )}
                     </div>
                   );
@@ -955,25 +946,25 @@ export default function RepositoriesPage() {
               </div>
             </div>
           ) : (
-            <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 text-center space-y-2">
-              <p className="text-xs text-slate-300">
-                No accessible repositories returned by GitHub for this installation.
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Verify repository selection in GitHub App settings or configure a repository manually below:
-              </p>
-              <div className="pt-2">
-                <Input
-                  placeholder="e.g. owner/repo-name"
-                  value={manualFullName}
-                  onChange={(e) => setManualFullName(e.target.value)}
-                  className="text-xs"
-                />
-              </div>
+            <div className="py-8 text-center text-slate-400 space-y-3">
+              <ShieldAlert className="mx-auto h-8 w-8 text-amber-400" />
+              <p className="text-xs">No repositories found for this GitHub App installation.</p>
+              {connection?.installationId && (
+                <a
+                  href={`https://github.com/settings/installations/${connection.installationId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Configure Access on GitHub
+                  </Button>
+                </a>
+              )}
             </div>
           )}
 
-          <DialogFooter className="mt-4">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
@@ -986,18 +977,19 @@ export default function RepositoriesPage() {
               type="submit"
               variant="glow"
               size="sm"
-              disabled={
-                isImporting ||
-                (selectedRepoNames.length === 0 && !manualFullName.trim())
-              }
+              disabled={isImporting || selectedRepoNames.length === 0}
+              className="gap-2"
             >
               {isImporting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                  Importing Repositories...
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Importing...
                 </>
               ) : (
-                `Import Selected (${selectedRepoNames.length > 0 ? selectedRepoNames.length : manualFullName.trim() ? 1 : 0})`
+                <>
+                  <Plus className="h-3.5 w-3.5" />
+                  Import ({selectedRepoNames.length})
+                </>
               )}
             </Button>
           </DialogFooter>

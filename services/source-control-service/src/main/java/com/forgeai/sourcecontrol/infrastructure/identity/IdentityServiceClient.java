@@ -65,15 +65,16 @@ public class IdentityServiceClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 JsonNode body = objectMapper.readTree(response.body());
-                boolean connected = body.path("connected").asBoolean(false);
+                boolean connected = body.path("connected").asBoolean(false) || body.path("linked").asBoolean(false);
                 if (!connected) {
                     return Optional.of(new UserGitHubProfile(false, null, null, null, null, null));
                 }
-                Long ghUserId = body.hasNonNull("githubUserId") ? body.path("githubUserId").asLong() : null;
-                String ghLogin = body.path("githubLogin").asText(null);
-                String name = body.path("name").asText(null);
-                String email = body.path("email").asText(null);
-                String avatarUrl = body.path("avatarUrl").asText(null);
+                JsonNode idNode = body.hasNonNull("identity") ? body.path("identity") : body;
+                Long ghUserId = idNode.hasNonNull("githubUserId") ? idNode.path("githubUserId").asLong() : null;
+                String ghLogin = idNode.path("githubLogin").asText(null);
+                String name = idNode.path("name").asText(null);
+                String email = idNode.path("email").asText(null);
+                String avatarUrl = idNode.path("avatarUrl").asText(null);
 
                 return Optional.of(new UserGitHubProfile(true, ghUserId, ghLogin, name, email, avatarUrl));
             } else {

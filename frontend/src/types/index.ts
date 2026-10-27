@@ -9,6 +9,45 @@ export interface GitHubIdentityDto {
   lastSyncedAt?: string;
 }
 
+export type GitHubConnectionState =
+  | "DISCONNECTED"
+  | "AUTHENTICATING_GITHUB"
+  | "GITHUB_CONNECTED"
+  | "CHECKING_APP_INSTALLATION"
+  | "INSTALLATION_REQUIRED"
+  | "GITHUB_APP_INSTALLING"
+  | "INSTALLATION_CALLBACK"
+  | "VERIFYING_INSTALLATION"
+  | "APP_INSTALLED"
+  | "REPOSITORIES_READY"
+  | "AUTHENTICATION_FAILED"
+  | "INSTALLATION_FAILED"
+  | "INSTALLATION_REJECTED"
+  | "INSTALLATION_NOT_AUTHORIZED"
+  | "REPOSITORY_ACCESS_UNAVAILABLE"
+  | "GITHUB_UNAVAILABLE";
+
+export interface GitHubConnectionResponse {
+  githubUserConnected: boolean;
+  githubUserId?: number | null;
+  githubLogin?: string | null;
+  githubName?: string | null;
+  githubEmail?: string | null;
+  githubAvatarUrl?: string | null;
+  installationStatus: "ACTIVE" | "NOT_INSTALLED" | "UNAUTHORIZED" | "PENDING" | string;
+  installationRequired: boolean;
+  installationId?: number | null;
+  repositorySelection?: string | null;
+  appInstallUrl: string;
+  appSlug?: string | null;
+  workspaceId?: string | null;
+  workspaceScope?: "PERSONAL" | "ORGANIZATION" | string;
+  repositoriesAvailable: number;
+  repositoriesConnected: number;
+  connectionState: GitHubConnectionState;
+  message?: string;
+}
+
 export interface GitHubStatusResponse {
   linked: boolean;
   identity?: GitHubIdentityDto | null;
