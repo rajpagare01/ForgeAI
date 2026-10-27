@@ -31,7 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 
 export default function ProjectsPage() {
-  const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
+  const { currentOrg, activeWorkspace, isPersonalWorkspace, isLoading: isTenantLoading } = useTenant();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +43,11 @@ export default function ProjectsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchProjects = useCallback(async () => {
-    if (!activeWorkspace?.id) return;
+    if (isTenantLoading) return;
+    if (!activeWorkspace?.id) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -64,6 +68,8 @@ export default function ProjectsPage() {
           updatedAt: p.updatedAt || p.createdAt || "",
         }));
         setProjects(mapped);
+      } else {
+        setProjects([]);
       }
     } catch (err: any) {
       console.warn("Failed to load projects from Gateway:", err);
@@ -71,7 +77,7 @@ export default function ProjectsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeWorkspace?.id]);
+  }, [activeWorkspace?.id, isTenantLoading]);
 
   useEffect(() => {
     fetchProjects();

@@ -165,7 +165,7 @@ public class GitHubInstallationDiscoveryService {
             });
         }
 
-        String appInstallUrl = "https://github.com/apps/forgeai-app/installations/new";
+        String appInstallUrl = gitHubAppConfig.getAppInstallUrl();
         String message = currentInstallation != null
                 ? "GitHub App installation is active and synchronized."
                 : (!candidates.isEmpty()
@@ -293,6 +293,27 @@ public class GitHubInstallationDiscoveryService {
                 }
                 if (effectiveWsId != null && effectiveWsId.equals(existing.getWorkspaceId())) {
                     return existing;
+                }
+                if (isPersonal) {
+                    log.info("[GitHub] Associating personal installation {} to personal workspace {}",
+                            installationId, effectiveWsId);
+                    existing.setWorkspaceId(effectiveWsId);
+                    existing.setOrganizationId(null);
+                    existing.setScope("PERSONAL");
+                    existing.setStatus(InstallationStatus.ACTIVE);
+                    existing.setClaimedByUserId(callerUserId);
+                    existing.setUpdatedAt(Instant.now());
+                    existing.setLastSyncedAt(Instant.now());
+                    GitHubInstallation saved = installationRepository.save(existing);
+                    try {
+                        List<GitHubRepositoryMetadata> accessibleRepos = gitHubAppClient.listInstallationRepositories(installationId);
+                        for (GitHubRepositoryMetadata ghRepo : accessibleRepos) {
+                            syncRepositoryRecord(ghRepo, saved);
+                        }
+                    } catch (Exception e) {
+                        log.warn("[GitHub] Could not sync repos during personal association: {}", e.getMessage());
+                    }
+                    return saved;
                 }
                 throw new GitHubAccessDeniedException(
                         "Installation " + installationId + " is already claimed by another organization or workspace.");

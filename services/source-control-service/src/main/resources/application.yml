@@ -40,6 +40,7 @@ forgeai:
     # Numeric GitHub App ID — required for GitHub integration
     # Set via GITHUB_APP_ID environment variable
     app-id: ${GITHUB_APP_ID:5311634}
+    app-slug: ${GITHUB_APP_SLUG:forgeai-raj-dev}
     # RSA private key in PKCS#8 PEM format (if supplied as an inline string)
     private-key: ${GITHUB_PRIVATE_KEY:}
     # Path to RSA private key file on disk (default: secrets/github-app-private-key.pem)

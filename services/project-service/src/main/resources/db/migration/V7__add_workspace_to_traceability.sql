@@ -32,6 +32,8 @@ CREATE INDEX IF NOT EXISTS idx_trace_links_ws_proj ON traceability_links (worksp
 -- 2. traceability_snapshots
 ALTER TABLE traceability_snapshots ADD COLUMN IF NOT EXISTS workspace_id UUID;
 
+ALTER TABLE traceability_snapshots DISABLE TRIGGER trg_prevent_traceability_snapshot_mutation;
+
 UPDATE traceability_snapshots ts
 SET workspace_id = p.workspace_id
 FROM projects p
@@ -41,6 +43,8 @@ WHERE ts.project_id = p.id AND ts.workspace_id IS NULL;
 UPDATE traceability_snapshots
 SET workspace_id = organization_id
 WHERE workspace_id IS NULL;
+
+ALTER TABLE traceability_snapshots ENABLE TRIGGER trg_prevent_traceability_snapshot_mutation;
 
 ALTER TABLE traceability_snapshots ALTER COLUMN workspace_id SET NOT NULL;
 ALTER TABLE traceability_snapshots ALTER COLUMN organization_id DROP NOT NULL;

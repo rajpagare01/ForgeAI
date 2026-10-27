@@ -39,12 +39,12 @@ function generateTraceparent(): string {
 interface RequestOptions extends RequestInit {
   orgId?: string;
   skipAuth?: boolean;
+  _retry?: boolean;
 }
 
 class ApiClient {
   private baseUrl: string;
-  private isRefreshing = false;
-  private refreshSubscribers: Array<(token: string) => void> = [];
+  private refreshPromise: Promise<string | null> | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
@@ -120,61 +120,67 @@ class ApiClient {
   }
 
 
-  private onTokenRefreshed(token: string) {
-    this.refreshSubscribers.forEach((callback) => callback(token));
-    this.refreshSubscribers = [];
-  }
+  public async tryRefreshToken(): Promise<string | null> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
 
-  private addRefreshSubscriber(callback: (token: string) => void) {
-    this.refreshSubscribers.push(callback);
-  }
-
-  private async tryRefreshToken(): Promise<string | null> {
     const refreshToken = this.getRefreshToken();
     if (!refreshToken) {
       this.clearTokensAndRedirect();
       return null;
     }
 
-    try {
-      const response = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Correlation-Id": generateCorrelationId(),
-          traceparent: generateTraceparent(),
-        },
-        body: JSON.stringify({ refreshToken }),
-      });
+    this.refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Correlation-Id": generateCorrelationId(),
+            traceparent: generateTraceparent(),
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
 
-      if (!response.ok) {
-        throw new Error("Token refresh rejected");
+        if (!response.ok) {
+          throw new Error(`Token refresh rejected with HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const newAccessToken = data.tokens?.accessToken || data.accessToken;
+        const newRefreshToken = data.tokens?.refreshToken || data.refreshToken;
+
+        if (newAccessToken) {
+          this.setAccessToken(newAccessToken);
+        }
+        if (newRefreshToken) {
+          this.setRefreshToken(newRefreshToken);
+        }
+
+        return newAccessToken || null;
+      } catch (err) {
+        console.warn("[ApiClient] Refresh token rotation rejected:", err);
+        this.clearTokensAndRedirect();
+        return null;
+      } finally {
+        this.refreshPromise = null;
       }
+    })();
 
-      const data = await response.json();
-      const newAccessToken = data.tokens?.accessToken || data.accessToken;
-      const newRefreshToken = data.tokens?.refreshToken || data.refreshToken;
-
-      if (newAccessToken) {
-        this.setAccessToken(newAccessToken);
-      }
-      if (newRefreshToken) {
-        this.setRefreshToken(newRefreshToken);
-      }
-
-      return newAccessToken;
-    } catch {
-      this.clearTokensAndRedirect();
-      return null;
-    }
+    return this.refreshPromise;
   }
 
   private clearTokensAndRedirect() {
     this.setAccessToken(null);
     this.setRefreshToken(null);
-    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    if (typeof window !== "undefined") {
+      const pathname = window.location.pathname;
+      if (pathname.startsWith("/login") || pathname.startsWith("/auth/github/callback")) {
+        return;
+      }
       window.location.href = `/login?expired=true&redirect=${encodeURIComponent(
-        window.location.pathname
+        pathname
       )}`;
     }
   }
@@ -220,6 +226,17 @@ class ApiClient {
       if (isValidUuid && !headers.has("X-Org-Id")) {
         headers.set("X-Org-Id", orgId as string);
       }
+
+      const wsId = this.getActiveWorkspaceId();
+      if (wsId && !headers.has("X-Workspace-Id")) {
+        const isValidWsUuid =
+          typeof wsId === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(wsId);
+        if (isValidWsUuid) {
+          headers.set("X-Workspace-Id", wsId);
+          headers.set("X-Workspace-Scope", this.getActiveWorkspaceType());
+        }
+      }
     }
 
 
@@ -242,36 +259,15 @@ class ApiClient {
       throw networkError;
     }
 
-    // 4. Automatic 401 Interception & Refresh Rotation
-    if (response.status === 401 && !options.skipAuth) {
-      if (!this.isRefreshing) {
-        this.isRefreshing = true;
-        const newToken = await this.tryRefreshToken();
-        this.isRefreshing = false;
-
-        if (newToken) {
-          this.onTokenRefreshed(newToken);
-          headers.set("Authorization", `Bearer ${newToken}`);
-          return this.request<T>(endpoint, { ...options, headers });
-        } else {
-          throw new Error("Session expired. Please log in again.");
-        }
+    // 4. Automatic 401 Interception & Refresh Rotation (One Retry Guaranteed)
+    if (response.status === 401 && !options.skipAuth && !options._retry) {
+      const newToken = await this.tryRefreshToken();
+      if (newToken) {
+        headers.set("Authorization", `Bearer ${newToken}`);
+        return this.request<T>(endpoint, { ...options, headers, _retry: true });
       } else {
-        // Queue concurrent requests until refresh completes
-        return new Promise<T>((resolve, reject) => {
-          this.addRefreshSubscriber(async (newToken: string) => {
-            try {
-              headers.set("Authorization", `Bearer ${newToken}`);
-              const retryResponse = await this.request<T>(endpoint, {
-                ...options,
-                headers,
-              });
-              resolve(retryResponse);
-            } catch (err) {
-              reject(err);
-            }
-          });
-        });
+        const sessionErr = new Error("Session expired. Please log in again.");
+        throw sessionErr;
       }
     }
 

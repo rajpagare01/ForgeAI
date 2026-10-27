@@ -1,4 +1,4 @@
-package com.forgeai.sourcecontrol.infrastructure.github;
+  package com.forgeai.sourcecontrol.infrastructure.github;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,24 +30,28 @@ import org.springframework.stereotype.Component;
 public class GitHubAppConfig {
 
     private final long appId;
+    private final String appSlug;
     private final String privateKeyPem;
     private final String webhookSecret;
     private final boolean configured;
 
     public GitHubAppConfig(long appId, String privateKeyPem, String webhookSecret) {
-        this(String.valueOf(appId), privateKeyPem, "", webhookSecret);
+        this(String.valueOf(appId), "forgeai-raj-dev", privateKeyPem, "", webhookSecret);
     }
 
     public GitHubAppConfig(String appIdRaw, String privateKeyPem, String webhookSecret) {
-        this(appIdRaw, privateKeyPem, "", webhookSecret);
+        this(appIdRaw, "forgeai-raj-dev", privateKeyPem, "", webhookSecret);
     }
 
     @Autowired
     public GitHubAppConfig(
             @Value("${forgeai.github.app-id:0}") String appIdRaw,
+            @Value("${forgeai.github.app-slug:forgeai-raj-dev}") String appSlug,
             @Value("${forgeai.github.private-key:}") String privateKeyPem,
             @Value("${forgeai.github.private-key-path:}") String privateKeyPath,
             @Value("${forgeai.github.webhook-secret:}") String webhookSecret) {
+
+        this.appSlug = (appSlug != null && !appSlug.isBlank()) ? appSlug.trim() : "forgeai-raj-dev";
 
         long parsedAppId = 0L;
         if (appIdRaw != null && !appIdRaw.isBlank()) {
@@ -125,12 +129,16 @@ public class GitHubAppConfig {
         this.configured = appIdPresent && keyPresent && secretPresent;
 
         if (this.configured) {
-            log.info("[GitHub] App configuration loaded successfully: appId={}", appId);
+            log.info("[GitHub] App configuration loaded successfully: appId={}, appSlug={}", appId, this.appSlug);
         } else {
             log.warn("[GitHub] App NOT configured. Missing: appId={} privateKey={} webhookSecret={}. "
                     + "Repository connection and installation claim endpoints are disabled until credentials are provided.",
                     appIdPresent, keyPresent, secretPresent);
         }
+    }
+
+    public String getAppInstallUrl() {
+        return "https://github.com/apps/" + (appSlug != null && !appSlug.isBlank() ? appSlug : "forgeai-raj-dev") + "/installations/new";
     }
 
     /**

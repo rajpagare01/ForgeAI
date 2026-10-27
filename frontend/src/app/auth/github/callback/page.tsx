@@ -17,6 +17,17 @@ function GitHubCallbackContent() {
   const hasExecuted = useRef(false);
 
   useEffect(() => {
+    // If an active session token is already present, immediately proceed to workspace
+    const existingToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
+    if (existingToken) {
+      setStatus("success");
+      setStepMessage("Active session verified! Redirecting to workspace...");
+      const redirectTimer = setTimeout(() => {
+        window.location.href = "/";
+      }, 400);
+      return () => clearTimeout(redirectTimer);
+    }
+
     if (hasExecuted.current) return;
     hasExecuted.current = true;
 
@@ -54,16 +65,42 @@ function GitHubCallbackContent() {
 
         setStatus("success");
         setStepMessage("Identity verified! Redirecting to workspace...");
+        router.push("/");
         setTimeout(() => {
-          router.push("/");
-        }, 800);
+          if (typeof window !== "undefined" && window.location.pathname.includes("/callback")) {
+            window.location.href = "/";
+          }
+        }, 1500);
       } catch (err: any) {
+        // If access token was saved during exchange or code was already consumed, navigate to workspace
+        const savedToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
+        if (savedToken) {
+          setStatus("success");
+          setStepMessage("Session verified! Redirecting to workspace...");
+          router.push("/");
+          setTimeout(() => {
+            if (typeof window !== "undefined" && window.location.pathname.includes("/callback")) {
+              window.location.href = "/";
+            }
+          }, 1500);
+          return;
+        }
         setStatus("error");
         setErrorMessage(err?.message || "Failed to authenticate with GitHub. Please try again.");
       }
     };
 
     exchange();
+
+    // Fallback safety timeout: if still processing after 4 seconds and token exists, redirect
+    const safetyTimeout = setTimeout(() => {
+      const savedToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
+      if (savedToken) {
+        window.location.href = "/";
+      }
+    }, 4000);
+
+    return () => clearTimeout(safetyTimeout);
   }, [searchParams, router, loginWithGitHub, linkGitHubAccount, isAuthenticated]);
 
   return (
@@ -104,6 +141,14 @@ function GitHubCallbackContent() {
             <p className="text-xs text-slate-500 max-w-xs">
               Exchanging cryptographically verified OAuth state and provisioning identity invariants.
             </p>
+            <div className="pt-2">
+              <Link
+                href="/"
+                className="text-xs text-indigo-400 hover:text-indigo-300 underline transition-colors"
+              >
+                Proceed to Dashboard &rarr;
+              </Link>
+            </div>
           </div>
         )}
 

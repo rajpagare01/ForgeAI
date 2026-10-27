@@ -137,17 +137,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem("forgeai_user", JSON.stringify(mappedUser));
         }
 
-        try {
-          const statusRes = await apiClient.get<GitHubStatusResponse>("/api/v1/auth/github/status");
-          setGithubStatus(statusRes);
-        } catch {
-          // Non-fatal
-        }
+        fetchGitHubStatus();
       } finally {
         setIsLoading(false);
       }
     },
-    []
+    [fetchGitHubStatus]
   );
 
   const linkGitHubAccount = useCallback(

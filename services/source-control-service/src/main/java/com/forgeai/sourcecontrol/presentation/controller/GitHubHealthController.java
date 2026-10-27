@@ -56,10 +56,10 @@ public class GitHubHealthController {
         try {
             List<GitHubInstallation> all = installationRepository.findAll();
             long quarantined = all.stream()
-                    .filter(i -> QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
+                    .filter(i -> i.getOrganizationId() != null && QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
                     .count();
             long active = all.stream()
-                    .filter(i -> !QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
+                    .filter(i -> i.getOrganizationId() == null || !QUARANTINE_ORG.equals(i.getOrganizationId().toString()))
                     .count();
 
             report.put("status", "CONFIGURED");

@@ -159,6 +159,14 @@ export default function RepositoriesPage() {
     } finally {
       setIsLoading(false);
     }
+
+    // 5. Fetch accessible repositories live from GitHub
+    try {
+      const avail = await apiClient.get<AvailableRepository[]>(`/api/v1/repositories/available?workspaceId=${activeWorkspace.id}`);
+      setAvailableRepos(Array.isArray(avail) ? avail : []);
+    } catch {
+      setAvailableRepos([]);
+    }
   }, [activeWorkspace?.id, isTenantLoading, workspaceDisplayName]);
 
   // Handle GitHub App setup redirect URL (?installation_id=...) with strict cryptographic/API ownership check
@@ -324,6 +332,26 @@ export default function RepositoriesPage() {
     }
   };
 
+  const handleConnectSingle = async (fullName: string) => {
+    if (!activeWorkspace?.id || !fullName) return;
+    setIsImporting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await apiClient.post("/api/v1/repositories/connect", {
+        fullName,
+        workspaceId: activeWorkspace.id,
+      });
+      setSuccess(`Repository '${fullName}' connected successfully.`);
+      await fetchData();
+    } catch (err: any) {
+      console.error("Connect failed:", err);
+      setError(err?.message || `Failed to connect repository '${fullName}'.`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const existingRepoFullNames = new Set(repositories.map((r) => r.fullName.toLowerCase()));
   const unimportedAvailableCount = availableRepos.filter((r) => !existingRepoFullNames.has(r.fullName.toLowerCase())).length;
 
@@ -379,7 +407,7 @@ export default function RepositoriesPage() {
             </Button>
           ) : (
             <a
-              href={discoveryData?.appInstallUrl || "https://github.com/apps/forgeai-app/installations/new"}
+              href={discoveryData?.appInstallUrl || "https://github.com/apps/forgeai-raj-dev/installations/new"}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -481,6 +509,20 @@ export default function RepositoriesPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              <a
+                href={`https://github.com/settings/installations/${currentInstallation.installationId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs border-slate-700 hover:text-white"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Configure on GitHub
+                </Button>
+              </a>
               <Button
                 variant="outline"
                 size="sm"
@@ -569,7 +611,7 @@ export default function RepositoriesPage() {
 
             <div className="flex items-center gap-3 shrink-0">
               <a
-                href={discoveryData?.appInstallUrl || "https://github.com/apps/forgeai-app/installations/new"}
+                href={discoveryData?.appInstallUrl || "https://github.com/apps/forgeai-raj-dev/installations/new"}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -701,6 +743,125 @@ export default function RepositoriesPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Available Repositories on GitHub Account */}
+      {availableRepos.length > 0 && (
+        <Card className="border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 p-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-sky-400" />
+                <h3 className="text-sm font-medium text-white">Available on GitHub</h3>
+                <Badge variant="outline" className="text-xs text-slate-300">
+                  {availableRepos.length}
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Repositories found on your GitHub account (public and private). Click to connect and give access to this workspace.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {currentInstallation && (
+                <a
+                  href={`https://github.com/settings/installations/${currentInstallation.installationId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Give Access on GitHub
+                  </Button>
+                </a>
+              )}
+              {unimportedAvailableCount > 0 && (
+                <Button
+                  variant="glow"
+                  size="sm"
+                  onClick={handleOpenConnectModal}
+                  className="gap-1.5 text-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Import All / Select ({unimportedAvailableCount})
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-800/60">
+            {availableRepos.map((repo) => {
+              const isAlreadyConnected = existingRepoFullNames.has(repo.fullName.toLowerCase());
+              return (
+                <div
+                  key={repo.id}
+                  className="flex items-center justify-between p-4 hover:bg-slate-900/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/80 text-slate-300">
+                      {repo.isPrivate ? (
+                        <Lock className="h-4 w-4 text-amber-400" />
+                      ) : (
+                        <Globe className="h-4 w-4 text-sky-400" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white">{repo.fullName}</span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            repo.isPrivate
+                              ? "text-amber-400 border-amber-500/30"
+                              : "text-slate-400 border-slate-700"
+                          }`}
+                        >
+                          {repo.isPrivate ? "Private" : "Public"}
+                        </Badge>
+                        <span className="text-[11px] text-slate-500 font-mono">
+                          branch: {repo.defaultBranch}
+                        </span>
+                      </div>
+                      <a
+                        href={`https://github.com/${repo.fullName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-slate-400 hover:text-sky-400 flex items-center gap-1 mt-0.5"
+                      >
+                        github.com/{repo.fullName}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
+
+                  <div>
+                    {isAlreadyConnected ? (
+                      <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1.5 py-1 px-2.5">
+                        <Check className="h-3.5 w-3.5" />
+                        Connected
+                      </Badge>
+                    ) : (
+                      <Button
+                        variant="glow"
+                        size="sm"
+                        onClick={() => handleConnectSingle(repo.fullName)}
+                        disabled={isImporting}
+                        className="gap-1.5 text-xs"
+                      >
+                        {isImporting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5" />
+                        )}
+                        Give Access to Repo
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {/* Multi-Select Repository Import Modal (Section 20 UI) */}
       <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>

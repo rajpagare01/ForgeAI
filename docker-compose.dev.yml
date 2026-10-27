@@ -49,6 +49,7 @@ services:
   # Core Domain: Identity Service (Java 21 / Spring Boot 3)
   # ----------------------------------------------------------------------------
   identity-service:
+    init: true
     build:
       context: .
       dockerfile: services/identity-service/Dockerfile
@@ -63,12 +64,19 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       JWT_ISSUER: ${JWT_ISSUER:-forgeai-identity}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      SECURITY_JWT_RSA_PUBLIC_KEY_PATH: /app/secrets/jwt-rsa-public.pem
+      SECURITY_JWT_RSA_PRIVATE_KEY_PATH: /app/secrets/jwt-rsa-private.pem
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom"
+    volumes:
+      - ./secrets:/app/secrets:ro
+      - ./services/identity-service/target/extracted/application/BOOT-INF/classes:/app/BOOT-INF/classes
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 10s
@@ -104,7 +112,9 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom"
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
+    volumes:
+      - ./services/project-service/target/classes:/app/BOOT-INF/classes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
       interval: 10s
@@ -134,6 +144,7 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-forgeai-raj-dev}
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       GITHUB_PRIVATE_KEY_PATH: ${GITHUB_PRIVATE_KEY_PATH:-/app/secrets/github-app-private-key.pem}
@@ -141,9 +152,10 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom"
     volumes:
       - ./secrets:/app/secrets:ro
+      - ./services/source-control-service/target/classes:/app/BOOT-INF/classes
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 10s
@@ -159,6 +171,7 @@ services:
   # Core Domain: Testing Service (Java 21 / Spring Boot 3)
   # ----------------------------------------------------------------------------
   testing-service:
+    init: true
     build:
       context: .
       dockerfile: services/testing-service/Dockerfile
@@ -174,7 +187,7 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom"
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
       interval: 10s
@@ -211,9 +224,9 @@ services:
       - ./services/ai-service:/app
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/healthz"]
       interval: 10s
@@ -228,6 +241,7 @@ services:
   # Edge Gateway: Spring Cloud Gateway (Java 21 / Reactive)
   # ----------------------------------------------------------------------------
   api-gateway:
+    init: true
     build:
       context: .
       dockerfile: infrastructure/api-gateway/Dockerfile
@@ -259,7 +273,9 @@ services:
       ai-service:
         condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
+    volumes:
+      - ./infrastructure/api-gateway/target/classes:/app/BOOT-INF/classes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s
@@ -274,6 +290,7 @@ services:
   # Presentation: Web Dashboard (Next.js 16 / TypeScript / Tailwind CSS)
   # ----------------------------------------------------------------------------
   frontend:
+    init: true
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -284,9 +301,12 @@ services:
       NEXT_PUBLIC_GATEWAY_URL: http://localhost:8080
       NODE_ENV: production
       PORT: 3000
+    volumes:
+      - ./frontend/.next:/app/.next
+      - ./frontend/public:/app/public
     depends_on:
       api-gateway:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 10s

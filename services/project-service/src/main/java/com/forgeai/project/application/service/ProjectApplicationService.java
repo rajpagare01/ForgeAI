@@ -179,8 +179,25 @@ public class ProjectApplicationService {
     @Transactional(readOnly = true)
     public List<Project> listProjects(UUID workspaceId, UUID organizationId, UUID callerUserId) {
         if (workspaceId != null) {
-            // Verify workspace authorization
-            WorkspaceJpaEntity workspace = workspaceRepository.findById(workspaceId)
+            Optional<WorkspaceJpaEntity> wsOpt = workspaceRepository.findById(workspaceId);
+            if (wsOpt.isEmpty() && callerUserId != null) {
+                // Auto-provision workspace locally if provisioned in identity-service
+                WorkspaceJpaEntity autoWs = WorkspaceJpaEntity.builder()
+                        .id(workspaceId)
+                        .type(organizationId != null ? "ORGANIZATION" : "PERSONAL")
+                        .ownerUserId(callerUserId)
+                        .organizationId(organizationId)
+                        .name(organizationId != null ? "Organization Workspace" : "Personal Workspace")
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+                try {
+                    wsOpt = Optional.of(workspaceRepository.save(autoWs));
+                } catch (Exception ignored) {
+                    wsOpt = workspaceRepository.findById(workspaceId);
+                }
+            }
+            WorkspaceJpaEntity workspace = wsOpt
                     .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
             if ("PERSONAL".equalsIgnoreCase(workspace.getType())) {
                 if (callerUserId == null || !callerUserId.equals(workspace.getOwnerUserId())) {
@@ -219,6 +236,23 @@ public class ProjectApplicationService {
             // If workspaceId was supplied but not found locally, see if it matches organizationId
             if (organizationId != null && workspaceId.equals(organizationId)) {
                 return getOrCreateOrgWorkspace(organizationId, callerUserId);
+            }
+            if (callerUserId != null) {
+                WorkspaceJpaEntity autoWs = WorkspaceJpaEntity.builder()
+                        .id(workspaceId)
+                        .type(organizationId != null ? "ORGANIZATION" : "PERSONAL")
+                        .ownerUserId(callerUserId)
+                        .organizationId(organizationId)
+                        .name(organizationId != null ? "Organization Workspace" : "Personal Workspace")
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+                try {
+                    return workspaceRepository.save(autoWs);
+                } catch (Exception ignored) {
+                    return workspaceRepository.findById(workspaceId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
+                }
             }
             throw new ResourceNotFoundException("Workspace not found: " + workspaceId);
         }

@@ -44,6 +44,8 @@ security:
       key-id: ${JWT_RSA_KEY_ID:forgeai-identity-key-v1}
       public-key: ${JWT_RSA_PUBLIC_KEY:}
       private-key: ${JWT_RSA_PRIVATE_KEY:}
+      public-key-path: ${SECURITY_JWT_RSA_PUBLIC_KEY_PATH:${JWT_RSA_PUBLIC_KEY_PATH:}}
+      private-key-path: ${SECURITY_JWT_RSA_PRIVATE_KEY_PATH:${JWT_RSA_PRIVATE_KEY_PATH:}}
 
 outbox:
   poll:

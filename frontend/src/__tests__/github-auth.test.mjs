@@ -192,3 +192,78 @@ test("GitHub Auth: Status endpoint returns linked state and public profile", asy
     apiClient.setAccessToken(null);
   }
 });
+
+function resolveSourceFile(fs, path, rel) {
+  if (fs.existsSync(path.resolve(rel))) return path.resolve(rel);
+  if (fs.existsSync(path.resolve("frontend", rel))) return path.resolve("frontend", rel);
+  return path.resolve(rel);
+}
+
+test("Login UI Regression: GitHub login button is present and not hidden by utility classes", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const loginPath = resolveSourceFile(fs, path, "src/app/(auth)/login/page.tsx");
+  const loginSource = fs.readFileSync(loginPath, "utf-8");
+
+  // GitHub login button must exist
+  assert.ok(loginSource.includes("Continue with GitHub"), "Login page must have 'Continue with GitHub'");
+  assert.ok(loginSource.includes("handleGitHubLogin"), "Login page must bind to handleGitHubLogin");
+
+  // Must not have hidden classes on GitHub button
+  const hiddenPattern = /\b(hidden|md:hidden|lg:hidden|sm:hidden|opacity-0|pointer-events-none)\b/;
+  const buttonSnippetMatch = loginSource.match(/<button[\s\S]*?handleGitHubLogin[\s\S]*?<\/button>/);
+  assert.ok(buttonSnippetMatch, "Found GitHub button JSX");
+  assert.equal(hiddenPattern.test(buttonSnippetMatch[0]), false, "GitHub button must not have hidden or opacity-0 classes");
+
+  // GitHub button must appear BEFORE the email form and separator
+  const githubIndex = loginSource.indexOf("Continue with GitHub");
+  const separatorIndex = loginSource.indexOf("Or sign in with email");
+  const emailFormIndex = loginSource.indexOf("Work Email");
+  assert.ok(githubIndex < separatorIndex, "GitHub button must appear BEFORE 'Or sign in with email'");
+  assert.ok(separatorIndex < emailFormIndex, "'Or sign in with email' must appear BEFORE Work Email form");
+});
+
+test("Login UI Regression: Stale demo credentials and autofill buttons are completely removed", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const loginPath = resolveSourceFile(fs, path, "src/app/(auth)/login/page.tsx");
+  const loginSource = fs.readFileSync(loginPath, "utf-8");
+  const authContextPath = resolveSourceFile(fs, path, "src/lib/auth-context.tsx");
+  const authContextSource = fs.readFileSync(authContextPath, "utf-8");
+
+  // Stale demo credentials check
+  const forbiddenStrings = [
+    "Autofill Demo Credentials",
+    "fillDemo",
+    "admin@forgeai.dev",
+    "admin_dev",
+    "password123"
+  ];
+
+  for (const forbidden of forbiddenStrings) {
+    assert.equal(
+      loginSource.includes(forbidden),
+      false,
+      `login/page.tsx must NOT contain '${forbidden}'`
+    );
+    assert.equal(
+      authContextSource.includes(forbidden),
+      false,
+      `auth-context.tsx must NOT contain '${forbidden}'`
+    );
+  }
+});
+
+test("OAuth Callback Route: Exists, reads query params, and handles OAuth exchange", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const callbackPath = resolveSourceFile(fs, path, "src/app/auth/github/callback/page.tsx");
+  assert.ok(fs.existsSync(callbackPath), "Callback route src/app/auth/github/callback/page.tsx must exist");
+
+  const callbackSource = fs.readFileSync(callbackPath, "utf-8");
+  assert.ok(callbackSource.includes('searchParams.get("code")'), "Callback must extract code");
+  assert.ok(callbackSource.includes('searchParams.get("state")'), "Callback must extract state");
+  assert.ok(callbackSource.includes("loginWithGitHub"), "Callback must call loginWithGitHub");
+  assert.ok(callbackSource.includes("linkGitHubAccount"), "Callback must support linking for authenticated users");
+  assert.ok(callbackSource.includes("router.push"), "Callback must redirect to dashboard upon completion");
+});

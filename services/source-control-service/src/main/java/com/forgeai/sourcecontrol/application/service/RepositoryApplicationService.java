@@ -53,8 +53,15 @@ public class RepositoryApplicationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.sourcecontrol.infrastructure.identity.IdentityServiceClient identityServiceClient;
+
     public void setWorkspaceRepository(com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository) {
         this.workspaceRepository = workspaceRepository;
+    }
+
+    public void setIdentityServiceClient(com.forgeai.sourcecontrol.infrastructure.identity.IdentityServiceClient identityServiceClient) {
+        this.identityServiceClient = identityServiceClient;
     }
 
     public RepositoryApplicationService(
@@ -612,7 +619,13 @@ public class RepositoryApplicationService {
             } else if ("PERSONAL".equalsIgnoreCase(existingRepo.getScope())) {
                 isOwner = organizationId == null && targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId());
             }
+            if (!isOwner && organizationId == null && "PERSONAL".equalsIgnoreCase(scope)) {
+                isOwner = true;
+            }
             if (isOwner) {
+                existingRepo.setOrganizationId(organizationId);
+                existingRepo.setWorkspaceId(targetWorkspaceId);
+                existingRepo.setScope(scope);
                 existingRepo.setName(ghRepo.name());
                 existingRepo.setFullName(ghRepo.fullName());
                 existingRepo.setDefaultBranch(ghRepo.defaultBranch());
@@ -674,7 +687,7 @@ public class RepositoryApplicationService {
         return getClaimedInstallation(organizationId, workspaceId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
@@ -684,6 +697,9 @@ public class RepositoryApplicationService {
         } else {
             opt = installationRepository.findByWorkspaceId(effectiveWsId)
                     .filter(i -> i.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(i.getScope()));
+            if (opt.isEmpty() && callerUserId != null) {
+                opt = findAndBindPersonalInstallation(callerUserId, effectiveWsId);
+            }
         }
 
         return opt.filter(i -> InstallationStatus.ACTIVE.equals(i.getStatus()))
@@ -691,6 +707,41 @@ public class RepositoryApplicationService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No active GitHub App installation found for this tenant. " +
                         "Install the ForgeAI GitHub App and claim the installation first."));
+    }
+
+    private Optional<GitHubInstallation> findAndBindPersonalInstallation(UUID callerUserId, UUID effectiveWsId) {
+        if (identityServiceClient == null) return Optional.empty();
+        try {
+            var profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
+            if (profileOpt.isPresent() && profileOpt.get().connected()) {
+                String login = profileOpt.get().githubLogin();
+                Long ghId = profileOpt.get().githubUserId();
+                List<GitHubInstallation> matching = new java.util.ArrayList<>();
+                if (ghId != null) {
+                    installationRepository.findByAccountId(ghId).ifPresent(matching::add);
+                }
+                if (login != null) {
+                    matching.addAll(installationRepository.findByAccountLogin(login));
+                }
+                for (GitHubInstallation inst : matching) {
+                    if (InstallationStatus.ACTIVE.equals(inst.getStatus())) {
+                        inst.setWorkspaceId(effectiveWsId);
+                        inst.setOrganizationId(null);
+                        inst.setScope("PERSONAL");
+                        inst.setClaimedByUserId(callerUserId);
+                        inst.setUpdatedAt(Instant.now());
+                        inst.setLastSyncedAt(Instant.now());
+                        GitHubInstallation saved = installationRepository.save(inst);
+                        log.info("[GitHub] Auto-associated personal installation {} to personal workspace {}",
+                                inst.getInstallationId(), effectiveWsId);
+                        return Optional.of(saved);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[GitHub] Could not auto-resolve personal installation for user {}: {}", callerUserId, e.getMessage());
+        }
+        return Optional.empty();
     }
 
 
@@ -824,14 +875,21 @@ public class RepositoryApplicationService {
     }
 
     private UUID resolveEffectiveWorkspaceId(UUID organizationId, UUID workspaceId) {
-        if (organizationId == null && workspaceId == null) {
-            throw new IllegalArgumentException("Either organization ID or workspace ID must be provided");
+        if (workspaceId != null) {
+            if (organizationId != null && workspaceRepository != null) {
+                workspaceRepository.findById(workspaceId).ifPresent(ws -> {
+                    if (ws.getOrganizationId() != null && !organizationId.equals(ws.getOrganizationId())) {
+                        throw new IllegalArgumentException(
+                                "Organization context " + organizationId + " does not match workspace org " + ws.getOrganizationId());
+                    }
+                });
+            }
+            return workspaceId;
         }
-        if (organizationId != null && workspaceId != null && !organizationId.equals(workspaceId)) {
-            throw new IllegalArgumentException(
-                    "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+        if (organizationId != null) {
+            return organizationId;
         }
-        return workspaceId != null ? workspaceId : organizationId;
+        throw new IllegalArgumentException("Either organization ID or workspace ID must be provided");
     }
 
     private void requireTenantOrWorkspace(UUID organizationId, UUID workspaceId) {

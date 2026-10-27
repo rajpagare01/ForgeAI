@@ -39,15 +39,39 @@ public class RsaKeyPropertiesConfig {
     @Value("${security.jwt.rsa.private-key:}")
     private String privateKeyPem;
 
+    @Value("${security.jwt.rsa.public-key-path:}")
+    private String publicKeyPath;
+
+    @Value("${security.jwt.rsa.private-key-path:}")
+    private String privateKeyPath;
+
     @Bean
     public RSAKey rsaJwk() {
         try {
             RSAPublicKey publicKey;
             RSAPrivateKey privateKey;
 
-            if (publicKeyPem != null && !publicKeyPem.isBlank() && privateKeyPem != null && !privateKeyPem.isBlank()) {
-                publicKey = parsePublicKey(publicKeyPem);
-                privateKey = parsePrivateKey(privateKeyPem);
+            String pubPem = publicKeyPem;
+            String privPem = privateKeyPem;
+
+            if ((pubPem == null || pubPem.isBlank()) && publicKeyPath != null && !publicKeyPath.isBlank()) {
+                java.nio.file.Path path = java.nio.file.Path.of(publicKeyPath.trim());
+                if (java.nio.file.Files.exists(path)) {
+                    pubPem = java.nio.file.Files.readString(path);
+                    log.info("Loaded RSA public key from file: {}", publicKeyPath);
+                }
+            }
+            if ((privPem == null || privPem.isBlank()) && privateKeyPath != null && !privateKeyPath.isBlank()) {
+                java.nio.file.Path path = java.nio.file.Path.of(privateKeyPath.trim());
+                if (java.nio.file.Files.exists(path)) {
+                    privPem = java.nio.file.Files.readString(path);
+                    log.info("Loaded RSA private key from file: {}", privateKeyPath);
+                }
+            }
+
+            if (pubPem != null && !pubPem.isBlank() && privPem != null && !privPem.isBlank()) {
+                publicKey = parsePublicKey(pubPem);
+                privateKey = parsePrivateKey(privPem);
                 log.info("Initialized RSA Key Pair from external configuration. Key ID: {}", keyId);
             } else {
                 log.warn("External RSA keys not provided in configuration. Generating an ephemeral in-memory 2048-bit RSA key pair for testing/local environment.");

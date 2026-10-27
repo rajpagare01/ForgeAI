@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
     }
 
 
-    @ExceptionHandler({IllegalArgumentException.class, MethodArgumentNotValidException.class, org.springframework.http.converter.HttpMessageNotReadableException.class})
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class, MethodArgumentNotValidException.class, org.springframework.http.converter.HttpMessageNotReadableException.class})
     public ResponseEntity<ApiErrorResponse> handleBadRequest(Exception ex, WebRequest request) {
         String message = ex instanceof MethodArgumentNotValidException ? "Validation failed" : 
                          ex instanceof org.springframework.http.converter.HttpMessageNotReadableException ? "Malformed request body" : ex.getMessage();
