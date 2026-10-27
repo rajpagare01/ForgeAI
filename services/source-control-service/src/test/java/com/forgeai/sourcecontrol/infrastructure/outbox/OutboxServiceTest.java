@@ -47,6 +47,11 @@ class OutboxServiceTest {
         public UUID getOrganizationId() {
             return organizationId;
         }
+
+        @Override
+        public String getScope() {
+            return "ORGANIZATION";
+        }
     }
 
     @Test

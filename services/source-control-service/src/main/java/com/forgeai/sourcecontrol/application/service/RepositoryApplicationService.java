@@ -617,10 +617,7 @@ public class RepositoryApplicationService {
             if ("ORGANIZATION".equalsIgnoreCase(existingRepo.getScope())) {
                 isOwner = organizationId != null && organizationId.equals(existingRepo.getOrganizationId());
             } else if ("PERSONAL".equalsIgnoreCase(existingRepo.getScope())) {
-                isOwner = organizationId == null && targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId());
-            }
-            if (!isOwner && organizationId == null && "PERSONAL".equalsIgnoreCase(scope)) {
-                isOwner = true;
+                isOwner = organizationId == null && (existingRepo.getWorkspaceId() == null || (targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId())));
             }
             if (isOwner) {
                 existingRepo.setOrganizationId(organizationId);
@@ -633,6 +630,9 @@ public class RepositoryApplicationService {
                 existingRepo.setInstallationId(installation.getInstallationId());
                 existingRepo.setUpdatedAt(Instant.now());
                 Repository updated = repositoryRepository.save(existingRepo);
+                if (updated == null) {
+                    updated = existingRepo;
+                }
                 log.info("[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
                         updated.getId(), updated.getFullName(), updated.getGithubRepoId(), organizationId, targetWorkspaceId);
                 return updated;
@@ -875,15 +875,30 @@ public class RepositoryApplicationService {
     }
 
     private UUID resolveEffectiveWorkspaceId(UUID organizationId, UUID workspaceId) {
-        if (workspaceId != null) {
-            if (organizationId != null && workspaceRepository != null) {
-                workspaceRepository.findById(workspaceId).ifPresent(ws -> {
+        if (organizationId != null && workspaceId != null) {
+            if (workspaceRepository != null) {
+                var wsOpt = workspaceRepository.findById(workspaceId);
+                if (wsOpt.isPresent()) {
+                    var ws = wsOpt.get();
                     if (ws.getOrganizationId() != null && !organizationId.equals(ws.getOrganizationId())) {
                         throw new IllegalArgumentException(
-                                "Organization context " + organizationId + " does not match workspace org " + ws.getOrganizationId());
+                                "Organization context " + organizationId + " does not match workspace context " + workspaceId);
                     }
-                });
+                    if ("PERSONAL".equalsIgnoreCase(ws.getType())) {
+                        throw new IllegalArgumentException(
+                                "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+                    }
+                } else if (!organizationId.equals(workspaceId)) {
+                    throw new IllegalArgumentException(
+                            "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+                }
+            } else if (!organizationId.equals(workspaceId)) {
+                throw new IllegalArgumentException(
+                        "Organization context " + organizationId + " does not match workspace context " + workspaceId);
             }
+            return workspaceId;
+        }
+        if (workspaceId != null) {
             return workspaceId;
         }
         if (organizationId != null) {
