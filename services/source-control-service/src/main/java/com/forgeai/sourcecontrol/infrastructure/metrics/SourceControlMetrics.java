@@ -153,6 +153,48 @@ public class SourceControlMetrics {
         outboxDeadLetterCounter.increment();
     }
 
+    public void recordInstallationSuccess() {
+        Counter.builder("github_installation_success_total")
+                .description("Total successful GitHub App installations")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordInstallationFailure() {
+        Counter.builder("github_installation_failure_total")
+                .description("Total failed GitHub App installations")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordInstallationCallbackReplay() {
+        Counter.builder("github_installation_callback_replay_total")
+                .description("Total GitHub App installation callback replay attempts rejected")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordInstallationOwnershipRejection() {
+        Counter.builder("github_installation_ownership_rejection_total")
+                .description("Total GitHub App installation ownership violations rejected")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordRepositoryDiscoverySuccess() {
+        Counter.builder("github_repository_discovery_success_total")
+                .description("Total successful repository discoveries")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordRepositoryDiscoveryFailure() {
+        Counter.builder("github_repository_discovery_failure_total")
+                .description("Total failed repository discoveries")
+                .register(meterRegistry)
+                .increment();
+    }
+
     public static final java.util.UUID QUARANTINE_ORG_ID = java.util.UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     public void reconcileInstallations(java.util.List<com.forgeai.sourcecontrol.domain.model.GitHubInstallation> installations) {

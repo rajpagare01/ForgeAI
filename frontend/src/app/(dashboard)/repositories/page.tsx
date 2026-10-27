@@ -187,11 +187,29 @@ export default function RepositoriesPage() {
     }
   }, [fetchData, isTenantLoading]);
 
-  // Auto-detect GitHub App Setup Callback from URL (?installation_id=...)
+  // Auto-detect GitHub App Setup Callback from URL (?installation_id=..., ?state=..., ?installed=true, ?error=...)
   useEffect(() => {
     if (typeof window === "undefined" || !activeWorkspace?.id) return;
     const params = new URLSearchParams(window.location.search);
     const installationIdStr = params.get("installation_id");
+    const stateParam = params.get("state");
+    const installedParam = params.get("installed");
+    const errorParam = params.get("error");
+
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam));
+      setConnectionState("INSTALLATION_FAILED");
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
+    if (installedParam === "true") {
+      setConnectionState("REPOSITORIES_READY");
+      setSuccess("GitHub App connected and verified successfully!");
+      window.history.replaceState({}, document.title, window.location.pathname);
+      fetchData();
+      return;
+    }
 
     if (installationIdStr) {
       const parsedId = parseInt(installationIdStr, 10);
@@ -203,11 +221,14 @@ export default function RepositoriesPage() {
         // Remove query parameters from URL cleanly
         window.history.replaceState({}, document.title, window.location.pathname);
 
+        // Forward to installation-callback if state exists, or connect endpoint
+        const callbackEndpoint = stateParam ? "/api/v1/github/installation-callback" : "/api/v1/github/connect";
+        const callbackPayload = stateParam
+          ? { workspaceId: activeWorkspace.id, installationId: parsedId, state: stateParam }
+          : { workspaceId: activeWorkspace.id, installationId: parsedId };
+
         apiClient
-          .post<GitHubConnectionResponse>("/api/v1/github/connect", {
-            workspaceId: activeWorkspace.id,
-            installationId: parsedId,
-          })
+          .post<GitHubConnectionResponse>(callbackEndpoint, callbackPayload)
           .then((updatedConn) => {
             setConnection(updatedConn);
             setConnectionState("REPOSITORIES_READY");
@@ -256,13 +277,27 @@ export default function RepositoriesPage() {
       return;
     }
 
-    // Case 2: GitHub user is connected, but App is not installed -> launch GitHub App installation
+    // Case 2: GitHub user is connected, but App is not installed -> launch GitHub App installation with secure state
     if (connection?.installationRequired || connection?.installationStatus !== "ACTIVE") {
       setConnectionState("GITHUB_APP_INSTALLING");
-      const installUrl =
+      setIsConnecting(true);
+      try {
+        const startRes = await apiClient.post<{ state: string; installUrl: string }>(
+          "/api/v1/github/installation-start",
+          { workspaceId: activeWorkspace.id }
+        );
+        if (startRes?.installUrl) {
+          window.location.href = startRes.installUrl;
+          return;
+        }
+      } catch (startErr: any) {
+        console.warn("Failed to generate dynamic installation state URL, using static fallback:", startErr);
+      }
+
+      const fallbackInstallUrl =
         connection?.appInstallUrl ||
         "https://github.com/apps/forgeai-raj-dev/installations/new";
-      window.location.href = installUrl;
+      window.location.href = fallbackInstallUrl;
       return;
     }
 

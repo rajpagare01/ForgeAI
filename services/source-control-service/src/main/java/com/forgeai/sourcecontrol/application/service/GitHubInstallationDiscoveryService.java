@@ -52,6 +52,19 @@ public class GitHubInstallationDiscoveryService {
     private final IdentityServiceClient identityServiceClient;
     private final OutboxService outboxService;
     private final InstallationTelemetryReconciler telemetryReconciler;
+    private final com.forgeai.sourcecontrol.infrastructure.metrics.SourceControlMetrics metrics;
+
+    public GitHubInstallationDiscoveryService(
+            GitHubAppClient gitHubAppClient,
+            GitHubAppConfig gitHubAppConfig,
+            GitHubInstallationRepository installationRepository,
+            RepositoryRepository repositoryRepository,
+            SpringDataWorkspaceRepository workspaceRepository,
+            IdentityServiceClient identityServiceClient,
+            OutboxService outboxService,
+            InstallationTelemetryReconciler telemetryReconciler) {
+        this(gitHubAppClient, gitHubAppConfig, installationRepository, repositoryRepository, workspaceRepository, identityServiceClient, outboxService, telemetryReconciler, null);
+    }
 
     @Autowired
     public GitHubInstallationDiscoveryService(
@@ -62,7 +75,8 @@ public class GitHubInstallationDiscoveryService {
             @Autowired(required = false) SpringDataWorkspaceRepository workspaceRepository,
             IdentityServiceClient identityServiceClient,
             OutboxService outboxService,
-            @Autowired(required = false) InstallationTelemetryReconciler telemetryReconciler) {
+            @Autowired(required = false) InstallationTelemetryReconciler telemetryReconciler,
+            @Autowired(required = false) com.forgeai.sourcecontrol.infrastructure.metrics.SourceControlMetrics metrics) {
         this.gitHubAppClient = gitHubAppClient;
         this.gitHubAppConfig = gitHubAppConfig;
         this.installationRepository = installationRepository;
@@ -71,6 +85,7 @@ public class GitHubInstallationDiscoveryService {
         this.identityServiceClient = identityServiceClient;
         this.outboxService = outboxService;
         this.telemetryReconciler = telemetryReconciler;
+        this.metrics = metrics;
     }
 
     /**
@@ -242,7 +257,7 @@ public class GitHubInstallationDiscoveryService {
     /**
      * Core validation and association routine. Enforces tenant boundaries and ownership.
      */
-    private GitHubInstallation validateAndAssociate(
+    public GitHubInstallation validateAndAssociate(
             UUID callerUserId,
             UUID effectiveWsId,
             UUID organizationId,
@@ -251,6 +266,9 @@ public class GitHubInstallationDiscoveryService {
         // 1. Authoritative metadata fetch from GitHub using App JWT
         GitHubInstallationDetails details = gitHubAppClient.getInstallationDetails(installationId);
         if (details == null) {
+            if (metrics != null) {
+                metrics.recordInstallationFailure();
+            }
             throw new GitHubAccessDeniedException("Installation " + installationId + " could not be resolved on GitHub.");
         }
 
@@ -261,23 +279,34 @@ public class GitHubInstallationDiscoveryService {
         if (isPersonal) {
             if (callerUserId != null) {
                 Optional<IdentityServiceClient.UserGitHubProfile> profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
-                if (profileOpt.isPresent() && profileOpt.get().connected()) {
-                    IdentityServiceClient.UserGitHubProfile profile = profileOpt.get();
-                    boolean idMatches = profile.githubUserId() != null && profile.githubUserId().equals(details.accountId());
-                    boolean loginMatches = profile.githubLogin() != null && profile.githubLogin().equalsIgnoreCase(details.accountLogin());
-
-                    if (!idMatches && !loginMatches) {
-                        log.warn("[Security] Installation ownership verification failed! Caller GitHub account '{}/{}' != Installation account '{}/{}'",
-                                profile.githubLogin(), profile.githubUserId(), details.accountLogin(), details.accountId());
-                        throw new GitHubAccessDeniedException(
-                                "Installation " + installationId + " belongs to GitHub account '" + details.accountLogin() +
-                                        "', which does not match your authenticated GitHub account.");
+                if (profileOpt.isEmpty() || !profileOpt.get().connected()) {
+                    log.warn("[Security] Caller {} has not linked a GitHub account", callerUserId);
+                    if (metrics != null) {
+                        metrics.recordInstallationOwnershipRejection();
+                        metrics.recordInstallationFailure();
                     }
+                    throw new GitHubAccessDeniedException("User must connect GitHub account before claiming a GitHub App installation.");
+                }
+
+                IdentityServiceClient.UserGitHubProfile profile = profileOpt.get();
+                boolean idMatches = profile.githubUserId() != null && profile.githubUserId().equals(details.accountId());
+                boolean loginMatches = profile.githubLogin() != null && profile.githubLogin().equalsIgnoreCase(details.accountLogin());
+
+                if (!idMatches && !loginMatches) {
+                    log.warn("[Security] Installation ownership verification failed! Caller GitHub account '{}/{}' != Installation account '{}/{}'",
+                            profile.githubLogin(), profile.githubUserId(), details.accountLogin(), details.accountId());
+                    if (metrics != null) {
+                        metrics.recordInstallationOwnershipRejection();
+                        metrics.recordInstallationFailure();
+                    }
+                    throw new GitHubAccessDeniedException(
+                            "Installation " + installationId + " belongs to GitHub account '" + details.accountLogin() +
+                                    "', which does not match your authenticated GitHub account.");
                 }
             }
         }
 
-        // 3. Multi-Tenant Collision Check
+        // 3. Multi-Tenant Collision Check & Cross-User Anti-Hijacking
         Optional<GitHubInstallation> existingClaimOpt = installationRepository.findByInstallationId(installationId);
         if (existingClaimOpt.isPresent()) {
             GitHubInstallation existing = existingClaimOpt.get();
@@ -288,10 +317,24 @@ public class GitHubInstallationDiscoveryService {
                     || existing.getStatus() == InstallationStatus.CLAIMABLE;
 
             if (!inQuarantine) {
+                // If installation is already claimed by another user, forbid reassignment
+                if (existing.getClaimedByUserId() != null && callerUserId != null && !callerUserId.equals(existing.getClaimedByUserId())) {
+                    log.warn("[Security] Cross-user installation hijack attempt blocked! Existing owner={}, Caller={}",
+                            existing.getClaimedByUserId(), callerUserId);
+                    if (metrics != null) {
+                        metrics.recordInstallationOwnershipRejection();
+                        metrics.recordInstallationFailure();
+                    }
+                    throw new GitHubAccessDeniedException(
+                            "Installation " + installationId + " is already claimed by another user.");
+                }
+
                 if (organizationId != null && organizationId.equals(existing.getOrganizationId())) {
+                    if (metrics != null) metrics.recordInstallationSuccess();
                     return existing;
                 }
                 if (effectiveWsId != null && effectiveWsId.equals(existing.getWorkspaceId())) {
+                    if (metrics != null) metrics.recordInstallationSuccess();
                     return existing;
                 }
                 if (isPersonal) {
@@ -305,15 +348,22 @@ public class GitHubInstallationDiscoveryService {
                     existing.setUpdatedAt(Instant.now());
                     existing.setLastSyncedAt(Instant.now());
                     GitHubInstallation saved = installationRepository.save(existing);
+                    if (metrics != null) metrics.recordInstallationSuccess();
                     try {
                         List<GitHubRepositoryMetadata> accessibleRepos = gitHubAppClient.listInstallationRepositories(installationId);
                         for (GitHubRepositoryMetadata ghRepo : accessibleRepos) {
                             syncRepositoryRecord(ghRepo, saved);
                         }
+                        if (metrics != null) metrics.recordRepositoryDiscoverySuccess();
                     } catch (Exception e) {
                         log.warn("[GitHub] Could not sync repos during personal association: {}", e.getMessage());
+                        if (metrics != null) metrics.recordRepositoryDiscoveryFailure();
                     }
                     return saved;
+                }
+                if (metrics != null) {
+                    metrics.recordInstallationOwnershipRejection();
+                    metrics.recordInstallationFailure();
                 }
                 throw new GitHubAccessDeniedException(
                         "Installation " + installationId + " is already claimed by another organization or workspace.");
@@ -359,6 +409,9 @@ public class GitHubInstallationDiscoveryService {
         if (telemetryReconciler != null) {
             telemetryReconciler.reconcile();
         }
+        if (metrics != null) {
+            metrics.recordInstallationSuccess();
+        }
 
         log.info("[GitHub] Successfully associated installation {} with workspace {} (scope={})",
                 installationId, effectiveWsId, scope);
@@ -369,8 +422,14 @@ public class GitHubInstallationDiscoveryService {
             for (GitHubRepositoryMetadata ghRepo : accessibleRepos) {
                 syncRepositoryRecord(ghRepo, savedInstallation);
             }
+            if (metrics != null) {
+                metrics.recordRepositoryDiscoverySuccess();
+            }
         } catch (Exception e) {
             log.warn("[GitHub] Could not immediately discover repositories for installation {}: {}", installationId, e.getMessage());
+            if (metrics != null) {
+                metrics.recordRepositoryDiscoveryFailure();
+            }
         }
 
         return savedInstallation;

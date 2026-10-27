@@ -29,6 +29,8 @@ public class SecurityConfig {
                         .pathMatchers("/.well-known/**").permitAll()
                         .pathMatchers("/api/v1/auth/**").permitAll()
                         .pathMatchers("/api/v1/webhooks/**").permitAll()
+                        .pathMatchers("/api/v1/github/installation-callback/**", "/api/v1/github/installation-callback").permitAll()
+                        .pathMatchers("/api/v1/installations/setup-callback/**", "/api/v1/installations/setup-callback").permitAll()
                         .pathMatchers("/api/v1/ai/health", "/api/v1/ai/healthz").permitAll()
                         .anyExchange().authenticated()
                 )

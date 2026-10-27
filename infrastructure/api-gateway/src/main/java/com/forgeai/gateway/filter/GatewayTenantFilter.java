@@ -54,6 +54,8 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                 || path.startsWith("/.well-known")
                 || path.startsWith("/api/v1/auth")
                 || path.startsWith("/api/v1/webhooks")
+                || path.startsWith("/api/v1/github/installation-callback")
+                || path.startsWith("/api/v1/installations/setup-callback")
                 || path.equals("/api/v1/ai/health")
                 || path.equals("/api/v1/ai/healthz");
     }
