@@ -112,7 +112,7 @@ export const Sidebar: React.FC = () => {
             Core Governance Anchor
           </div>
           <Link
-            href="/projects/proj-forgeai-core/traceability"
+            href="/traceability"
             className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-slate-300 hover:bg-slate-900 border border-slate-800/80 hover:border-indigo-500/40 transition-all bg-gradient-to-r from-indigo-950/20 to-purple-950/20"
           >
             <Layers className="h-4 w-4 text-indigo-400 shrink-0" />

@@ -1092,22 +1092,31 @@ public class TraceabilityAggregationService {
 
     @Transactional(readOnly = true)
     public TraceabilitySnapshotResponse getSnapshot(UUID organizationId, UUID snapshotId) {
-        return getSnapshot(organizationId, snapshotId, null);
+        return getSnapshot(organizationId, null, snapshotId, null);
     }
 
     @Transactional(readOnly = true)
     public TraceabilitySnapshotResponse getSnapshot(UUID organizationId, UUID snapshotId, UUID userId) {
+        return getSnapshot(organizationId, null, snapshotId, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public TraceabilitySnapshotResponse getSnapshot(UUID organizationId, UUID projectId, UUID snapshotId, UUID userId) {
         validateTenant(organizationId);
+        TraceabilitySnapshot snapshot;
         if (organizationId != null) {
-            return traceabilitySnapshotRepository.findById(organizationId, snapshotId)
-                    .map(TraceabilitySnapshotResponse::from)
+            snapshot = traceabilitySnapshotRepository.findById(organizationId, snapshotId)
                     .orElseThrow(() -> new ResourceNotFoundException("Snapshot not found: id=" + snapshotId));
+        } else {
+            snapshot = traceabilitySnapshotRepository.findById(snapshotId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Snapshot not found: id=" + snapshotId));
+            Project project = projectRepository.findById(snapshot.getProjectId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + snapshot.getProjectId()));
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
         }
-        TraceabilitySnapshot snapshot = traceabilitySnapshotRepository.findById(snapshotId)
-                .orElseThrow(() -> new ResourceNotFoundException("Snapshot not found: id=" + snapshotId));
-        Project project = projectRepository.findById(snapshot.getProjectId())
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + snapshot.getProjectId()));
-        verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        if (projectId != null && !projectId.equals(snapshot.getProjectId())) {
+            throw new ResourceNotFoundException("Snapshot not found for project: id=" + snapshotId);
+        }
         return TraceabilitySnapshotResponse.from(snapshot);
     }
 
@@ -1181,7 +1190,7 @@ public class TraceabilityAggregationService {
         }
 
         for (RemoteAiAnalysisDto analysis : analyses) {
-            if (analysis.getRiskScore() != null && analysis.getRiskScore() >= 0.70) {
+            if (analysis.getRiskScore() != null && (analysis.getRiskScore() >= 70.0 || (analysis.getRiskScore() <= 1.0 && analysis.getRiskScore() >= 0.70))) {
                 gaps.add(TraceabilityGap.builder()
                         .gapType(GapType.HIGH_RISK_REQUIREMENT)
                         .artifactId(req.getId().toString())
@@ -1197,9 +1206,13 @@ public class TraceabilityAggregationService {
         boolean hasBlockedPr = prs.stream().anyMatch(pr -> {
             String prKey = pr.getRepositoryId() + "#" + pr.getPrNumber();
             List<RemoteAiAnalysisDto> al = analyses.stream().filter(a -> prKey.equals(a.getEntityId())).toList();
-            return al.stream().anyMatch(a -> a.getMergeReadiness() != null &&
-                    ("BLOCKED".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status"))) ||
-                     "NOT_READY".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status")))));
+            return al.stream().anyMatch(a -> {
+                if (a.getMergeReadiness() == null) return false;
+                Object val = a.getMergeReadiness().get("decision");
+                if (val == null) val = a.getMergeReadiness().get("status");
+                String s = String.valueOf(val);
+                return "BLOCKED".equalsIgnoreCase(s) || "NOT_READY".equalsIgnoreCase(s) || "BLOCKED_BY_MISSING_EVIDENCE".equalsIgnoreCase(s);
+            });
         });
 
         if (hasBlockedTask || hasBlockedPr) {
@@ -1404,9 +1417,13 @@ public class TraceabilityAggregationService {
                 String prKey = pr.getRepositoryId() + "#" + pr.getPrNumber();
                 failing = allAnalyses.stream()
                         .filter(a -> prKey.equals(a.getEntityId()))
-                        .anyMatch(a -> a.getMergeReadiness() != null &&
-                                ("BLOCKED".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status"))) ||
-                                 "NOT_READY".equalsIgnoreCase(String.valueOf(a.getMergeReadiness().get("status")))));
+                        .anyMatch(a -> {
+                            if (a.getMergeReadiness() == null) return false;
+                            Object val = a.getMergeReadiness().get("decision");
+                            if (val == null) val = a.getMergeReadiness().get("status");
+                            String s = String.valueOf(val);
+                            return "BLOCKED".equalsIgnoreCase(s) || "NOT_READY".equalsIgnoreCase(s) || "BLOCKED_BY_MISSING_EVIDENCE".equalsIgnoreCase(s);
+                        });
             }
             if (failing) {
                 failingPrs++;

@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import date, datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 import asyncpg
 
@@ -165,7 +165,8 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
     async def find_by_content_hash(self, org_id: UUID, content_hash: str) -> Optional[CodeChunk]:
         query = """
             SELECT id, organization_id, repository_id, commit_sha, file_path,
-                   symbol_name, symbol_type, content, content_hash, is_current, created_at
+                   symbol_name, symbol_type, content, content_hash, is_current, created_at,
+                   embedding::text AS embedding_str
             FROM code_chunks
             WHERE organization_id = $1 AND content_hash = $2
             LIMIT 1;
@@ -173,6 +174,12 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(query, org_id, content_hash)
             if row:
+                emb = None
+                if row.get("embedding_str"):
+                    try:
+                        emb = [float(x) for x in row["embedding_str"].strip("[]").split(",") if x.strip()]
+                    except Exception:
+                        emb = None
                 return CodeChunk(
                     id=row["id"],
                     organization_id=row["organization_id"],
@@ -183,10 +190,48 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                     symbol_type=row["symbol_type"],
                     content=row["content"],
                     content_hash=row["content_hash"],
+                    embedding=emb,
                     is_current=row.get("is_current", True),
                     created_at=row["created_at"],
                 )
         return None
+
+    async def get_by_repository(self, org_id: UUID, repo_id: UUID) -> List[CodeChunk]:
+        query = """
+            SELECT id, organization_id, repository_id, commit_sha, file_path,
+                   symbol_name, symbol_type, content, content_hash, is_current, created_at,
+                   embedding::text AS embedding_str
+            FROM code_chunks
+            WHERE organization_id = $1 AND repository_id = $2 AND is_current = TRUE
+            ORDER BY file_path ASC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, repo_id)
+            chunks = []
+            for r in rows:
+                emb = None
+                if r.get("embedding_str"):
+                    try:
+                        emb = [float(x) for x in r["embedding_str"].strip("[]").split(",") if x.strip()]
+                    except Exception:
+                        emb = None
+                chunks.append(
+                    CodeChunk(
+                        id=r["id"],
+                        organization_id=r["organization_id"],
+                        repository_id=r["repository_id"],
+                        commit_sha=r["commit_sha"],
+                        file_path=r["file_path"],
+                        symbol_name=r["symbol_name"],
+                        symbol_type=r["symbol_type"],
+                        content=r["content"],
+                        content_hash=r["content_hash"],
+                        embedding=emb,
+                        is_current=r.get("is_current", True),
+                        created_at=r["created_at"],
+                    )
+                )
+            return chunks
 
     async def similarity_search(
         self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None, only_current: bool = True
@@ -691,9 +736,9 @@ class AsyncpgTestValidationFeedbackRepository(TestValidationFeedbackRepository):
                 feedback.passed_count,
                 feedback.failed_count,
                 feedback.high_priority_missed_count,
-                float(feedback.prediction_to_failure_correlation),
-                float(feedback.test_selection_efficiency),
-                json.dumps(feedback.metrics),
+                float(feedback.prediction_to_failure_correlation) if feedback.prediction_to_failure_correlation is not None else 0.0,
+                float(feedback.test_selection_efficiency) if feedback.test_selection_efficiency is not None else 0.0,
+                json.dumps(feedback.metrics or {}),
                 feedback.created_at,
             )
         return feedback
@@ -725,9 +770,9 @@ class AsyncpgTestValidationFeedbackRepository(TestValidationFeedbackRepository):
             passed_count=r["passed_count"],
             failed_count=r["failed_count"],
             high_priority_missed_count=r["high_priority_missed_count"],
-            prediction_to_failure_correlation=float(r["prediction_to_failure_correlation"]),
-            test_selection_efficiency=float(r["test_selection_efficiency"]),
-            metrics=json.loads(r["metrics"]) if r["metrics"] else {},
+            prediction_to_failure_correlation=float(r["prediction_to_failure_correlation"]) if r["prediction_to_failure_correlation"] is not None else None,
+            test_selection_efficiency=float(r["test_selection_efficiency"]) if r["test_selection_efficiency"] is not None else None,
+            metrics=r["metrics"] if isinstance(r["metrics"], dict) else (json.loads(r["metrics"]) if r["metrics"] else {}),
             created_at=r["created_at"],
         )
 
@@ -795,7 +840,7 @@ class AsyncpgIndexJobRepository(IndexJobRepository):
             LIMIT 1;
         """
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(query, org_id, repository_id, commit_sha)
+            row = await conn.fetchrow(query, organization_id, repository_id, commit_sha)
             if row:
                 return self._row_to_job(row)
         return None
@@ -979,11 +1024,23 @@ class AsyncpgMergeEvaluationRepository(MergeEvaluationRepository):
         return [self._row_to_evaluation(r) for r in rows]
 
     def _row_to_evaluation(self, r: Any) -> MergeEvaluation:
-        b_reasons = json.loads(r["blocking_reasons"]) if r.get("blocking_reasons") else []
-        warns = json.loads(r["warnings"]) if r.get("warnings") else []
-        req_actions = json.loads(r["required_actions"]) if r.get("required_actions") else []
-        req_checks = json.loads(r["required_checks"]) if r.get("required_checks") else []
-        req_tests = json.loads(r["required_tests"]) if r.get("required_tests") else []
+        def _to_list(val):
+            if val is None:
+                return []
+            if isinstance(val, list):
+                return val
+            if isinstance(val, str):
+                try:
+                    return json.loads(val)
+                except Exception:
+                    return [val]
+            return []
+
+        b_reasons = _to_list(r.get("blocking_reasons"))
+        warns = _to_list(r.get("warnings"))
+        req_actions = _to_list(r.get("required_actions"))
+        req_checks = _to_list(r.get("required_checks"))
+        req_tests = _to_list(r.get("required_tests"))
         return MergeEvaluation(
             id=r["id"],
             analysis_id=r["analysis_id"],
@@ -1338,6 +1395,71 @@ class AsyncpgSecurityAssessmentRepository(SecurityAssessmentRepository):
             metadata=meta,
         )
 
+    async def get_by_analysis_id(
+        self, org_id: UUID, analysis_id: UUID
+    ) -> Optional[Tuple[SecurityAssessment, List[SecurityFinding]]]:
+        assessment_query = """
+            SELECT security_status, evidence_status, security_risk_score,
+                   critical_count, high_count, medium_count, low_count, summary, metadata
+            FROM security_assessments
+            WHERE organization_id = $1 AND analysis_id = $2
+            ORDER BY created_at DESC LIMIT 1;
+        """
+        findings_query = """
+            SELECT id, organization_id, repository_id, analysis_id, pr_number,
+                   commit_sha, category, rule_id, severity, confidence,
+                   title, description, file_path, line_number, redacted_evidence,
+                   remediation, is_blocker, metadata, created_at
+            FROM security_findings
+            WHERE organization_id = $1 AND analysis_id = $2
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            a_row = await conn.fetchrow(assessment_query, org_id, analysis_id)
+            if not a_row:
+                return None
+            f_rows = await conn.fetch(findings_query, org_id, analysis_id)
+
+        findings = [
+            SecurityFinding(
+                id=r["id"],
+                organization_id=r["organization_id"],
+                repository_id=r["repository_id"],
+                analysis_id=r["analysis_id"],
+                pr_number=r["pr_number"],
+                commit_sha=r["commit_sha"],
+                category=r["category"],
+                rule_id=r["rule_id"],
+                severity=r["severity"],
+                confidence=r["confidence"],
+                title=r["title"],
+                description=r["description"],
+                file_path=r["file_path"],
+                line_number=r["line_number"],
+                redacted_evidence=r["redacted_evidence"],
+                remediation=r["remediation"],
+                is_blocker=r["is_blocker"],
+                metadata=json.loads(r["metadata"]) if isinstance(r["metadata"], str) else (r["metadata"] or {}),
+                created_at=r["created_at"],
+            )
+            for r in f_rows
+        ]
+
+        meta = json.loads(a_row["metadata"]) if isinstance(a_row["metadata"], str) else (a_row["metadata"] or {})
+        assessment = SecurityAssessment(
+            security_status=a_row["security_status"],
+            evidence_status=a_row["evidence_status"],
+            security_risk_score=a_row["security_risk_score"],
+            critical_count=a_row["critical_count"],
+            high_count=a_row["high_count"],
+            medium_count=a_row["medium_count"],
+            low_count=a_row["low_count"],
+            findings=findings,
+            summary=a_row["summary"] or "",
+            metadata=meta,
+        )
+        return assessment, findings
+
 
 class AsyncpgReliabilityAssessmentRepository(ReliabilityAssessmentRepository):
     def __init__(self, pool: asyncpg.Pool):
@@ -1485,6 +1607,71 @@ class AsyncpgReliabilityAssessmentRepository(ReliabilityAssessmentRepository):
             summary=a_row["summary"] or "",
             metadata=meta,
         )
+
+    async def get_by_analysis_id(
+        self, org_id: UUID, analysis_id: UUID
+    ) -> Optional[Tuple[ReliabilityAssessment, List[ReliabilityFinding]]]:
+        assessment_query = """
+            SELECT reliability_status, evidence_status, reliability_risk_score,
+                   critical_count, high_count, medium_count, low_count, summary, metadata
+            FROM reliability_assessments
+            WHERE organization_id = $1 AND analysis_id = $2
+            ORDER BY created_at DESC LIMIT 1;
+        """
+        findings_query = """
+            SELECT id, organization_id, repository_id, analysis_id, pr_number,
+                   commit_sha, category, rule_id, severity, confidence,
+                   title, description, file_path, line_number, evidence,
+                   remediation, is_blocker, metadata, created_at
+            FROM reliability_findings
+            WHERE organization_id = $1 AND analysis_id = $2
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            a_row = await conn.fetchrow(assessment_query, org_id, analysis_id)
+            if not a_row:
+                return None
+            f_rows = await conn.fetch(findings_query, org_id, analysis_id)
+
+        findings = [
+            ReliabilityFinding(
+                id=r["id"],
+                organization_id=r["organization_id"],
+                repository_id=r["repository_id"],
+                analysis_id=r["analysis_id"],
+                pr_number=r["pr_number"],
+                commit_sha=r["commit_sha"],
+                category=r["category"],
+                rule_id=r["rule_id"],
+                severity=r["severity"],
+                confidence=r["confidence"],
+                title=r["title"],
+                description=r["description"],
+                file_path=r["file_path"],
+                line_number=r["line_number"],
+                evidence=r["evidence"],
+                remediation=r["remediation"],
+                is_blocker=r["is_blocker"],
+                metadata=json.loads(r["metadata"]) if isinstance(r["metadata"], str) else (r["metadata"] or {}),
+                created_at=r["created_at"],
+            )
+            for r in f_rows
+        ]
+
+        meta = json.loads(a_row["metadata"]) if isinstance(a_row["metadata"], str) else (a_row["metadata"] or {})
+        assessment = ReliabilityAssessment(
+            reliability_status=a_row["reliability_status"],
+            evidence_status=a_row["evidence_status"],
+            reliability_risk_score=a_row["reliability_risk_score"],
+            critical_count=a_row["critical_count"],
+            high_count=a_row["high_count"],
+            medium_count=a_row["medium_count"],
+            low_count=a_row["low_count"],
+            findings=findings,
+            summary=a_row["summary"] or "",
+            metadata=meta,
+        )
+        return assessment, findings
 
 
 class AsyncpgEngineeringActionRepository(EngineeringActionRepository):

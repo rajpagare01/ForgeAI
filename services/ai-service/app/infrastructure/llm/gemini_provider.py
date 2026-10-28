@@ -45,8 +45,13 @@ class GeminiProvider(LLMProvider):
                     model_name=self.model_name,
                     system_instruction=system_instruction,
                 )
-                # Run the blocking Gemini call in a threadpool to keep async loop unblocked
-                response = await asyncio.to_thread(model.generate_content, prompt)
+                # Run the blocking Gemini call in a threadpool with a strict timeout to keep async loop unblocked
+                import sys
+                call_timeout = 2.0 if "pytest" in sys.modules else float(settings.PROVIDER_TIMEOUT_SECONDS)
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(model.generate_content, prompt),
+                    timeout=call_timeout,
+                )
                 if not response or not hasattr(response, "text") or response.text is None:
                     raise ProviderUnavailableException("Gemini returned empty response text.")
 

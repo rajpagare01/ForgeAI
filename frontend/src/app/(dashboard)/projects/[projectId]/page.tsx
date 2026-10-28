@@ -466,11 +466,9 @@ function ProjectDetailContent() {
                   ))}
                 </select>
               ) : (
-                <Input
-                  placeholder="e.g. REQ-501"
-                  value={selectedReqId}
-                  onChange={(e) => setSelectedReqId(e.target.value)}
-                />
+                <div className="flex h-10 w-full items-center rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-slate-500 italic">
+                  No requirements created yet (leaving unbound)
+                </div>
               )}
             </div>
           </div>

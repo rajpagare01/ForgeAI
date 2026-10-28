@@ -52,6 +52,12 @@ class InMemoryCodeChunkRepository(CodeChunkRepository):
                 count += 1
         return count
 
+    async def get_by_repository(self, org_id: UUID, repo_id: UUID) -> List[CodeChunk]:
+        return [
+            c for c in self.chunks
+            if c.organization_id == org_id and c.repository_id == repo_id and c.is_current
+        ]
+
     async def similarity_search(
         self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None, only_current: bool = True
     ) -> List[Dict[str, Any]]:

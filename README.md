@@ -15,10 +15,11 @@ ForgeAI is an enterprise-grade AI Engineering Operating System and Governance Ma
 ## 🌟 Key Highlights & Architecture
 
 - **Unified One-Click GitHub Connection:** Frictionless GitHub App onboarding combining GitHub OAuth identity linking with GitHub App installation. Automatically discovers installations, persists associations, and verifies webhook signatures with zero manual installation IDs.
-- **Strict Multi-Tenant & Personal Workspace Isolation:** Complete support for both enterprise organizations and personal developer workspaces (`organization_id = NULL`). Strict isolation guarantees that no user can access, enumerate, or spoof repositories across workspaces.
+- **Strict Multi-Tenant & Personal Workspace Isolation:** Complete support for both enterprise organizations and personal developer workspaces (`organization_id = NULL`). Personal workspaces do not require an organization context. Strict isolation guarantees that developers only see and manage their own repositories.
+- **Live Repository Discovery & Access Delegation:** Once connected, ForgeAI discovers all public and private repositories accessible under the developer's GitHub account or organization installation. Developers can connect repositories with a single click, granting access for automated webhook ingestion, CI test reporting, and AI blast radius scanning.
 - **Traceability Spine (`REQ -> TASK -> PR -> COMMIT -> TEST -> AI`):** Complete bidirectional audit trail mapping requirements to code modifications, JUnit test runs, and blast radius risk scores.
-- **AI-Powered Code Intelligence & Blast Radius:** Semantic AST diff analysis, regression risk prediction, and automated test impact analysis.
-- **Enterprise Security & Observability:** RS256 JWT tokens, single-use anti-replay installation states, distributed W3C trace correlation (`traceparent`, `X-Correlation-Id`), and Redis rate limiting.
+- **AI-Powered Code Intelligence & Blast Radius:** Semantic AST diff analysis, regression risk prediction, test effectiveness correlation, and automated test impact analysis powered by Google Gemini and Groq LLMs.
+- **Enterprise Security & Observability:** RS256 JWT tokens, single-use anti-replay installation states, distributed W3C trace correlation (`traceparent`, `X-Correlation-Id`), internal service mesh attestation (`X-ForgeAI-Internal: attested`), and Redis rate limiting.
 
 ---
 
@@ -65,15 +66,51 @@ flowchart TD
 
 | Service | Port | Technology | Primary Responsibilities |
 | :--- | :--- | :--- | :--- |
-| **API Gateway** | `8080` | Spring Cloud Gateway (Reactive) | JWT verification, route aggregation, rate limiting, CORS, tenant header validation |
-| **Frontend Dashboard** | `3000` | Next.js 16 (Turbopack), Tailwind CSS | Platform workspace UI, one-click GitHub connect, project boards, traceability matrices |
-| **Identity Service** | `8081` | Spring Boot 3, Spring Security | User authentication, RS256 JWT issuance, GitHub OAuth 2.0 identity linking, workspace lifecycle |
+| **API Gateway** | `8080` | Spring Cloud Gateway (Reactive) | JWT verification, route aggregation, rate limiting, CORS, tenant header validation, internal marker attestation |
+| **Frontend Dashboard** | `3000` | Next.js 16 (Turbopack), Tailwind CSS | Platform workspace UI, one-click GitHub connect, project boards, traceability matrices, AI insights |
+| **Identity Service** | `8081` | Spring Boot 3, Spring Security | User authentication, RS256 JWT issuance, GitHub OAuth 2.0 identity linking, workspace lifecycle management |
 | **Source Control** | `8082` | Spring Boot 3, Flyway (V9) | GitHub App integration, cryptographic single-use installation callback, branch/commit sync, PR governance |
 | **Testing Service** | `8083` | Spring Boot 3, PostgreSQL | JUnit test report ingestion, automated test runs, test-to-requirement traceability |
-| **AI Service** | `8084` | Python 3.11, FastAPI | Semantic AST code intelligence, regression risk modeling, code churn and blast radius calculation |
+| **AI Service** | `8084` | Python 3.11, FastAPI, pgvector | Semantic AST code intelligence, regression risk modeling, code churn, and blast radius calculation |
 | **Project Service** | `8085` | Spring Boot 3, PostgreSQL | Governed projects, sprint tasks, requirements backlog, traceability spine aggregation |
-| **PostgreSQL** | `5432` | PostgreSQL 16 | Relational stores for all core domain services (Flyway managed migrations) |
+| **PostgreSQL** | `5432` | PostgreSQL 16 + pgvector | Relational stores for all core domain services (Flyway managed migrations) |
 | **Redis** | `6379` | Redis 7 Alpine | Gateway distributed rate limiting, token revocation lists, caching |
+
+---
+
+## 🔗 Unified GitHub Onboarding & Workspace Isolation
+
+ForgeAI provides a seamless, developer-friendly onboarding experience:
+
+```text
+ForgeAI Platform
+   ↓
+[ Connect GitHub / Login with GitHub ]
+   ↓
+GitHub OAuth & App Verification
+   ↓
+┌────────────────────────────────────────────────────────┐
+│ Personal Workspace (organization_id = NULL)            │
+│  - No organization required                            │
+│  - GitHub App automatically bound to user workspace    │
+│  - Private and public repositories discovered live     │
+│  - Single click to grant access to repository          │
+└────────────────────────────────────────────────────────┘
+   OR
+┌────────────────────────────────────────────────────────┐
+│ Organization Workspace (organization_id = UUID)        │
+│  - Team-level GitHub App installation                  │
+│  - Multi-tenant role-based isolation                   │
+└────────────────────────────────────────────────────────┘
+   ↓
+Repositories Connected & Monitored
+   ↓
+Automated Webhooks / PR Analysis / Traceability Spine
+```
+
+- **Zero Manual IDs:** Users never need to manually enter or copy installation IDs or repository numeric IDs.
+- **Dual Flow Security:** GitHub user OAuth sessions are strictly separated from GitHub App installation tokens. Browser sessions use standard ForgeAI RS256 JWTs.
+- **Repository Isolation:** Repositories connected in a personal workspace are strictly partitioned (`scope = 'PERSONAL'`, `workspace_id = <user-workspace-id>`). Cross-tenant or cross-workspace access attempts are rejected with `404 Not Found` or `403 Forbidden`.
 
 ---
 
@@ -84,6 +121,7 @@ flowchart TD
 - **Docker Desktop** (with Docker Compose v2)
 - **Node.js 20+** and **npm**
 - **Java 21 JDK** & **Maven 3.9+** (for host development and test suites)
+- **Python 3.11+** (for AI Service)
 
 ### 1. Clone & Configure Environment
 
@@ -95,12 +133,19 @@ cd ForgeAI
 Create a `.env` file in the project root:
 
 ```env
-# GitHub App Configuration
+# GitHub App & OAuth Configuration
 GITHUB_APP_ID=your_github_app_id
 GITHUB_APP_SLUG=your_github_app_slug
 GITHUB_CLIENT_ID=your_github_oauth_client_id
 GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
 GITHUB_WEBHOOK_SECRET=your_webhook_secret
+
+# AI Models (Gemini & Groq)
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-1.5-flash
+GEMINI_EMBEDDING_MODEL=models/text-embedding-004
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.3-70b-versatile
 
 # Database & Infrastructure
 POSTGRES_USER=forgeai
@@ -108,7 +153,7 @@ POSTGRES_PASSWORD=password
 JWT_ISSUER=forgeai-identity
 ```
 
-Ensure your GitHub App RSA private key is located at `secrets/github-app-private-key.pem`.
+Ensure your GitHub App RSA private key is placed at `secrets/github-app-private-key.pem`.
 
 ### 2. Launch the Platform
 
@@ -130,6 +175,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 - **API Gateway:** [http://localhost:8080](http://localhost:8080)
 - **Identity Actuator:** [http://localhost:8081/actuator/health](http://localhost:8081/actuator/health)
 - **Source Control Actuator:** [http://localhost:8082/actuator/health](http://localhost:8082/actuator/health)
+- **AI Service Health:** [http://localhost:8084/healthz](http://localhost:8084/healthz)
 
 ---
 
@@ -143,25 +189,39 @@ ForgeAI features an audited security model:
 2. **Strict Multi-User Isolation:**
    - User B cannot view, query, or enumerate User A's repositories or installations.
    - Direct cross-user repository lookup returns `404 Not Found` (blocking identifier enumeration).
-   - Header spoofing (`X-Workspace-Id`) is rejected with `403 Forbidden`.
-3. **Automated Verification Suite:**
-   - Unit & Adversarial Tests: `mvn test -pl services/source-control-service -Dtest=GitHubInstallationLifecycleSecurityTest`
-   - End-to-End Live Runtime Script: `node scratch/verify_live_github_flow.cjs`
+   - Header spoofing (`X-Workspace-Id`, `X-Org-Id`) is rejected with `403 Forbidden` unless attested by the API Gateway (`X-ForgeAI-Internal: attested`).
+3. **Automated Verification Suites:**
+   - Source Control Security & Adversarial Tests: `mvn test -pl services/source-control-service -Dtest=GitHubInstallationLifecycleSecurityTest`
+   - Workspace Security E2E Tests: `mvn test -pl services/source-control-service -Dtest=SourceControlWorkspaceSecurityE2ETest`
+   - AI Engine Test Suite: `pytest services/ai-service/tests`
+   - Frontend Unit & Component Tests: `npm test --prefix frontend`
 
 ---
 
 ## 🧪 Running Tests
 
-### Source Control Security Suite (Adversarial Tests A–H)
+### Source Control Security Suite
 
 ```bash
-mvn test -pl services/source-control-service -Dtest=GitHubInstallationLifecycleSecurityTest
+mvn test -pl services/source-control-service
 ```
 
-### Full Integration Verification
+### AI Service Test Suite
 
 ```bash
-node scratch/verify_live_github_flow.cjs
+pytest services/ai-service/tests
+```
+
+### Frontend Test Suite
+
+```bash
+npm test --prefix frontend
+```
+
+### Full Maven Reactor Compile
+
+```bash
+mvn compile -DskipTests
 ```
 
 ---

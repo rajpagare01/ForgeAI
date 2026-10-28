@@ -53,13 +53,22 @@ public class WorkflowRunTestingServiceForwarder {
         String jsonPayload = objectMapper.writeValueAsString(event);
         String targetUrl = testingServiceUrl + "/api/v1/internal/workflow-runs";
 
-        HttpRequest request = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(targetUrl))
                 .timeout(Duration.ofSeconds(10))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
-                .header("X-Org-Id", event.getOrganizationId().toString())
                 .header("X-Trace-Id", envelope.getTraceId() != null ? envelope.getTraceId() : "")
+                .header("X-ForgeAI-Internal", "attested");
+
+        if (event.getOrganizationId() != null) {
+            requestBuilder.header("X-Org-Id", event.getOrganizationId().toString());
+        }
+        if (event.getWorkspaceId() != null) {
+            requestBuilder.header("X-Workspace-Id", event.getWorkspaceId().toString());
+        }
+
+        HttpRequest request = requestBuilder
                 .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .build();
 

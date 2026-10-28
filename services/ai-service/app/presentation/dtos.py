@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
@@ -6,8 +6,16 @@ from datetime import datetime
 
 
 class IndexFileInput(BaseModel):
-    file_path: str
-    content: str
+    file_path: str = ""
+    content: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_filename(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("file_path") and data.get("filename"):
+                data["file_path"] = data["filename"]
+        return data
 
 
 class EnqueueIndexJobRequest(BaseModel):
@@ -180,7 +188,7 @@ class TestStrategyDTO(BaseModel):
 
 class TestValidationRequest(BaseModel):
     repository_id: UUID
-    analysis_id: UUID
+    analysis_id: Optional[UUID] = None
     commit_sha: str
     workflow_run_id: Optional[int] = None
     executed_tests: List[Dict[str, Any]] = Field(default_factory=list)
@@ -188,7 +196,7 @@ class TestValidationRequest(BaseModel):
 
 class TestValidationResponse(BaseModel):
     status: str
-    analysis_id: UUID
+    analysis_id: Optional[UUID] = None
     commit_sha: str
     workflow_run_id: Optional[int] = None
     metrics: Dict[str, Any] = Field(default_factory=dict)
@@ -196,6 +204,7 @@ class TestValidationResponse(BaseModel):
 
 class AnalysisResponseDTO(BaseModel):
     id: UUID
+    analysis_id: Optional[UUID] = None
     organization_id: UUID
     entity_type: str
     entity_id: str
@@ -218,6 +227,8 @@ class AnalysisResponseDTO(BaseModel):
     changed_components: Optional[Dict[str, Any]] = None
     direct_impact: Optional[List[Dict[str, Any]]] = None
     transitive_impact: Optional[List[Dict[str, Any]]] = None
+    engineering_actions: List[Dict[str, Any]] = Field(default_factory=list)
+    remediation_summary: Optional[str] = None
     affected_modules: Optional[List[str]] = None
     affected_tests: Optional[List[Dict[str, Any]]] = None
     historical_signals: Optional[List[Dict[str, Any]]] = None
@@ -327,7 +338,7 @@ class RegisterDependencyRequest(BaseModel):
 
 
 class DiscoverDependenciesRequest(BaseModel):
-    repository_id: UUID
+    repository_id: Optional[UUID] = None
     files: List[IndexFileInput] = Field(default_factory=list)
     commit_sha: Optional[str] = None
 
@@ -492,6 +503,7 @@ class SecretScanResponseDTO(BaseModel):
     high_count: int = 0
     warning_count: int = 0
     files_scanned: int = 0
+    scan_time_ms: float = 0.0
     commit_sha: str = ""
     status: str = "CLEAN"  # ACTIVE_EXPOSURE, CLEAN
     findings: List[Dict[str, Any]] = Field(default_factory=list)

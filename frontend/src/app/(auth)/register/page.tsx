@@ -23,7 +23,7 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      await register(fullName, email, password);
+      await register(fullName, email, password, orgName);
       router.push("/");
     } catch (err: unknown) {
       if (err instanceof Error) {

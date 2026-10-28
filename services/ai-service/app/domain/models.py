@@ -275,6 +275,9 @@ class TestRecommendation(BaseModel):
 
 class ReviewFinding(BaseModel):
     id: UUID = Field(default_factory=uuid4)
+    organization_id: Optional[UUID] = None
+    repository_id: Optional[UUID] = None
+    line_number: Optional[int] = None
     severity: str = "MEDIUM"                     # CRITICAL, HIGH, MEDIUM, LOW, INFO
     category: str = "CORRECTNESS"                # CORRECTNESS, ARCHITECTURE, SECURITY, etc.
     finding_type: str = "INFERRED"               # OBSERVED, INFERRED
@@ -303,6 +306,7 @@ class MergeReadiness(BaseModel):
     confidence: str = "HIGH"                     # HIGH, MEDIUM, LOW
     policy_version: str = "merge-policy-v1"
     blocking_reasons: List[str] = Field(default_factory=list)
+    blockers: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     required_actions: List[str] = Field(default_factory=list)
     required_checks: List[Any] = Field(default_factory=list)

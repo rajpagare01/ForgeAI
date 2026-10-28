@@ -423,9 +423,20 @@ async def validate_post_pr_test_execution(
     analysis_repo = AsyncpgAnalysisRepository(pool)
     feedback_repo = AsyncpgTestValidationFeedbackRepository(pool)
 
-    analysis = await analysis_repo.get_by_id(org_id, req.analysis_id)
+    analysis = None
+    if req.analysis_id:
+        analysis = await analysis_repo.get_by_id(org_id, req.analysis_id)
+    if not analysis:
+        # Fallback lookup by repository_id for PR or REPO
+        analyses = await analysis_repo.get_by_entity(org_id, "PR", f"{req.repository_id}")
+        if not analyses:
+            analyses = await analysis_repo.get_by_entity(org_id, "REPO", f"{req.repository_id}")
+        if analyses:
+            analysis = analyses[0]
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
+
+    resolved_analysis_id = analysis.id
 
     strat = analysis.test_strategy or {}
     all_recs = []
@@ -442,7 +453,7 @@ async def validate_post_pr_test_execution(
     feedback = TestValidationFeedback(
         organization_id=org_id,
         repository_id=req.repository_id,
-        analysis_id=req.analysis_id,
+        analysis_id=resolved_analysis_id,
         commit_sha=req.commit_sha,
         workflow_run_id=req.workflow_run_id,
         recommended_count=metrics["recommended_count"],
@@ -462,93 +473,11 @@ async def validate_post_pr_test_execution(
 
     return TestValidationResponse(
         status="VALIDATED",
-        analysis_id=req.analysis_id,
+        analysis_id=resolved_analysis_id,
         commit_sha=req.commit_sha,
         workflow_run_id=req.workflow_run_id,
         metrics=metrics,
     )
-
-
-@router.get("/analyses/{entity_type}/{entity_id}", response_model=List[AnalysisResponseDTO])
-async def get_analyses_for_entity(
-    entity_type: str,
-    entity_id: str,
-    org_id: UUID = Depends(get_tenant_org_id),
-):
-    """
-    Fetches historical AI analysis audit records for a given entity (e.g., PR or REPO).
-    """
-    pool = await db_pool.get_pool()
-    analysis_repo = AsyncpgAnalysisRepository(pool)
-    records = await analysis_repo.get_by_entity(org_id, entity_type, entity_id)
-    return [
-        AnalysisResponseDTO(
-            id=a.id,
-            organization_id=a.organization_id,
-            entity_type=a.entity_type,
-            entity_id=a.entity_id,
-            provider=a.provider,
-            model_version=a.model_version,
-            prompt_version=a.prompt_version,
-            summary=a.summary,
-            risk_level=a.risk_level,
-            risk_score=a.risk_score,
-            confidence=a.confidence,
-            risk_factors=a.risk_factors or [],
-            impact_metadata=a.impact_metadata or {},
-            test_strategy=a.test_strategy or {},
-            test_effectiveness=a.test_effectiveness,
-            merge_readiness=a.merge_readiness,
-            review_findings=a.review_findings or [],
-            security_assessment=a.security_assessment or (a.impact_metadata or {}).get("security_assessment"),
-            reliability_assessment=a.reliability_assessment or (a.impact_metadata or {}).get("reliability_assessment"),
-            unified_risk=a.unified_risk or (a.impact_metadata or {}).get("unified_risk"),
-            changed_components=(a.impact_metadata or {}).get("changed_components"),
-            direct_impact=(a.impact_metadata or {}).get("direct_impact"),
-            transitive_impact=(a.impact_metadata or {}).get("transitive_impact"),
-            affected_modules=(a.impact_metadata or {}).get("affected_modules"),
-            affected_tests=(a.impact_metadata or {}).get("affected_tests"),
-            historical_signals=(a.impact_metadata or {}).get("historical_signals"),
-            architectural_concerns=(a.impact_metadata or {}).get("architectural_concerns"),
-            fallback_used=a.fallback_used,
-            retrieved_chunks=a.retrieved_chunks,
-            execution_duration_ms=a.execution_duration_ms,
-            trace_id=a.trace_id,
-        )
-        for a in records
-    ]
-
-
-@router.get("/merge-readiness/{analysis_id}", response_model=Dict[str, Any])
-async def get_merge_readiness_for_analysis(
-    analysis_id: UUID,
-    org_id: UUID = Depends(get_tenant_org_id),
-):
-    """
-    Retrieves the deterministic merge readiness evaluation and structured review findings
-    for a completed PR analysis:
-    - Categorical decision (READY, READY_WITH_WARNINGS, NOT_READY, BLOCKED_BY_MISSING_EVIDENCE)
-    - Deterministic readiness score [0.0 - 100.0]
-    - Required checks matrix across CI, TEST_INTELLIGENCE, RISK_ENGINE, SECURITY, SYNCHRONIZATION, PROVENANCE
-    - Required tests execution status
-    - Structured grounded review findings with OBSERVED vs INFERRED classification
-    """
-    pool = await db_pool.get_pool()
-    analysis_repo = AsyncpgAnalysisRepository(pool)
-    analysis = await analysis_repo.get_by_id(org_id, analysis_id)
-    if not analysis:
-        raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
-
-    return {
-        "analysis_id": str(analysis.id),
-        "organization_id": str(analysis.organization_id),
-        "entity_id": analysis.entity_id,
-        "merge_readiness": analysis.merge_readiness or {},
-        "review_findings": analysis.review_findings or [],
-        "risk_level": analysis.risk_level,
-        "risk_score": analysis.risk_score,
-        "created_at": analysis.created_at.isoformat() if hasattr(analysis.created_at, "isoformat") else str(analysis.created_at),
-    }
 
 
 @router.get("/analyses/{analysis_id}/security", response_model=Dict[str, Any])
@@ -626,6 +555,131 @@ async def get_reliability_assessment_for_analysis(
         "analysis_id": str(analysis_id),
         "organization_id": str(org_id),
         **rel,
+    }
+
+
+@router.get("/analyses/{analysis_id}/actions", response_model=List[EngineeringActionDTO])
+async def get_analysis_actions(
+    analysis_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves all deterministic engineering actions derived for a specific analysis.
+    Enforces tenant isolation via organization_id.
+    """
+    services = await get_services()
+    remediation_service: RemediationService = services[10]
+    actions = await remediation_service.get_actions_for_analysis(org_id, analysis_id)
+    return [
+        EngineeringActionDTO(
+            id=a.id,
+            action_id=a.action_id,
+            analysis_id=a.analysis_id,
+            organization_id=a.organization_id,
+            repository_id=a.repository_id,
+            pr_number=a.pr_number,
+            commit_sha=a.commit_sha,
+            action_type=a.action_type,
+            title=a.title,
+            description=a.description,
+            reason=a.reason,
+            severity=a.severity,
+            confidence=a.confidence,
+            evidence=a.evidence,
+            affected_files=a.affected_files,
+            affected_symbols=a.affected_symbols,
+            provenance=a.provenance,
+            status=a.status,
+            source_finding_id=a.source_finding_id,
+            source_finding_type=a.source_finding_type,
+            metadata=a.metadata,
+            created_at=a.created_at,
+            updated_at=a.updated_at,
+        )
+        for a in actions
+    ]
+
+
+@router.get("/analyses/{entity_type}/{entity_id}", response_model=List[AnalysisResponseDTO])
+async def get_analyses_for_entity(
+    entity_type: str,
+    entity_id: str,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Fetches historical AI analysis audit records for a given entity (e.g., PR or REPO).
+    """
+    pool = await db_pool.get_pool()
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    records = await analysis_repo.get_by_entity(org_id, entity_type, entity_id)
+    return [
+        AnalysisResponseDTO(
+            id=a.id,
+            analysis_id=a.id,
+            organization_id=a.organization_id,
+            entity_type=a.entity_type,
+            entity_id=a.entity_id,
+            provider=a.provider,
+            model_version=a.model_version,
+            prompt_version=a.prompt_version,
+            summary=a.summary,
+            risk_level=a.risk_level,
+            risk_score=a.risk_score,
+            confidence=a.confidence,
+            risk_factors=a.risk_factors or [],
+            impact_metadata=a.impact_metadata or {},
+            test_strategy=a.test_strategy or {},
+            test_effectiveness=a.test_effectiveness,
+            merge_readiness=a.merge_readiness,
+            review_findings=a.review_findings or [],
+            security_assessment=a.security_assessment or (a.impact_metadata or {}).get("security_assessment"),
+            reliability_assessment=a.reliability_assessment or (a.impact_metadata or {}).get("reliability_assessment"),
+            unified_risk=a.unified_risk or (a.impact_metadata or {}).get("unified_risk"),
+            changed_components=(a.impact_metadata or {}).get("changed_components"),
+            direct_impact=(a.impact_metadata or {}).get("direct_impact"),
+            transitive_impact=(a.impact_metadata or {}).get("transitive_impact"),
+            affected_modules=(a.impact_metadata or {}).get("affected_modules"),
+            affected_tests=(a.impact_metadata or {}).get("affected_tests"),
+            historical_signals=(a.impact_metadata or {}).get("historical_signals"),
+            architectural_concerns=(a.impact_metadata or {}).get("architectural_concerns"),
+            fallback_used=a.fallback_used,
+            retrieved_chunks=a.retrieved_chunks,
+            execution_duration_ms=a.execution_duration_ms,
+            trace_id=a.trace_id,
+        )
+        for a in records
+    ]
+
+
+@router.get("/merge-readiness/{analysis_id}", response_model=Dict[str, Any])
+async def get_merge_readiness_for_analysis(
+    analysis_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves the deterministic merge readiness evaluation and structured review findings
+    for a completed PR analysis:
+    - Categorical decision (READY, READY_WITH_WARNINGS, NOT_READY, BLOCKED_BY_MISSING_EVIDENCE)
+    - Deterministic readiness score [0.0 - 100.0]
+    - Required checks matrix across CI, TEST_INTELLIGENCE, RISK_ENGINE, SECURITY, SYNCHRONIZATION, PROVENANCE
+    - Required tests execution status
+    - Structured grounded review findings with OBSERVED vs INFERRED classification
+    """
+    pool = await db_pool.get_pool()
+    analysis_repo = AsyncpgAnalysisRepository(pool)
+    analysis = await analysis_repo.get_by_id(org_id, analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis record not found or unauthorized.")
+
+    return {
+        "analysis_id": str(analysis.id),
+        "organization_id": str(analysis.organization_id),
+        "entity_id": analysis.entity_id,
+        "merge_readiness": analysis.merge_readiness or {},
+        "review_findings": analysis.review_findings or [],
+        "risk_level": analysis.risk_level,
+        "risk_score": analysis.risk_score,
+        "created_at": analysis.created_at.isoformat() if hasattr(analysis.created_at, "isoformat") else str(analysis.created_at),
     }
 
 
@@ -959,48 +1013,6 @@ async def get_repository_distributed_impact(
 # ======================================================================
 # Milestone: Engineering Workflow Automation & Controlled AI Remediation Endpoints
 # ======================================================================
-
-@router.get("/analyses/{analysis_id}/actions", response_model=List[EngineeringActionDTO])
-async def get_analysis_actions(
-    analysis_id: UUID,
-    org_id: UUID = Depends(get_tenant_org_id),
-):
-    """
-    Retrieves all deterministic engineering actions derived for a specific analysis.
-    Enforces tenant isolation via organization_id.
-    """
-    services = await get_services()
-    remediation_service: RemediationService = services[10]
-    actions = await remediation_service.get_actions_for_analysis(org_id, analysis_id)
-    return [
-        EngineeringActionDTO(
-            id=a.id,
-            action_id=a.action_id,
-            analysis_id=a.analysis_id,
-            organization_id=a.organization_id,
-            repository_id=a.repository_id,
-            pr_number=a.pr_number,
-            commit_sha=a.commit_sha,
-            action_type=a.action_type,
-            title=a.title,
-            description=a.description,
-            reason=a.reason,
-            severity=a.severity,
-            confidence=a.confidence,
-            evidence=a.evidence,
-            affected_files=a.affected_files,
-            affected_symbols=a.affected_symbols,
-            provenance=a.provenance,
-            status=a.status,
-            source_finding_id=a.source_finding_id,
-            source_finding_type=a.source_finding_type,
-            metadata=a.metadata,
-            created_at=a.created_at,
-            updated_at=a.updated_at,
-        )
-        for a in actions
-    ]
-
 
 @router.get("/actions/{action_id}", response_model=ActionDetailsResponseDTO)
 async def get_action_details(
@@ -1370,10 +1382,22 @@ async def rescan_analysis_after_fix(
     if not pr_num and prior_analysis.entity_type == "PR" and prior_analysis.entity_id.isdigit():
         pr_num = int(prior_analysis.entity_id)
 
+    # Determine repository_id safely
+    repo_id_candidate = (
+        prior_analysis.impact_metadata.get("repository_id")
+        or (prior_analysis.entity_id.split("#")[0] if "#" in prior_analysis.entity_id else None)
+    )
+    if not repo_id_candidate and prior_analysis.entity_type == "REPO":
+        repo_id_candidate = prior_analysis.entity_id
+    try:
+        resolved_repo_id = UUID(str(repo_id_candidate)) if repo_id_candidate else org_id
+    except Exception:
+        resolved_repo_id = org_id
+
     # Execute authoritative re-analysis
     new_analysis = await orchestration_service.analyze_pull_request(
         organization_id=org_id,
-        repository_id=UUID(prior_analysis.impact_metadata.get("repository_id", str(analysis_id))) if prior_analysis.impact_metadata.get("repository_id") else org_id,
+        repository_id=resolved_repo_id,
         pr_number=pr_num,
         title=f"[Re-Scan] {prior_analysis.summary[:60]}",
         description="Authoritative re-scan following remediation / code change.",
@@ -1406,6 +1430,7 @@ async def rescan_analysis_after_fix(
     meta = new_analysis.impact_metadata or {}
     updated_dto = AnalysisResponseDTO(
         id=new_analysis.id,
+        analysis_id=new_analysis.id,
         organization_id=new_analysis.organization_id,
         entity_type=new_analysis.entity_type,
         entity_id=new_analysis.entity_id,
@@ -1586,7 +1611,11 @@ async def get_analysis_history_comparison(
     """
     pool = await db_pool.get_pool()
     analysis_repo = AsyncpgAnalysisRepository(pool)
-    records = await analysis_repo.get_by_entity(org_id, entity_type, entity_id)
+    norm_entity_type = "PR" if entity_type.upper() in ("PR", "PULL_REQUEST") else entity_type.upper()
+    records = await analysis_repo.get_by_entity(org_id, norm_entity_type, entity_id)
+    if not records and norm_entity_type == "PR" and "#" not in entity_id:
+        all_pr_records = await analysis_repo.get_by_entity(org_id, "PR", "%")
+        records = [r for r in all_pr_records if r.entity_id.endswith(f"#{entity_id}")]
 
     # Sort chronological
     sorted_records = sorted(records, key=lambda a: a.created_at)

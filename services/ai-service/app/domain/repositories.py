@@ -31,6 +31,11 @@ class CodeChunkRepository(ABC):
     async def deactivate_all_repo_chunks(self, org_id: UUID, repo_id: UUID) -> int:
         pass
 
+    @abstractmethod
+    async def get_by_repository(self, org_id: UUID, repo_id: UUID) -> List[CodeChunk]:
+        """Retrieves all active code chunks for a repository."""
+        pass
+
 
 class GraphEdgeRepository(ABC):
     @abstractmethod
@@ -216,6 +221,12 @@ class SecurityAssessmentRepository(ABC):
     ) -> Optional[Any]:
         pass
 
+    @abstractmethod
+    async def get_by_analysis_id(
+        self, org_id: UUID, analysis_id: UUID
+    ) -> Optional[Any]:
+        pass
+
 
 class ReliabilityAssessmentRepository(ABC):
     @abstractmethod
@@ -233,6 +244,12 @@ class ReliabilityAssessmentRepository(ABC):
     @abstractmethod
     async def get_latest_assessment(
         self, org_id: UUID, repo_id: UUID, pr_number: int
+    ) -> Optional[Any]:
+        pass
+
+    @abstractmethod
+    async def get_by_analysis_id(
+        self, org_id: UUID, analysis_id: UUID
     ) -> Optional[Any]:
         pass
 

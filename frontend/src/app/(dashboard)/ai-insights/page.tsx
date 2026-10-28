@@ -308,6 +308,7 @@ export interface UnifiedRiskScoreDTO {
 }
 
 export interface PrAnalysisResponse {
+  id?: string;
   analysis_id?: string;
   risk?: string;
   risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -1128,6 +1129,7 @@ function AiInsightsContent() {
     try {
       const resp = await apiClient.post<TestValidationResponseDTO>("/api/v1/ai/test-validation/validate", {
         repository_id: selectedRepoId,
+        analysis_id: prAnalysisResult?.analysis_id || prAnalysisResult?.id,
         commit_sha: commitSha,
       });
       setTestValidationResult(resp);
@@ -1212,6 +1214,7 @@ function AiInsightsContent() {
         {
           commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
           files: prChangeSet?.files?.map((f) => ({
+            file_path: f.filename,
             filename: f.filename,
             content: f.content || f.patch || "",
           })),
@@ -1235,6 +1238,7 @@ function AiInsightsContent() {
         {
           commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
           files: prChangeSet?.files?.map((f) => ({
+            file_path: f.filename,
             filename: f.filename,
             content: f.content || f.patch || "",
           })),
@@ -1256,7 +1260,7 @@ function AiInsightsContent() {
 
   // Authoritative Re-Scan Differential Pipeline Handler (Phase 13)
   const handleRescan = async () => {
-    const analysisId = prAnalysisResult?.analysis_id;
+    const analysisId = prAnalysisResult?.analysis_id || prAnalysisResult?.id;
     if (!analysisId) return;
     setIsRescanning(true);
     setRescanResult(null);
@@ -1345,9 +1349,15 @@ function AiInsightsContent() {
     if (!prNum) return;
     setIsLoadingHistory(true);
     try {
-      const res = await apiClient.get<AnalysisHistoryItemDTO[]>(
-        `/api/v1/ai/analyses/pull_request/${prNum}/history`
+      const targetEntityId = selectedRepoId ? `${selectedRepoId}#${prNum}` : `${prNum}`;
+      let res = await apiClient.get<AnalysisHistoryItemDTO[]>(
+        `/api/v1/ai/analyses/PR/${encodeURIComponent(targetEntityId)}/history`
       );
+      if (!Array.isArray(res) || res.length === 0) {
+        res = await apiClient.get<AnalysisHistoryItemDTO[]>(
+          `/api/v1/ai/analyses/PR/${prNum}/history`
+        );
+      }
       if (Array.isArray(res)) {
         setAnalysisHistory(res);
       }
@@ -1356,7 +1366,7 @@ function AiInsightsContent() {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, []);
+  }, [selectedRepoId]);
 
   useEffect(() => {
     if (selectedPrNumber) {
@@ -5914,7 +5924,7 @@ function AiInsightsContent() {
                   <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
                     <span className="text-[10px] uppercase text-slate-500 block">Scan Duration</span>
                     <span className="text-base font-bold text-indigo-300">
-                      {secretScanResult.scan_time_ms.toFixed(0)}ms
+                      {(secretScanResult.scan_time_ms ?? 0).toFixed(0)}ms
                     </span>
                   </div>
                 </div>

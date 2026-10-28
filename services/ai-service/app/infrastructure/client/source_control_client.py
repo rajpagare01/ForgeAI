@@ -11,6 +11,16 @@ class SourceControlClient:
     def __init__(self, base_url: Optional[str] = None):
         self.base_url = (base_url or settings.SOURCE_CONTROL_SERVICE_URL).rstrip("/")
 
+    def _headers(self, organization_id: Optional[UUID] = None, accept: str = "application/json") -> Dict[str, str]:
+        hdrs = {
+            "Accept": accept,
+            "X-ForgeAI-Internal": "attested",
+        }
+        if organization_id:
+            hdrs[settings.ORG_HEADER_NAME] = str(organization_id)
+            hdrs["X-Workspace-Id"] = str(organization_id)
+        return hdrs
+
     async def get_pull_request_changes(
         self, organization_id: UUID, repository_id: UUID, pr_number: int
     ) -> Optional[Dict[str, Any]]:
@@ -19,10 +29,7 @@ class SourceControlClient:
         from source-control-service scoped by organization_id and repository_id.
         """
         url = f"{self.base_url}/api/v1/pull-requests/{pr_number}/changes"
-        headers = {
-            settings.ORG_HEADER_NAME: str(organization_id),
-            "Accept": "application/json",
-        }
+        headers = self._headers(organization_id)
         params = {"repositoryId": str(repository_id)}
 
         try:
@@ -60,10 +67,7 @@ class SourceControlClient:
         Retrieves stored commit history for the repository to compute historical change frequency.
         """
         url = f"{self.base_url}/api/v1/repositories/{repository_id}/commits"
-        headers = {
-            settings.ORG_HEADER_NAME: str(organization_id),
-            "Accept": "application/json",
-        }
+        headers = self._headers(organization_id)
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, headers=headers)
@@ -81,10 +85,7 @@ class SourceControlClient:
         Retrieves repository synchronization status (SYNCED, SYNCING, STALE, FAILED).
         """
         url = f"{self.base_url}/api/v1/repositories/{repository_id}/sync-status"
-        headers = {
-            settings.ORG_HEADER_NAME: str(organization_id),
-            "Accept": "application/json",
-        }
+        headers = self._headers(organization_id)
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, headers=headers)
@@ -103,10 +104,7 @@ class SourceControlClient:
         Enforces tenant isolation by passing organization_id in headers.
         """
         url = f"{self.base_url}/api/v1/repositories"
-        headers = {
-            settings.ORG_HEADER_NAME: str(organization_id),
-            "Accept": "application/json",
-        }
+        headers = self._headers(organization_id)
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, headers=headers)
@@ -129,10 +127,7 @@ class SourceControlClient:
         Retrieves raw content of a specific file from a repository at an optional git ref.
         """
         url = f"{self.base_url}/api/v1/repositories/{repository_id}/contents/{path.lstrip('/')}"
-        headers = {
-            settings.ORG_HEADER_NAME: str(organization_id),
-            "Accept": "text/plain, application/json",
-        }
+        headers = self._headers(organization_id, accept="text/plain, application/json")
         params = {}
         if ref:
             params["ref"] = ref

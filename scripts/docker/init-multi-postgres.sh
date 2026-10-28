@@ -77,4 +77,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "ai_db" <<-EOSQL
         ON analyses (organization_id, entity_type, entity_id);
     CREATE INDEX IF NOT EXISTS idx_analyses_trace_id 
         ON analyses (trace_id);
+
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+        version VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    INSERT INTO schema_migrations (version, applied_at)
+    VALUES ('001_initial_schema.sql', NOW())
+    ON CONFLICT (version) DO NOTHING;
 EOSQL

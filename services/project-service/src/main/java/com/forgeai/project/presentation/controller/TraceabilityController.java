@@ -117,7 +117,7 @@ public class TraceabilityController {
         UUID orgId = TenantContext.getOrganizationId();
         UUID userId = TenantContext.getUserId();
         validateTenantContext(orgId, userId);
-        return ResponseEntity.ok(traceabilityAggregationService.getSnapshot(orgId, snapshotId, userId));
+        return ResponseEntity.ok(traceabilityAggregationService.getSnapshot(orgId, projectId, snapshotId, userId));
     }
 
     private void validateTenantContext(UUID orgId, UUID userId) {

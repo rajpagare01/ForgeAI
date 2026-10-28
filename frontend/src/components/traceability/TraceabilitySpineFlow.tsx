@@ -52,7 +52,12 @@ function convertChainToNode(chain: TraceabilitySpineChain): TraceabilityNode {
 
   // Determine AI blast radius
   const riskLevel: RiskLevel = (ai?.riskLevel as RiskLevel) || "LOW";
-  const score = ai?.riskScore !== undefined ? Math.round(ai.riskScore * 100) : 0;
+  const score =
+    ai?.riskScore !== undefined
+      ? ai.riskScore <= 1.0
+        ? Math.round(ai.riskScore * 100)
+        : Math.round(ai.riskScore)
+      : 0;
   const flaggedRisks: string[] = [];
 
   if (chain.gaps && chain.gaps.length > 0) {

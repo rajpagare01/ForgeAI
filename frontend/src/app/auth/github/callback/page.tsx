@@ -17,17 +17,6 @@ function GitHubCallbackContent() {
   const hasExecuted = useRef(false);
 
   useEffect(() => {
-    // If an active session token is already present, immediately proceed to workspace
-    const existingToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
-    if (existingToken) {
-      setStatus("success");
-      setStepMessage("Active session verified! Redirecting to workspace...");
-      const redirectTimer = setTimeout(() => {
-        window.location.href = "/";
-      }, 400);
-      return () => clearTimeout(redirectTimer);
-    }
-
     if (hasExecuted.current) return;
     hasExecuted.current = true;
 
@@ -35,6 +24,17 @@ function GitHubCallbackContent() {
     const state = searchParams.get("state");
     const error = searchParams.get("error");
     const errorDescription = searchParams.get("error_description");
+
+    // If an active session token is already present and not in a callback handshake, immediately proceed to workspace
+    const existingToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
+    if (existingToken && !code && !state && !error) {
+      setStatus("success");
+      setStepMessage("Active session verified! Redirecting to workspace...");
+      const redirectTimer = setTimeout(() => {
+        window.location.href = "/";
+      }, 400);
+      return () => clearTimeout(redirectTimer);
+    }
 
     if (error) {
       setStatus("error");

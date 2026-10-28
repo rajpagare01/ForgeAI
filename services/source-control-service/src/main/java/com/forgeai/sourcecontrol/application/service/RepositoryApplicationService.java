@@ -864,6 +864,18 @@ public class RepositoryApplicationService {
         return getSyncStatus(organizationId, workspaceId, repositoryId);
     }
 
+    @Transactional(readOnly = true)
+    public String getFileContent(UUID organizationId, UUID workspaceId, UUID repositoryId, String path, String ref) {
+        requireTenantOrWorkspace(organizationId, workspaceId);
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId);
+        if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0) {
+            String targetRef = (ref != null && !ref.isBlank()) ? ref : repo.getDefaultBranch();
+            return gitHubAppClient.getFileContent(repo.getInstallationId(), repo.getFullName(), path, targetRef)
+                    .orElseThrow(() -> new ResourceNotFoundException("File not found at path: " + path));
+        }
+        throw new ResourceNotFoundException("GitHub App not configured or repository not linked to installation");
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

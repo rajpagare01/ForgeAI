@@ -260,7 +260,7 @@ class ReliabilityIntelligenceEngine:
 
         # Historical Reliability Signals Integration
         for sig in historical_signals:
-            commit_count = sig.get("churn_count") or sig.get("commit_count", 0)
+            commit_count = sig.get("churn_count") or sig.get("recent_modifications_count") or sig.get("commit_count", 0)
             file_p = sig.get("file_path", "")
             # High churn hotspot file (>= 10 commits) modified again
             if commit_count >= 10:

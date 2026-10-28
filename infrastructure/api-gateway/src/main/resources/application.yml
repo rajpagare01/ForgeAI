@@ -24,7 +24,7 @@ spring:
         - id: identity-service
           uri: ${IDENTITY_SERVICE_URI:http://localhost:8081}
           predicates:
-            - Path=/api/v1/auth/**,/.well-known/**,/api/v1/users/**,/api/v1/organizations/**,/api/v1/workspaces/**
+            - Path=/api/v1/auth/**,/.well-known/**,/api/v1/users/**,/api/v1/organizations/**,/api/v1/workspaces/**,/api/v1/invitations/**
           filters:
             - name: RequestRateLimiter
               args:
@@ -34,7 +34,7 @@ spring:
         - id: project-operations
           uri: ${PROJECT_SERVICE_URI:http://localhost:8085}
           predicates:
-            - Path=/api/v1/operations/circuit-breakers,/api/v1/operations/traceability/**
+            - Path=/api/v1/operations/circuit-breakers,/api/v1/operations/traceability/**,/api/v1/operations/audit-events
           filters:
             - name: RequestRateLimiter
               args:

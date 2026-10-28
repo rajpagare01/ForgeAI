@@ -294,10 +294,14 @@ export default function RepositoriesPage() {
         console.warn("Failed to generate dynamic installation state URL, using static fallback:", startErr);
       }
 
-      const fallbackInstallUrl =
-        connection?.appInstallUrl ||
-        "https://github.com/apps/forgeai-raj-dev/installations/new";
-      window.location.href = fallbackInstallUrl;
+      const fallbackInstallUrl = connection?.appInstallUrl;
+      if (fallbackInstallUrl) {
+        window.location.href = fallbackInstallUrl;
+        return;
+      }
+      setError("GitHub App installation URL is not configured. Please verify GitHub App configuration.");
+      setIsConnecting(false);
+      setConnectionState("DISCONNECTED");
       return;
     }
 

@@ -165,5 +165,22 @@ public class RepositoryController {
         }
         return ResponseEntity.ok(results);
     }
+
+    @GetMapping("/{id}/contents/**")
+    public ResponseEntity<String> getFileContent(
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId,
+            @RequestParam(required = false) String ref,
+            jakarta.servlet.http.HttpServletRequest request) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        String fullPath = (String) request.getAttribute(
+                org.springframework.web.servlet.HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
+        String bestMatchingPattern = (String) request.getAttribute(
+                org.springframework.web.servlet.HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        org.springframework.util.AntPathMatcher apm = new org.springframework.util.AntPathMatcher();
+        String path = apm.extractPathWithinPattern(bestMatchingPattern, fullPath);
+        return ResponseEntity.ok(repositoryApplicationService.getFileContent(
+                organizationId, resolveWorkspaceId(workspaceId), id, path, ref));
+    }
 }
 

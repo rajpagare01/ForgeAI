@@ -93,6 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_ws_pr ON test_runs (workspace_id, repository
 
 -- 4. test_results
 ALTER TABLE test_results ADD COLUMN IF NOT EXISTS workspace_id UUID;
+ALTER TABLE test_results ADD COLUMN IF NOT EXISTS scope VARCHAR(32) NOT NULL DEFAULT 'ORGANIZATION';
 
 UPDATE test_results 
 SET workspace_id = organization_id 

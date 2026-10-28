@@ -101,6 +101,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
       SERVER_PORT: 8085
+      SOURCE_CONTROL_SERVICE_URL: http://source-control-service:8082
+      TESTING_SERVICE_URL: http://testing-service:8083
+      AI_SERVICE_URL: http://ai-service:8084
       ENFORCE_INTERNAL_MARKER: "true"
     depends_on:
       postgres:

@@ -184,7 +184,7 @@ export default function OverviewDashboardPage() {
           </div>
 
           <div className="shrink-0">
-            <Link href="/projects/proj-forgeai-core/traceability">
+            <Link href="/traceability">
               <Button variant="glow" size="lg" className="gap-2">
                 Launch Traceability Matrix
                 <ArrowRight className="h-4 w-4" />

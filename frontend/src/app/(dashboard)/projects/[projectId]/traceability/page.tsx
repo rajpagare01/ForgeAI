@@ -33,7 +33,7 @@ import {
 function TraceabilityMatrixContent() {
   const params = useParams();
   const projectId = (params?.projectId as string) || "";
-  const { currentOrg, isLoading: isTenantLoading } = useTenant();
+  const { currentOrg, isLoading: isTenantLoading, activeWorkspace } = useTenant();
 
   const [traceData, setTraceData] = useState<ProjectTraceabilityResponse | null>(null);
   const [snapshots, setSnapshots] = useState<TraceabilitySnapshot[]>([]);
@@ -48,7 +48,11 @@ function TraceabilityMatrixContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    if (!projectId || isTenantLoading || !currentOrg?.id) return;
+    if (isTenantLoading) return;
+    if (!projectId || (!currentOrg?.id && !activeWorkspace?.id)) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -66,6 +70,7 @@ function TraceabilityMatrixContent() {
           console.error("Failed to load project traceability", {
             projectId,
             orgId: currentOrg?.id,
+            workspaceId: activeWorkspace?.id,
             error: traceResp.reason,
           });
         }
@@ -89,6 +94,7 @@ function TraceabilityMatrixContent() {
         console.error("An error occurred while loading traceability", {
           projectId,
           orgId: currentOrg?.id,
+          workspaceId: activeWorkspace?.id,
           error: err,
         });
       }
@@ -96,13 +102,13 @@ function TraceabilityMatrixContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [projectId, currentOrg?.id, isTenantLoading]);
+  }, [projectId, currentOrg?.id, activeWorkspace?.id, isTenantLoading]);
 
   useEffect(() => {
-    if (projectId && !isTenantLoading && currentOrg?.id) {
+    if (projectId && !isTenantLoading && (currentOrg?.id || activeWorkspace?.id)) {
       loadData();
     }
-  }, [loadData, projectId, isTenantLoading, currentOrg?.id]);
+  }, [loadData, projectId, isTenantLoading, currentOrg?.id, activeWorkspace?.id]);
 
   const handleSync = async () => {
     setIsSyncing(true);

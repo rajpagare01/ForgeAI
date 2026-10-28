@@ -69,18 +69,23 @@ async def check_ai_quota(org_id: UUID = Depends(get_tenant_org_id)):
     FastAPI dependency enforcing daily token quota and rate limiting.
     Rejects with HTTP 429 Too Many Requests and Retry-After header if exceeded.
     """
-    allowed, retry_after = await ai_rate_limiter.check_and_consume_quota(
-        org_id=org_id,
-        estimated_tokens=500,
-        max_requests_per_minute=60,
-        daily_token_limit=100_000,
-    )
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="AI organizational quota or rate limit exceeded",
-            headers={"Retry-After": str(retry_after or 60)},
+    try:
+        allowed, retry_after = await ai_rate_limiter.check_and_consume_quota(
+            org_id=org_id,
+            estimated_tokens=500,
+            max_requests_per_minute=60,
+            daily_token_limit=100_000,
         )
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail="AI organizational quota or rate limit exceeded",
+                headers={"Retry-After": str(retry_after or 60)},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Quota check encountered unexpected error: {e}; failing open for availability")
 
 
 EXEMPT_INTERNAL_PATHS = {

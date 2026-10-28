@@ -26,7 +26,9 @@ class DatabasePool:
         if db_url.startswith("postgresql+asyncpg://"):
             db_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
 
-        logger.info(f"Connecting to database pool at {db_url}")
+        import re
+        masked_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:***@", db_url)
+        logger.info(f"Connecting to database pool at {masked_url}")
         self._pool = await asyncpg.create_pool(
             dsn=db_url,
             min_size=settings.DB_POOL_MIN_SIZE,

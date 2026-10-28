@@ -98,7 +98,7 @@ interface AuditEventItem {
 }
 
 export default function OperationsDashboardPage() {
-  const { currentOrg } = useTenant();
+  const { currentOrg, activeWorkspace, isLoading: isTenantLoading } = useTenant();
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -117,7 +117,12 @@ export default function OperationsDashboardPage() {
   const [replaySuccess, setReplaySuccess] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!currentOrg?.id) return;
+    if (isTenantLoading) return;
+    if (!currentOrg?.id && !activeWorkspace?.id) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       setErrorMsg(null);
       const [
@@ -171,14 +176,14 @@ export default function OperationsDashboardPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentOrg?.id]);
+  }, [currentOrg?.id, activeWorkspace?.id, isTenantLoading]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const handleReplay = async (eventId: string) => {
-    if (!currentOrg?.id) return;
+    if (!currentOrg?.id && !activeWorkspace?.id) return;
     setReplayingId(eventId);
     setReplaySuccess(null);
     try {

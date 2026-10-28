@@ -11,7 +11,7 @@ interface AuthContextType {
   isLoading: boolean;
   githubStatus: GitHubStatusResponse | null;
   login: (identifier: string, password: string) => Promise<void>;
-  register: (fullName: string, email: string, password: string) => Promise<void>;
+  register: (fullName: string, email: string, password: string, orgName?: string) => Promise<void>;
   logout: () => void;
   fetchGitHubStatus: () => Promise<GitHubStatusResponse | null>;
   loginWithGitHub: (code: string, state: string, redirectUri?: string) => Promise<void>;
@@ -163,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const register = useCallback(
-    async (fullName: string, email: string, password: string) => {
+    async (fullName: string, email: string, password: string, orgName?: string) => {
       setIsLoading(true);
       try {
         const parts = fullName.trim().split(/\s+/);
@@ -189,6 +189,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Immediately authenticate with newly created credentials
         await login(email, password);
+
+        // If organization name was provided during registration, create it
+        if (orgName && orgName.trim()) {
+          try {
+            await apiClient.post<any>("/api/v1/organizations", {
+              name: orgName.trim(),
+              slug: orgName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-"),
+              description: `Organization ${orgName.trim()}`,
+            });
+          } catch (orgErr) {
+            console.error("Failed to automatically create initial organization:", orgErr);
+          }
+        }
       } finally {
         setIsLoading(false);
       }

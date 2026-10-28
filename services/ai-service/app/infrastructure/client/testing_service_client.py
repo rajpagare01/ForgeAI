@@ -11,6 +11,16 @@ class TestingServiceClient:
     def __init__(self, base_url: Optional[str] = None):
         self.base_url = (base_url or settings.TESTING_SERVICE_URL).rstrip("/")
 
+    def _headers(self, organization_id: Optional[UUID] = None) -> Dict[str, str]:
+        hdrs = {
+            "Accept": "application/json",
+            "X-ForgeAI-Internal": "attested",
+        }
+        if organization_id:
+            hdrs[settings.ORG_HEADER_NAME] = str(organization_id)
+            hdrs["X-Workspace-Id"] = str(organization_id)
+        return hdrs
+
     async def list_test_runs(
         self, organization_id: UUID, repository_id: Optional[UUID] = None, commit_sha: Optional[str] = None
     ) -> List[Dict[str, Any]]:
@@ -18,10 +28,7 @@ class TestingServiceClient:
         Retrieves recorded test runs from testing-service scoped by organization_id.
         """
         url = f"{self.base_url}/api/v1/test-runs"
-        headers = {
-            settings.ORG_HEADER_NAME: str(organization_id),
-            "Accept": "application/json",
-        }
+        headers = self._headers(organization_id)
         params: Dict[str, str] = {}
         if repository_id:
             params["repositoryId"] = str(repository_id)
@@ -46,10 +53,7 @@ class TestingServiceClient:
         Retrieves detailed test results for a specific test run.
         """
         url = f"{self.base_url}/api/v1/test-runs/{run_id}/results"
-        headers = {
-            settings.ORG_HEADER_NAME: str(organization_id),
-            "Accept": "application/json",
-        }
+        headers = self._headers(organization_id)
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url, headers=headers)

@@ -38,11 +38,10 @@ export const TopNav: React.FC = () => {
     const checkGateway = async () => {
       try {
         const gatewayBase = apiClient.getBaseUrl();
-        await fetch(`${gatewayBase}/actuator/health`, {
-          mode: "no-cors",
+        const res = await fetch(`${gatewayBase}/actuator/health`, {
           cache: "no-store",
         });
-        if (isMounted) setGatewayOnline(true);
+        if (isMounted) setGatewayOnline(res.ok);
       } catch {
         if (isMounted) setGatewayOnline(false);
       }
