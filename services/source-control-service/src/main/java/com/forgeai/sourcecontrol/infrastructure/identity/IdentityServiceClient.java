@@ -26,7 +26,7 @@ public class IdentityServiceClient {
     private final ObjectMapper objectMapper;
 
     public IdentityServiceClient(
-            @Value("${forgeai.services.identity-service.url:http://identity-service:8081}") String identityServiceUrl,
+            @Value("${forgeai.services.identity-service.url:${IDENTITY_SERVICE_URL:${IDENTITY_SERVICE_URI:http://identity-service:8081}}}") String identityServiceUrl,
             ObjectMapper objectMapper) {
         this.identityServiceUrl = identityServiceUrl.replaceAll("/+$", "");
         this.objectMapper = objectMapper;
@@ -54,7 +54,7 @@ public class IdentityServiceClient {
         String url = identityServiceUrl + "/api/v1/auth/github/status";
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Accept", "application/vnd.github+json")
+                .header("Accept", "application/json")
                 .header("X-User-Id", userId.toString())
                 .header("X-ForgeAI-Internal", "attested")
                 .GET()

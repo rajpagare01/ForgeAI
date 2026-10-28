@@ -111,11 +111,14 @@ interface PullRequestChangeSet {
 }
 
 export interface AnalysisFactor {
-  factor: string;
-  points: number;
-  weight: number;
-  raw_value: number;
-  detail: string;
+  factor?: string;
+  name?: string;
+  points?: number;
+  score?: number;
+  weight?: number;
+  raw_value?: number;
+  detail?: string;
+  details?: string;
 }
 
 export interface TestImpactItem {
@@ -3275,21 +3278,21 @@ function AiInsightsContent() {
                             className="p-3 rounded-lg border border-slate-800/80 bg-slate-900/60 text-xs flex flex-col justify-between gap-1.5"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-semibold text-slate-200">{rf.factor}</span>
+                              <span className="font-semibold text-slate-200">{rf.factor || rf.name}</span>
                               <Badge
                                 variant="outline"
                                 className={`text-[10px] font-mono ${
-                                  rf.points > 10
+                                  (rf.points ?? rf.score ?? 0) > 10
                                     ? "text-rose-400 border-rose-500/40 bg-rose-950/20"
-                                    : rf.points > 0
+                                    : (rf.points ?? rf.score ?? 0) > 0
                                     ? "text-amber-400 border-amber-500/40 bg-amber-950/20"
                                     : "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
                                 }`}
                               >
-                                +{rf.points} pts
+                                +{(rf.points ?? rf.score ?? 0)} pts
                               </Badge>
                             </div>
-                            <p className="text-[11px] text-slate-400 leading-snug">{rf.detail}</p>
+                            <p className="text-[11px] text-slate-400 leading-snug">{rf.detail || rf.details}</p>
                           </div>
                         ))}
                       </div>
@@ -3532,7 +3535,7 @@ function AiInsightsContent() {
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-semibold font-mono text-slate-100 text-sm">
-                                      {dep.target_repository_name}
+                                      {dep.target_repository_name || (dep as any).repository_name || dep.target_repository_id || (dep as any).repository_id || "downstream-repo"}
                                     </span>
                                     <Badge variant="outline" className="text-[10px] font-mono text-indigo-300 border-indigo-500/30">
                                       {dep.dependency_type}
@@ -3540,14 +3543,14 @@ function AiInsightsContent() {
                                     <Badge
                                       variant="outline"
                                       className={`text-[10px] font-mono ${
-                                        dep.confidence === "HIGH"
+                                        (dep.confidence || (dep as any).dependency_confidence) === "HIGH"
                                           ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
-                                          : dep.confidence === "MEDIUM"
+                                          : (dep.confidence || (dep as any).dependency_confidence) === "MEDIUM"
                                           ? "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
                                           : "text-amber-400 border-amber-500/40 bg-amber-950/20"
                                       }`}
                                     >
-                                      Confidence: {dep.confidence}
+                                      Confidence: {dep.confidence || (dep as any).dependency_confidence || "LOW"}
                                     </Badge>
                                   </div>
 
@@ -3556,17 +3559,17 @@ function AiInsightsContent() {
                                     <Badge
                                       variant="outline"
                                       className={`text-[10px] font-bold ${
-                                        dep.downstream_ci_status === "PASS"
+                                        (dep.downstream_ci_status || (dep as any).ci_status) === "PASS" || (dep.downstream_ci_status || (dep as any).ci_status) === "PASSED"
                                           ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/40"
-                                          : dep.downstream_ci_status === "FAIL"
+                                          : (dep.downstream_ci_status || (dep as any).ci_status) === "FAIL" || (dep.downstream_ci_status || (dep as any).ci_status) === "FAILED"
                                           ? "text-rose-400 border-rose-500/40 bg-rose-950/40 animate-pulse"
                                           : "text-slate-400 border-slate-700 bg-slate-900/50"
                                       }`}
                                     >
-                                      {dep.downstream_ci_status}
+                                      {dep.downstream_ci_status || (dep as any).ci_status || "NOT_FOUND"}
                                     </Badge>
                                     <span className="text-[11px] text-slate-400 ml-1">
-                                      Risk +{dep.risk_contribution}
+                                      Risk +{dep.risk_contribution ?? 0}
                                     </span>
                                   </div>
                                 </div>
@@ -4166,7 +4169,7 @@ function AiInsightsContent() {
                             <div className="flex items-center justify-between">
                               <span className="text-slate-300 truncate max-w-[180px]">{sig.file_path}</span>
                               <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
-                                {sig.commit_count} prior commits
+                                {sig.commit_count || (sig as any).recent_modifications_count || 0} prior commits
                               </Badge>
                             </div>
                             {sig.recent_commits && sig.recent_commits.length > 0 && (

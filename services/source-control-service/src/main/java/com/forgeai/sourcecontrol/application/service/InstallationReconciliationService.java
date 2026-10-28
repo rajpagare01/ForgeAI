@@ -139,6 +139,7 @@ public class InstallationReconciliationService {
                 RepositoryConnectedEvent event = RepositoryConnectedEvent.builder()
                         .repositoryId(repoId)
                         .organizationId(repo.getOrganizationId())
+                        .workspaceId(repo.getWorkspaceId())
                         .githubRepoId(repo.getGithubRepoId())
                         .fullName(repo.getFullName())
                         .defaultBranch(repo.getDefaultBranch())

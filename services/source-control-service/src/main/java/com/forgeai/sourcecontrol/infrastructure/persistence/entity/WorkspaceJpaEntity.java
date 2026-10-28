@@ -19,7 +19,6 @@ import java.util.UUID;
 public class WorkspaceJpaEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "type", nullable = false, length = 32)
@@ -42,6 +41,9 @@ public class WorkspaceJpaEntity {
 
     @PrePersist
     public void prePersist() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
         Instant now = Instant.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;

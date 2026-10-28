@@ -9,7 +9,7 @@ import Link from "next/link";
 function GitHubCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { loginWithGitHub, linkGitHubAccount, isAuthenticated } = useAuth();
+  const { loginWithGitHub, linkGitHubAccount, isAuthenticated, isLoading } = useAuth();
 
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -17,6 +17,8 @@ function GitHubCallbackContent() {
   const hasExecuted = useRef(false);
 
   useEffect(() => {
+    // Wait until AuthProvider completes initial session hydration to avoid race condition
+    if (isLoading) return;
     if (hasExecuted.current) return;
     hasExecuted.current = true;
 
@@ -25,7 +27,6 @@ function GitHubCallbackContent() {
     const error = searchParams.get("error");
     const errorDescription = searchParams.get("error_description");
 
-    // If an active session token is already present and not in a callback handshake, immediately proceed to workspace
     const existingToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
     if (existingToken && !code && !state && !error) {
       setStatus("success");
@@ -48,69 +49,54 @@ function GitHubCallbackContent() {
       return;
     }
 
+    const hasExistingSession = Boolean(
+      isAuthenticated ||
+      (typeof window !== "undefined" && localStorage.getItem("forgeai_access_token"))
+    );
+
     const exchange = async () => {
       try {
         setStepMessage("Exchanging GitHub authorization credentials...");
         const callbackUri = `${window.location.origin}/auth/github/callback`;
 
-        // Wrap the exchange in a 15-second timeout to prevent indefinite hanging
+        let targetRoute = "/";
         const exchangePromise = (async () => {
-          if (isAuthenticated) {
+          if (hasExistingSession) {
             // Account linking flow for logged-in user
             setStepMessage("Linking GitHub identity to ForgeAI workspace...");
             await linkGitHubAccount(code, state, callbackUri);
+            setStepMessage("GitHub account successfully linked! Redirecting to repositories...");
+            targetRoute = "/repositories";
           } else {
             // Sign in / Registration flow
             setStepMessage("Establishing secure ForgeAI session & personal workspace...");
             await loginWithGitHub(code, state, callbackUri);
+            setStepMessage("Identity verified! Redirecting to workspace...");
+            targetRoute = "/";
           }
         })();
 
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("GitHub OAuth exchange timed out after 15 seconds. Please try signing in again.")), 15000)
+          setTimeout(() => reject(new Error("GitHub OAuth exchange timed out after 45 seconds. Network latency was high. Please try signing in again.")), 45000)
         );
 
         await Promise.race([exchangePromise, timeoutPromise]);
 
         setStatus("success");
-        setStepMessage("Identity verified! Redirecting to workspace...");
-        router.push("/");
+        router.push(targetRoute);
         setTimeout(() => {
           if (typeof window !== "undefined" && window.location.pathname.includes("/callback")) {
-            window.location.href = "/";
+            window.location.href = targetRoute;
           }
-        }, 1500);
+        }, 1200);
       } catch (err: any) {
-        // If access token was saved during exchange or code was already consumed, navigate to workspace
-        const savedToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
-        if (savedToken) {
-          setStatus("success");
-          setStepMessage("Session verified! Redirecting to workspace...");
-          router.push("/");
-          setTimeout(() => {
-            if (typeof window !== "undefined" && window.location.pathname.includes("/callback")) {
-              window.location.href = "/";
-            }
-          }, 1500);
-          return;
-        }
         setStatus("error");
         setErrorMessage(err?.message || "Failed to authenticate with GitHub. Please try again.");
       }
     };
 
     exchange();
-
-    // Fallback safety timeout: if still processing after 4 seconds and token exists, redirect
-    const safetyTimeout = setTimeout(() => {
-      const savedToken = typeof window !== "undefined" ? localStorage.getItem("forgeai_access_token") : null;
-      if (savedToken) {
-        window.location.href = "/";
-      }
-    }, 4000);
-
-    return () => clearTimeout(safetyTimeout);
-  }, [searchParams, router, loginWithGitHub, linkGitHubAccount, isAuthenticated]);
+  }, [searchParams, router, loginWithGitHub, linkGitHubAccount, isAuthenticated, isLoading]);
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 bg-[#090d16] overflow-hidden">

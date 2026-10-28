@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from uuid import UUID
 from datetime import datetime
 
@@ -200,6 +200,33 @@ class TestValidationResponse(BaseModel):
     commit_sha: str
     workflow_run_id: Optional[int] = None
     metrics: Dict[str, Any] = Field(default_factory=dict)
+    prediction_to_failure_correlation: Optional[float] = None
+    test_selection_efficiency: Optional[float] = None
+    high_priority_missed_count: Optional[int] = None
+    total_recommended: Optional[int] = None
+    total_actual_executed: Optional[int] = None
+    actual_failed_count: Optional[int] = None
+    recommended_failed_count: Optional[int] = None
+    missed_failures: List[Any] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_root_metrics(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            m = data.get("metrics") or {}
+            for k in [
+                "prediction_to_failure_correlation",
+                "test_selection_efficiency",
+                "high_priority_missed_count",
+                "total_recommended",
+                "total_actual_executed",
+                "actual_failed_count",
+                "recommended_failed_count",
+                "missed_failures"
+            ]:
+                if data.get(k) is None and k in m:
+                    data[k] = m[k]
+        return data
 
 
 class AnalysisResponseDTO(BaseModel):
@@ -228,7 +255,7 @@ class AnalysisResponseDTO(BaseModel):
     direct_impact: Optional[List[Dict[str, Any]]] = None
     transitive_impact: Optional[List[Dict[str, Any]]] = None
     engineering_actions: List[Dict[str, Any]] = Field(default_factory=list)
-    remediation_summary: Optional[str] = None
+    remediation_summary: Optional[Union[Dict[str, Any], str]] = None
     affected_modules: Optional[List[str]] = None
     affected_tests: Optional[List[Dict[str, Any]]] = None
     historical_signals: Optional[List[Dict[str, Any]]] = None

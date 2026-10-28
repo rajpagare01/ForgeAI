@@ -1601,7 +1601,14 @@ public class TraceabilityAggregationService {
 
         String mergeReadiness = prs.stream()
                 .flatMap(pr -> analyses.stream().filter(a -> (pr.getRepositoryId() + "#" + pr.getPrNumber()).equals(a.getEntityId())))
-                .map(a -> a.getMergeReadiness() != null ? String.valueOf(a.getMergeReadiness().get("status")) : "PENDING")
+                .map(a -> {
+                    if (a.getMergeReadiness() == null) return "PENDING";
+                    Object dec = a.getMergeReadiness().get("decision");
+                    if (dec != null && !dec.toString().isBlank()) return String.valueOf(dec);
+                    Object stat = a.getMergeReadiness().get("status");
+                    if (stat != null && !stat.toString().isBlank()) return String.valueOf(stat);
+                    return "PENDING";
+                })
                 .findFirst()
                 .orElse("NONE");
 
@@ -1610,7 +1617,8 @@ public class TraceabilityAggregationService {
         if (tasksCount > 0) completeness += 25.0;
         if (tasksCount > 0 && completedTasks == tasksCount) completeness += 25.0;
         if (testsCount > 0 || !testRuns.isEmpty()) completeness += 25.0;
-        if ((passingTests > 0 || hasPassingTestRun) && (mergedPrs > 0 || "READY".equalsIgnoreCase(mergeReadiness))) {
+        boolean isMergeReady = "READY".equalsIgnoreCase(mergeReadiness) || "READY_WITH_WARNINGS".equalsIgnoreCase(mergeReadiness);
+        if ((passingTests > 0 || hasPassingTestRun) && (mergedPrs > 0 || isMergeReady)) {
             completeness += 25.0;
         }
         completeness = Math.min(100.0, completeness);
@@ -1618,19 +1626,19 @@ public class TraceabilityAggregationService {
         boolean hasImplementation = prsCount > 0 || commitsCount > 0 || completedTasks > 0;
         boolean hasVerifiedTests = (passingTests > 0 || hasPassingTestRun) && !hasFailingTestCase && !hasFailingTestRun;
         boolean hasBlockedTask = tasks.stream().anyMatch(t -> t.getStatus() == TaskStatus.BLOCKED);
-        boolean isHighRisk = riskScore >= 0.70;
+        boolean isHighRisk = (riskScore >= 70.0 || (riskScore <= 1.0 && riskScore >= 0.70));
 
         String implStatus = tasksCount == 0 ? "NOT_STARTED" : (completedTasks == tasksCount ? "IMPLEMENTED" : (hasImplementation ? "IMPLEMENTED" : "IN_PROGRESS"));
         String testStatus = testsCount == 0 && testRuns.isEmpty() ? "NO_TESTS" : (hasVerifiedTests ? "TESTS_PASSED" : (hasFailingTestCase || hasFailingTestRun ? "TESTS_FAILING" : "TESTS_PENDING"));
-        String riskStatus = isHighRisk ? "HIGH" : (riskScore >= 0.40 ? "MEDIUM" : (riskScore > 0 ? "LOW" : "NO_RISK"));
+        String riskStatus = isHighRisk ? "HIGH" : ((riskScore >= 40.0 || (riskScore <= 1.0 && riskScore >= 0.40)) ? "MEDIUM" : (riskScore > 0 ? "LOW" : "NO_RISK"));
         String traceabilityStatus = (tasksCount > 0 && (prsCount > 0 || testsCount > 0)) ? "COMPLETE" : (tasksCount > 0 ? "PARTIAL" : "ORPHAN");
 
         RequirementHealthStatus status;
         if (tasksCount == 0) {
             status = RequirementHealthStatus.NOT_STARTED;
-        } else if (hasBlockedTask || isHighRisk || hasFailingTestCase || hasFailingTestRun || "BLOCKED".equalsIgnoreCase(mergeReadiness)) {
+        } else if (hasBlockedTask || isHighRisk || hasFailingTestCase || hasFailingTestRun || "BLOCKED".equalsIgnoreCase(mergeReadiness) || "NOT_READY".equalsIgnoreCase(mergeReadiness)) {
             status = RequirementHealthStatus.AT_RISK;
-        } else if (completedTasks == tasksCount && hasImplementation && hasVerifiedTests && (mergedPrs > 0 || "READY".equalsIgnoreCase(mergeReadiness))) {
+        } else if (completedTasks == tasksCount && hasImplementation && hasVerifiedTests && (mergedPrs > 0 || isMergeReady)) {
             status = RequirementHealthStatus.COMPLETED;
         } else if (hasImplementation && hasVerifiedTests) {
             status = RequirementHealthStatus.VALIDATED;

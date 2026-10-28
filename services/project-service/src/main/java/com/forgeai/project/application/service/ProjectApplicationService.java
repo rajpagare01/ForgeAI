@@ -176,7 +176,7 @@ public class ProjectApplicationService {
     /**
      * Lists projects accessible in the requested workspace or tenant context.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public List<Project> listProjects(UUID workspaceId, UUID organizationId, UUID callerUserId) {
         if (workspaceId != null) {
             Optional<WorkspaceJpaEntity> wsOpt = workspaceRepository.findById(workspaceId);

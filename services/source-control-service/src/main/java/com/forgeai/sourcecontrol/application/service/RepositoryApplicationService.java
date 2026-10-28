@@ -502,6 +502,23 @@ public class RepositoryApplicationService {
         String accountLogin = gitHubAppClient.getInstallationAccountLogin(installationId);
         log.info("[GitHub] Verified installation {} belongs to GitHub account '{}'", installationId, accountLogin);
 
+        // Strict Ownership Validation (Anti-Spoofing / Anti-Hijacking)
+        if ("PERSONAL".equals(scope) && callerUserId != null && identityServiceClient != null) {
+            var profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
+            if (profileOpt.isEmpty() || !profileOpt.get().connected()) {
+                throw new GitHubAccessDeniedException("User must connect GitHub account before claiming a GitHub App installation.");
+            }
+            var profile = profileOpt.get();
+            boolean loginMatches = profile.githubLogin() != null && profile.githubLogin().equalsIgnoreCase(accountLogin);
+            if (!loginMatches) {
+                log.warn("[Security] Installation claim ownership mismatch! Caller login '{}' != Installation account '{}'",
+                        profile.githubLogin(), accountLogin);
+                throw new GitHubAccessDeniedException(
+                        "Installation " + installationId + " belongs to GitHub account '" + accountLogin +
+                                "', which does not match your authenticated GitHub account.");
+            }
+        }
+
         // Check if tenant already owns a different installation
         Optional<GitHubInstallation> existingInstall = organizationId != null
                 ? installationRepository.findByOrganizationId(organizationId)
@@ -521,6 +538,7 @@ public class RepositoryApplicationService {
             inst.setOrganizationId(organizationId);
             inst.setWorkspaceId(targetWorkspaceId);
             inst.setScope(scope);
+            inst.setClaimedByUserId(callerUserId);
             inst.setStatus(InstallationStatus.ACTIVE);
             inst.setUpdatedAt(Instant.now());
             GitHubInstallation saved = installationRepository.save(inst);
@@ -536,6 +554,7 @@ public class RepositoryApplicationService {
                     .installationId(installationId)
                     .accountLogin(accountLogin)
                     .accountType("PERSONAL".equals(scope) ? "User" : "Organization")
+                    .claimedByUserId(callerUserId)
                     .status(InstallationStatus.ACTIVE)
                     .createdAt(Instant.now())
                     .updatedAt(Instant.now())

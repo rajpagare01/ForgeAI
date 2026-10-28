@@ -50,9 +50,10 @@ public class GitHubAuthController {
     public ResponseEntity<GitHubAuthStartResponse> start(
             @RequestParam(value = "redirectUri", required = false) String redirectUri,
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = resolveOptionalUserId(authentication, headerUserId);
+        UUID userId = resolveOptionalUserId(authentication, headerUserId, internalAttestation);
         GitHubAuthStartResponse response = gitHubAuthenticationUseCase.startAuthorization(userId, redirectUri);
         return ResponseEntity.ok(response);
     }
@@ -80,9 +81,10 @@ public class GitHubAuthController {
     public ResponseEntity<GitHubIdentityDto> link(
             @Valid @RequestBody GitHubCallbackRequest request,
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = requireUserId(authentication, headerUserId);
+        UUID userId = requireUserId(authentication, headerUserId, internalAttestation);
         GitHubIdentityDto response = gitHubAuthenticationUseCase.linkAccount(
                 userId,
                 request.code(),
@@ -99,9 +101,10 @@ public class GitHubAuthController {
     @PostMapping("/disconnect")
     public ResponseEntity<Map<String, String>> disconnect(
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = requireUserId(authentication, headerUserId);
+        UUID userId = requireUserId(authentication, headerUserId, internalAttestation);
         gitHubAuthenticationUseCase.disconnectAccount(userId);
         return ResponseEntity.ok(Map.of("message", "GitHub account unlinked successfully"));
     }
@@ -113,21 +116,22 @@ public class GitHubAuthController {
     @GetMapping("/status")
     public ResponseEntity<GitHubStatusResponse> getStatus(
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = requireUserId(authentication, headerUserId);
+        UUID userId = requireUserId(authentication, headerUserId, internalAttestation);
         return ResponseEntity.ok(gitHubAuthenticationUseCase.getStatus(userId));
     }
 
-    private UUID requireUserId(Authentication authentication, String headerUserId) {
-        UUID userId = resolveOptionalUserId(authentication, headerUserId);
+    private UUID requireUserId(Authentication authentication, String headerUserId, String internalAttestation) {
+        UUID userId = resolveOptionalUserId(authentication, headerUserId, internalAttestation);
         if (userId == null) {
             throw new InvalidCredentialsException("Authentication required");
         }
         return userId;
     }
 
-    private UUID resolveOptionalUserId(Authentication authentication, String headerUserId) {
+    private UUID resolveOptionalUserId(Authentication authentication, String headerUserId, String internalAttestation) {
         if (authentication != null && authentication.isAuthenticated()) {
             Object principal = authentication.getPrincipal();
             if (principal instanceof UUID uuid) {
@@ -144,7 +148,8 @@ public class GitHubAuthController {
                 } catch (IllegalArgumentException ignored) {}
             }
         }
-        if (headerUserId != null && !headerUserId.isBlank()) {
+        // Only trust X-User-Id if attested by internal gateway marker
+        if ("attested".equalsIgnoreCase(internalAttestation) && headerUserId != null && !headerUserId.isBlank()) {
             try {
                 return UUID.fromString(headerUserId.trim());
             } catch (IllegalArgumentException ignored) {}

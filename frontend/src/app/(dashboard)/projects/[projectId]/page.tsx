@@ -162,6 +162,13 @@ function ProjectDetailContent() {
         payload.requirementId = selectedReqId;
       }
 
+      if (assignee.trim()) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(assignee.trim());
+        if (isUuid) {
+          payload.assigneeId = assignee.trim();
+        }
+      }
+
       const created = await apiClient.post<any>(`/api/v1/projects/${rawProjectId}/tasks`, payload);
 
       const newTask: Task = {

@@ -210,6 +210,7 @@ public class InstallationEventHandler {
             RepositoryConnectedEvent event = RepositoryConnectedEvent.builder()
                     .repositoryId(repo.getId())
                     .organizationId(repo.getOrganizationId())
+                    .workspaceId(repo.getWorkspaceId())
                     .githubRepoId(repo.getGithubRepoId())
                     .fullName(repo.getFullName())
                     .defaultBranch(repo.getDefaultBranch())

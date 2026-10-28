@@ -34,7 +34,7 @@ spring:
         - id: project-operations
           uri: ${PROJECT_SERVICE_URI:http://localhost:8085}
           predicates:
-            - Path=/api/v1/operations/circuit-breakers,/api/v1/operations/traceability/**,/api/v1/operations/audit-events
+            - Path=/api/v1/operations/circuit-breakers,/api/v1/operations/traceability/**
           filters:
             - name: RequestRateLimiter
               args:

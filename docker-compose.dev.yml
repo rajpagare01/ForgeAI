@@ -112,8 +112,6 @@ services:
     depends_on:
       postgres:
         condition: service_started
-    volumes:
-      - ./services/project-service/target/classes:/app/BOOT-INF/classes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
       interval: 10s
@@ -151,7 +149,6 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     volumes:
       - ./secrets:/app/secrets:ro
-      - ./services/source-control-service/target/classes:/app/BOOT-INF/classes
     depends_on:
       postgres:
         condition: service_started
@@ -273,8 +270,6 @@ services:
         condition: service_started
       redis:
         condition: service_started
-    volumes:
-      - ./infrastructure/api-gateway/target/classes:/app/BOOT-INF/classes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s

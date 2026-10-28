@@ -288,6 +288,7 @@ class ReviewFinding(BaseModel):
     recommendation: str
     affected_file: Optional[str] = None
     affected_symbol: Optional[str] = None
+    provenance_source: Optional[str] = "AI_GROUNDED_REVIEW"
     created_at: datetime = Field(default_factory=utc_now)
 
 

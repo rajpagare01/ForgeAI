@@ -638,6 +638,8 @@ async def get_analyses_for_entity(
             changed_components=(a.impact_metadata or {}).get("changed_components"),
             direct_impact=(a.impact_metadata or {}).get("direct_impact"),
             transitive_impact=(a.impact_metadata or {}).get("transitive_impact"),
+            engineering_actions=getattr(a, "engineering_actions", None) or (a.impact_metadata or {}).get("engineering_actions") or [],
+            remediation_summary=getattr(a, "remediation_summary", None) or (a.impact_metadata or {}).get("remediation_summary"),
             affected_modules=(a.impact_metadata or {}).get("affected_modules"),
             affected_tests=(a.impact_metadata or {}).get("affected_tests"),
             historical_signals=(a.impact_metadata or {}).get("historical_signals"),
@@ -1379,8 +1381,14 @@ async def rescan_analysis_after_fix(
     # Determine files to re-analyze
     raw_files = [f.model_dump() for f in req.changed_files] if req.changed_files else None
     pr_num = req.pr_number if req.pr_number is not None else 0
-    if not pr_num and prior_analysis.entity_type == "PR" and prior_analysis.entity_id.isdigit():
-        pr_num = int(prior_analysis.entity_id)
+    if not pr_num and prior_analysis.entity_type == "PR":
+        if "#" in prior_analysis.entity_id:
+            try:
+                pr_num = int(prior_analysis.entity_id.split("#")[1])
+            except (ValueError, IndexError):
+                pass
+        elif prior_analysis.entity_id.isdigit():
+            pr_num = int(prior_analysis.entity_id)
 
     # Determine repository_id safely
     repo_id_candidate = (

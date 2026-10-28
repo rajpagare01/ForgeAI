@@ -36,22 +36,22 @@ public class GitHubAppConfig {
     private final boolean configured;
 
     public GitHubAppConfig(long appId, String privateKeyPem, String webhookSecret) {
-        this(String.valueOf(appId), "forgeai-raj-dev", privateKeyPem, "", webhookSecret);
+        this(String.valueOf(appId), "forgeai", privateKeyPem, "", webhookSecret);
     }
 
     public GitHubAppConfig(String appIdRaw, String privateKeyPem, String webhookSecret) {
-        this(appIdRaw, "forgeai-raj-dev", privateKeyPem, "", webhookSecret);
+        this(appIdRaw, "forgeai", privateKeyPem, "", webhookSecret);
     }
 
     @Autowired
     public GitHubAppConfig(
             @Value("${forgeai.github.app-id:0}") String appIdRaw,
-            @Value("${forgeai.github.app-slug:forgeai-raj-dev}") String appSlug,
+            @Value("${forgeai.github.app-slug:forgeai}") String appSlug,
             @Value("${forgeai.github.private-key:}") String privateKeyPem,
             @Value("${forgeai.github.private-key-path:}") String privateKeyPath,
             @Value("${forgeai.github.webhook-secret:}") String webhookSecret) {
 
-        this.appSlug = (appSlug != null && !appSlug.isBlank()) ? appSlug.trim() : "forgeai-raj-dev";
+        this.appSlug = (appSlug != null && !appSlug.isBlank()) ? appSlug.trim() : "forgeai";
 
         long parsedAppId = 0L;
         if (appIdRaw != null && !appIdRaw.isBlank()) {
@@ -138,7 +138,7 @@ public class GitHubAppConfig {
     }
 
     public String getAppInstallUrl() {
-        return "https://github.com/apps/" + (appSlug != null && !appSlug.isBlank() ? appSlug : "forgeai-raj-dev") + "/installations/new";
+        return "https://github.com/apps/" + (appSlug != null && !appSlug.isBlank() ? appSlug : "forgeai") + "/installations/new";
     }
 
     /**

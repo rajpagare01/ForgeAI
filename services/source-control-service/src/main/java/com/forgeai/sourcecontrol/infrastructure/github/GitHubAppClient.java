@@ -222,13 +222,26 @@ public class GitHubAppClient {
      * Returns the account login for the installation.
      */
     public String getInstallationAccountLogin(Long installationId) {
-        return getInstallationDetails(installationId).accountLogin();
+        GitHubInstallationDetails details = getInstallationDetails(installationId);
+        if (details == null) {
+            throw new GitHubAccessDeniedException("Installation " + installationId + " could not be resolved on GitHub.");
+        }
+        return details.accountLogin();
     }
 
     /**
      * Authoritatively fetches installation details directly from GitHub using the App JWT.
+     * Returns null if installation is not found (404).
      */
     public GitHubInstallationDetails getInstallationDetails(Long installationId) {
+        return findInstallationDetails(installationId).orElse(null);
+    }
+
+    /**
+     * Authoritatively fetches installation details directly from GitHub using the App JWT.
+     * Returns Optional.empty() if installation is not found (404).
+     */
+    public Optional<GitHubInstallationDetails> findInstallationDetails(Long installationId) {
         config.requireConfigured();
         String appJwt = buildAppJwt();
         String url = GITHUB_API + "/app/installations/" + installationId;
@@ -243,8 +256,23 @@ public class GitHubAppClient {
                 .timeout(Duration.ofSeconds(15))
                 .build();
 
-        JsonNode body = execute(request, "get installation id=" + installationId);
-        return mapInstallationDetails(body);
+        try {
+            HttpResponse<String> response = executeRaw(request, "get installation id=" + installationId);
+            if (response.statusCode() == 200) {
+                JsonNode body = objectMapper.readTree(response.body());
+                return Optional.of(mapInstallationDetails(body));
+            } else if (response.statusCode() == 404) {
+                return Optional.empty();
+            }
+        } catch (GitHubAccessDeniedException e) {
+            if (e.getMessage() != null && e.getMessage().contains("HTTP 404")) {
+                return Optional.empty();
+            }
+            throw e;
+        } catch (Exception e) {
+            log.warn("Could not fetch installation details for {}: {}", installationId, e.getMessage());
+        }
+        return Optional.empty();
     }
 
     /**
@@ -275,6 +303,11 @@ public class GitHubAppClient {
             } else if (response.statusCode() == 404) {
                 return Optional.empty();
             }
+        } catch (GitHubAccessDeniedException e) {
+            if (e.getMessage() != null && e.getMessage().contains("HTTP 404")) {
+                return Optional.empty();
+            }
+            log.warn("Access denied fetching user installation for {}: {}", githubLogin, e.getMessage());
         } catch (Exception e) {
             log.warn("Could not fetch user installation for {}: {}", githubLogin, e.getMessage());
         }
@@ -309,6 +342,11 @@ public class GitHubAppClient {
             } else if (response.statusCode() == 404) {
                 return Optional.empty();
             }
+        } catch (GitHubAccessDeniedException e) {
+            if (e.getMessage() != null && e.getMessage().contains("HTTP 404")) {
+                return Optional.empty();
+            }
+            log.warn("Access denied fetching org installation for {}: {}", orgLogin, e.getMessage());
         } catch (Exception e) {
             log.warn("Could not fetch org installation for {}: {}", orgLogin, e.getMessage());
         }

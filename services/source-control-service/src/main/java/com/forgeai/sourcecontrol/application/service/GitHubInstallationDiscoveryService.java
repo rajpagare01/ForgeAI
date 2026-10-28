@@ -338,6 +338,23 @@ public class GitHubInstallationDiscoveryService {
                     return existing;
                 }
                 if (isPersonal) {
+                    if (existing.getOrganizationId() != null) {
+                        if (metrics != null) {
+                            metrics.recordInstallationOwnershipRejection();
+                            metrics.recordInstallationFailure();
+                        }
+                        throw new GitHubAccessDeniedException(
+                                "Installation " + installationId + " is already claimed by an organization.");
+                    }
+                    if (existing.getWorkspaceId() != null && !existing.getWorkspaceId().equals(effectiveWsId)
+                            && existing.getClaimedByUserId() != null && !existing.getClaimedByUserId().equals(callerUserId)) {
+                        if (metrics != null) {
+                            metrics.recordInstallationOwnershipRejection();
+                            metrics.recordInstallationFailure();
+                        }
+                        throw new GitHubAccessDeniedException(
+                                "Installation " + installationId + " is already claimed by another user.");
+                    }
                     log.info("[GitHub] Associating personal installation {} to personal workspace {}",
                             installationId, effectiveWsId);
                     existing.setWorkspaceId(effectiveWsId);
@@ -473,6 +490,7 @@ public class GitHubInstallationDiscoveryService {
             RepositoryConnectedEvent event = RepositoryConnectedEvent.builder()
                     .repositoryId(repo.getId())
                     .organizationId(repo.getOrganizationId())
+                    .workspaceId(repo.getWorkspaceId())
                     .githubRepoId(repo.getGithubRepoId())
                     .fullName(repo.getFullName())
                     .defaultBranch(repo.getDefaultBranch())
