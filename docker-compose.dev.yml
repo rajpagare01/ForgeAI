@@ -57,7 +57,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_identity
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_identity?connectTimeout=5&socketTimeout=10&tcpKeepAlive=true
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
       SERVER_PORT: 8081
@@ -71,7 +71,6 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx512m -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     volumes:
       - ./secrets:/app/secrets:ro
-      - ./services/identity-service/target/classes:/app/BOOT-INF/classes
     depends_on:
       postgres:
         condition: service_started

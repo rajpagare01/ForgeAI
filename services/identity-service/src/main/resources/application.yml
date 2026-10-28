@@ -6,6 +6,12 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgeai_identity}
     username: ${SPRING_DATASOURCE_USERNAME:forgeai}
     password: ${SPRING_DATASOURCE_PASSWORD:password}
+    hikari:
+      connection-timeout: 5000
+      validation-timeout: 3000
+      max-lifetime: 300000
+      idle-timeout: 120000
+      leak-detection-threshold: 60000
 
   jpa:
     open-in-view: false
