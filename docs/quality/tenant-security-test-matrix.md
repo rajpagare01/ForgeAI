@@ -56,3 +56,4 @@ This matrix specifies the security behaviors, expected HTTP response codes, and 
     - Personal workspace repository listing (200 OK without Org ID)
     - Callback execution & Anti-replay defense (Replay blocked)
     - Multi-user isolation (User B cannot see User A repos, 404 on cross-repo access, 403 on spoofed workspace header).
+

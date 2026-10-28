@@ -53,15 +53,24 @@ function GitHubCallbackContent() {
         setStepMessage("Exchanging GitHub authorization credentials...");
         const callbackUri = `${window.location.origin}/auth/github/callback`;
 
-        if (isAuthenticated) {
-          // Account linking flow for logged-in user
-          setStepMessage("Linking GitHub identity to ForgeAI workspace...");
-          await linkGitHubAccount(code, state, callbackUri);
-        } else {
-          // Sign in / Registration flow
-          setStepMessage("Establishing secure ForgeAI session & personal workspace...");
-          await loginWithGitHub(code, state, callbackUri);
-        }
+        // Wrap the exchange in a 15-second timeout to prevent indefinite hanging
+        const exchangePromise = (async () => {
+          if (isAuthenticated) {
+            // Account linking flow for logged-in user
+            setStepMessage("Linking GitHub identity to ForgeAI workspace...");
+            await linkGitHubAccount(code, state, callbackUri);
+          } else {
+            // Sign in / Registration flow
+            setStepMessage("Establishing secure ForgeAI session & personal workspace...");
+            await loginWithGitHub(code, state, callbackUri);
+          }
+        })();
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("GitHub OAuth exchange timed out after 15 seconds. Please try signing in again.")), 15000)
+        );
+
+        await Promise.race([exchangePromise, timeoutPromise]);
 
         setStatus("success");
         setStepMessage("Identity verified! Redirecting to workspace...");
