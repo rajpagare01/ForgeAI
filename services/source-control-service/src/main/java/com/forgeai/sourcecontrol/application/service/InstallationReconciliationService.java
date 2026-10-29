@@ -140,6 +140,7 @@ public class InstallationReconciliationService {
                         .repositoryId(repoId)
                         .organizationId(repo.getOrganizationId())
                         .workspaceId(repo.getWorkspaceId())
+                        .scope(repo.getScope() != null ? repo.getScope() : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL"))
                         .githubRepoId(repo.getGithubRepoId())
                         .fullName(repo.getFullName())
                         .defaultBranch(repo.getDefaultBranch())

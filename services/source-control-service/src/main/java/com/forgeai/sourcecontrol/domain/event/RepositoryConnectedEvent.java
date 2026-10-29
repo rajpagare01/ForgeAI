@@ -20,6 +20,15 @@ public class RepositoryConnectedEvent implements DomainEvent {
     private String fullName;
     private String defaultBranch;
     private Instant timestamp;
+    private String scope;
+
+    @Override
+    public String getScope() {
+        if (scope != null && !scope.isBlank()) {
+            return scope;
+        }
+        return organizationId != null ? "ORGANIZATION" : "PERSONAL";
+    }
 
     @Override
     public UUID getWorkspaceId() {

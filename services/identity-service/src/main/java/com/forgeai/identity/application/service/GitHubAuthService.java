@@ -30,7 +30,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -45,6 +47,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 @Slf4j
 @Service
@@ -63,11 +66,32 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
     private final RefreshTokenRepository refreshTokenRepository;
     private final SecurityEventService securityEventService;
     private final PasswordHasher passwordHasher;
+    private final TransactionTemplate transactionTemplate;
 
     private final String clientId;
     private final String clientSecret;
     private final String defaultRedirectUri;
     private final SecureRandom secureRandom = new SecureRandom();
+
+    public GitHubAuthService(
+            GitHubIdentityRepository gitHubIdentityRepository,
+            OAuthStateRepository oauthStateRepository,
+            GitHubOAuthClient gitHubOAuthClient,
+            TokenEncryptor tokenEncryptor,
+            UserRepository userRepository,
+            WorkspaceService workspaceService,
+            TokenProvider tokenProvider,
+            SessionService sessionService,
+            RefreshTokenRepository refreshTokenRepository,
+            SecurityEventService securityEventService,
+            PasswordHasher passwordHasher,
+            String clientId,
+            String clientSecret,
+            String defaultRedirectUri) {
+        this(gitHubIdentityRepository, oauthStateRepository, gitHubOAuthClient, tokenEncryptor, userRepository,
+                workspaceService, tokenProvider, sessionService, refreshTokenRepository, securityEventService,
+                passwordHasher, null, clientId, clientSecret, defaultRedirectUri);
+    }
 
     @Autowired
     public GitHubAuthService(
@@ -82,6 +106,7 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
             RefreshTokenRepository refreshTokenRepository,
             SecurityEventService securityEventService,
             PasswordHasher passwordHasher,
+            @Autowired(required = false) PlatformTransactionManager transactionManager,
             @Value("${forgeai.github.client-id:${GITHUB_CLIENT_ID:}}") String clientId,
             @Value("${forgeai.github.client-secret:${GITHUB_CLIENT_SECRET:}}") String clientSecret,
             @Value("${forgeai.github.redirect-uri:${GITHUB_REDIRECT_URI:http://localhost:3000/auth/github/callback}}") String defaultRedirectUri) {
@@ -96,9 +121,17 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
         this.refreshTokenRepository = refreshTokenRepository;
         this.securityEventService = securityEventService;
         this.passwordHasher = passwordHasher;
+        this.transactionTemplate = transactionManager != null ? new TransactionTemplate(transactionManager) : null;
         this.clientId = clientId != null ? clientId.trim() : "";
         this.clientSecret = clientSecret != null ? clientSecret.trim() : "";
         this.defaultRedirectUri = defaultRedirectUri != null ? defaultRedirectUri.trim() : "http://localhost:3000/auth/github/callback";
+    }
+
+    private <T> T executeInTransaction(Supplier<T> action) {
+        if (transactionTemplate != null) {
+            return transactionTemplate.execute(status -> action.get());
+        }
+        return action.get();
     }
 
     @Override
@@ -139,24 +172,50 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
         return new GitHubAuthStartResponse(authorizationUrl, state);
     }
 
+    private record CallbackProvisioningResult(User user, boolean isNewUser, LoginResponse response) {}
+
     @Override
-    @Transactional
     public LoginResponse handleCallback(String code, String state, String redirectUri) {
-        OAuthState oauthState = validateAndConsumeState(state, null);
+        // Phase 1 (Short Transaction #1): Validate and consume state atomically
+        OAuthState oauthState = executeInTransaction(() -> validateAndConsumeState(state, null));
 
         String effectiveRedirect = (redirectUri != null && !redirectUri.isBlank())
                 ? redirectUri
                 : oauthState.getRedirectUrl();
 
+        // Phase 2 (No Transaction / Outside DB Pool): Outbound GitHub HTTPS calls
         GitHubOAuthClient.OAuthToken token = gitHubOAuthClient.exchangeCodeForToken(code, effectiveRedirect);
         GitHubOAuthClient.UserProfile profile = gitHubOAuthClient.fetchUserProfile(token.accessToken());
 
         String email = resolveVerifiedEmail(profile, token.accessToken());
         String encryptedAccessToken = tokenEncryptor.encrypt(token.accessToken());
 
+        // Phase 3 (Short Transaction #2): User/identity resolution & session creation
+        CallbackProvisioningResult result = executeInTransaction(() ->
+                processUserAndIdentity(profile, email, encryptedAccessToken, token));
+
+        // Phase 4 (Separate Transaction / Isolated Try-Catch): Workspace provisioning
+        if (result.isNewUser() && workspaceService != null) {
+            try {
+                workspaceService.getOrCreatePersonalWorkspace(result.user().getId(), result.user().getUsername().value());
+            } catch (Exception e) {
+                log.warn("Personal workspace provisioning warning for user {}: {}", result.user().getId(), e.getMessage());
+            }
+        }
+
+        return result.response();
+    }
+
+    private CallbackProvisioningResult processUserAndIdentity(
+            GitHubOAuthClient.UserProfile profile,
+            String email,
+            String encryptedAccessToken,
+            GitHubOAuthClient.OAuthToken token) {
+
         Optional<GitHubIdentity> existingIdentityOpt = gitHubIdentityRepository.findByGithubUserId(profile.id());
 
         User user;
+        boolean isNewUser = false;
         if (existingIdentityOpt.isPresent()) {
             GitHubIdentity identity = existingIdentityOpt.get();
             user = userRepository.findById(identity.getUserId())
@@ -212,6 +271,7 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
 
             } else {
                 // Provision new user
+                isNewUser = true;
                 String resolvedUsername = generateUniqueUsername(profile.login());
                 String[] parsedNames = parseNames(profile.name(), profile.login());
 
@@ -229,15 +289,6 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
                 newUser.setCreatedAt(Instant.now());
                 newUser.setUpdatedAt(Instant.now());
                 user = userRepository.save(newUser);
-
-                // Invariant: provision Personal Workspace for the user
-                if (workspaceService != null) {
-                    try {
-                        workspaceService.getOrCreatePersonalWorkspace(user.getId(), user.getUsername().value());
-                    } catch (Exception e) {
-                        log.warn("Personal workspace provisioning warning for user {}: {}", user.getId(), e.getMessage());
-                    }
-                }
 
                 GitHubIdentity identity = GitHubIdentity.builder()
                         .userId(user.getId())
@@ -264,71 +315,76 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
         securityEventService.recordEvent(user.getId(), null, "GITHUB_LOGIN_SUCCESS",
                 getClientIp(), getUserAgent(), "{\"githubLogin\":\"" + profile.login() + "\"}");
 
-        return createSessionAndTokens(user);
+        LoginResponse loginResponse = createSessionAndTokens(user);
+        return new CallbackProvisioningResult(user, isNewUser, loginResponse);
     }
 
     @Override
-    @Transactional
     public GitHubIdentityDto linkAccount(UUID userId, String code, String state, String redirectUri) {
         if (userId == null) {
             throw new IllegalArgumentException("User ID is required to link GitHub account");
         }
 
-        OAuthState oauthState = validateAndConsumeState(state, userId);
+        // Phase 1 (Short Transaction #1): Validate and consume state
+        OAuthState oauthState = executeInTransaction(() -> validateAndConsumeState(state, userId));
 
         String effectiveRedirect = (redirectUri != null && !redirectUri.isBlank())
                 ? redirectUri
                 : oauthState.getRedirectUrl();
 
+        // Phase 2 (No Transaction): Outbound GitHub calls
         GitHubOAuthClient.OAuthToken token = gitHubOAuthClient.exchangeCodeForToken(code, effectiveRedirect);
         GitHubOAuthClient.UserProfile profile = gitHubOAuthClient.fetchUserProfile(token.accessToken());
-
-        Optional<GitHubIdentity> existingOpt = gitHubIdentityRepository.findByGithubUserId(profile.id());
-        if (existingOpt.isPresent() && !existingOpt.get().getUserId().equals(userId)) {
-            throw new IllegalStateException("This GitHub account is already linked to another ForgeAI user.");
-        }
 
         String email = resolveVerifiedEmail(profile, token.accessToken());
         String encryptedAccessToken = tokenEncryptor.encrypt(token.accessToken());
 
-        Optional<GitHubIdentity> currentOpt = gitHubIdentityRepository.findByUserId(userId);
-        GitHubIdentity identity;
-        if (currentOpt.isPresent()) {
-            identity = currentOpt.get();
-            identity.setGithubUserId(profile.id());
-            identity.setGithubLogin(profile.login());
-            identity.setName(profile.name());
-            identity.setEmail(email);
-            identity.setAvatarUrl(profile.avatarUrl());
-            identity.setProfileUrl(profile.htmlUrl());
-            identity.setEncryptedAccessToken(encryptedAccessToken);
-            identity.setTokenType(token.tokenType());
-            identity.setScope(token.scope());
-            identity.setUpdatedAt(Instant.now());
-            identity.setLastSyncedAt(Instant.now());
-        } else {
-            identity = GitHubIdentity.builder()
-                    .userId(userId)
-                    .githubUserId(profile.id())
-                    .githubLogin(profile.login())
-                    .name(profile.name())
-                    .email(email)
-                    .avatarUrl(profile.avatarUrl())
-                    .profileUrl(profile.htmlUrl())
-                    .encryptedAccessToken(encryptedAccessToken)
-                    .tokenType(token.tokenType())
-                    .scope(token.scope())
-                    .createdAt(Instant.now())
-                    .updatedAt(Instant.now())
-                    .lastSyncedAt(Instant.now())
-                    .build();
-        }
+        // Phase 3 (Short Transaction #2): Link identity in DB
+        return executeInTransaction(() -> {
+            Optional<GitHubIdentity> existingOpt = gitHubIdentityRepository.findByGithubUserId(profile.id());
+            if (existingOpt.isPresent() && !existingOpt.get().getUserId().equals(userId)) {
+                throw new IllegalStateException("This GitHub account is already linked to another ForgeAI user.");
+            }
 
-        GitHubIdentity saved = gitHubIdentityRepository.save(identity);
-        securityEventService.recordEvent(userId, null, "GITHUB_ACCOUNT_LINKED",
-                getClientIp(), getUserAgent(), "{\"githubLogin\":\"" + profile.login() + "\"}");
+            Optional<GitHubIdentity> currentOpt = gitHubIdentityRepository.findByUserId(userId);
+            GitHubIdentity identity;
+            if (currentOpt.isPresent()) {
+                identity = currentOpt.get();
+                identity.setGithubUserId(profile.id());
+                identity.setGithubLogin(profile.login());
+                identity.setName(profile.name());
+                identity.setEmail(email);
+                identity.setAvatarUrl(profile.avatarUrl());
+                identity.setProfileUrl(profile.htmlUrl());
+                identity.setEncryptedAccessToken(encryptedAccessToken);
+                identity.setTokenType(token.tokenType());
+                identity.setScope(token.scope());
+                identity.setUpdatedAt(Instant.now());
+                identity.setLastSyncedAt(Instant.now());
+            } else {
+                identity = GitHubIdentity.builder()
+                        .userId(userId)
+                        .githubUserId(profile.id())
+                        .githubLogin(profile.login())
+                        .name(profile.name())
+                        .email(email)
+                        .avatarUrl(profile.avatarUrl())
+                        .profileUrl(profile.htmlUrl())
+                        .encryptedAccessToken(encryptedAccessToken)
+                        .tokenType(token.tokenType())
+                        .scope(token.scope())
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .lastSyncedAt(Instant.now())
+                        .build();
+            }
 
-        return toDto(saved);
+            GitHubIdentity saved = gitHubIdentityRepository.save(identity);
+            securityEventService.recordEvent(userId, null, "GITHUB_ACCOUNT_LINKED",
+                    getClientIp(), getUserAgent(), "{\"githubLogin\":\"" + profile.login() + "\"}");
+
+            return toDto(saved);
+        });
     }
 
     @Override

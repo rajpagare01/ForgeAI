@@ -296,7 +296,6 @@ services:
       NODE_ENV: production
       PORT: 3000
     volumes:
-      - ./frontend/.next:/app/.next
       - ./frontend/public:/app/public
     depends_on:
       api-gateway:

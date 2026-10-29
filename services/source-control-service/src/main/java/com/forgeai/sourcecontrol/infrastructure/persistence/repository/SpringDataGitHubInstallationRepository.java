@@ -9,9 +9,9 @@ import java.util.UUID;
 
 public interface SpringDataGitHubInstallationRepository extends JpaRepository<GitHubInstallationJpaEntity, UUID> {
     Optional<GitHubInstallationJpaEntity> findByInstallationId(Long installationId);
-    Optional<GitHubInstallationJpaEntity> findByOrganizationId(UUID organizationId);
-    Optional<GitHubInstallationJpaEntity> findByWorkspaceId(UUID workspaceId);
-    Optional<GitHubInstallationJpaEntity> findByAccountId(Long accountId);
+    Optional<GitHubInstallationJpaEntity> findFirstByOrganizationIdOrderByUpdatedAtDesc(UUID organizationId);
+    Optional<GitHubInstallationJpaEntity> findFirstByWorkspaceIdOrderByUpdatedAtDesc(UUID workspaceId);
+    Optional<GitHubInstallationJpaEntity> findFirstByAccountIdOrderByUpdatedAtDesc(Long accountId);
     List<GitHubInstallationJpaEntity> findByAccountLoginIgnoreCase(String accountLogin);
     List<GitHubInstallationJpaEntity> findByStatus(String status);
     List<GitHubInstallationJpaEntity> findByClaimedByUserId(UUID claimedByUserId);

@@ -81,7 +81,10 @@ public class GitHubConnectionController {
             throw new IllegalStateException("Authenticated user required to initiate GitHub App installation");
         }
         if (effectiveWsId == null) {
-            throw new IllegalStateException("Active workspace required to initiate GitHub App installation");
+            effectiveWsId = orgId;
+        }
+        if (effectiveWsId == null) {
+            throw new IllegalStateException("Workspace or Organization context is required to start GitHub App installation.");
         }
 
         String scope = (orgId == null) ? "PERSONAL" : "ORGANIZATION";
@@ -112,9 +115,15 @@ public class GitHubConnectionController {
         log.info("[GitHub Callback GET] Received setup redirect: installation_id={}, setup_action={}, statePresent={}",
                 installationId, setupAction, (state != null && !state.isBlank()));
 
-        if (installationId == null || state == null || state.isBlank()) {
-            log.warn("[GitHub Callback GET] Missing installation_id or state parameter in callback redirect");
+        if (installationId == null) {
+            log.warn("[GitHub Callback GET] Missing installation_id parameter in callback redirect");
             String target = frontendUrl + "/repositories?error=" + URLEncoder.encode("Missing required callback parameters from GitHub", StandardCharsets.UTF_8);
+            return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(target)).build();
+        }
+
+        if (state == null || state.isBlank()) {
+            log.info("[GitHub Callback GET] Setup redirect without state token; redirecting to repositories with installation_id={}", installationId);
+            String target = frontendUrl + "/repositories?installation_id=" + installationId + (setupAction != null ? "&setup_action=" + URLEncoder.encode(setupAction, StandardCharsets.UTF_8) : "");
             return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(target)).build();
         }
 

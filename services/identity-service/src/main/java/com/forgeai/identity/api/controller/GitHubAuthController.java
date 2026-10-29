@@ -8,9 +8,11 @@ import com.forgeai.identity.api.dto.GitHubStatusResponse;
 import com.forgeai.identity.api.dto.LoginResponse;
 import com.forgeai.identity.application.port.in.GitHubAuthenticationUseCase;
 import com.forgeai.identity.domain.exception.InvalidCredentialsException;
+import com.forgeai.identity.infrastructure.security.JwtService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,10 +29,18 @@ import java.util.UUID;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth/github")
-@RequiredArgsConstructor
 public class GitHubAuthController {
 
     private final GitHubAuthenticationUseCase gitHubAuthenticationUseCase;
+    private final JwtService jwtService;
+
+    @Autowired
+    public GitHubAuthController(
+            GitHubAuthenticationUseCase gitHubAuthenticationUseCase,
+            @Autowired(required = false) JwtService jwtService) {
+        this.gitHubAuthenticationUseCase = gitHubAuthenticationUseCase;
+        this.jwtService = jwtService;
+    }
 
     /**
      * GET /api/v1/auth/github/config
@@ -49,11 +59,12 @@ public class GitHubAuthController {
     @GetMapping("/start")
     public ResponseEntity<GitHubAuthStartResponse> start(
             @RequestParam(value = "redirectUri", required = false) String redirectUri,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
             @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = resolveOptionalUserId(authentication, headerUserId, internalAttestation);
+        UUID userId = resolveOptionalUserId(authentication, authHeader, headerUserId, internalAttestation);
         GitHubAuthStartResponse response = gitHubAuthenticationUseCase.startAuthorization(userId, redirectUri);
         return ResponseEntity.ok(response);
     }
@@ -80,11 +91,12 @@ public class GitHubAuthController {
     @PostMapping("/link")
     public ResponseEntity<GitHubIdentityDto> link(
             @Valid @RequestBody GitHubCallbackRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
             @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = requireUserId(authentication, headerUserId, internalAttestation);
+        UUID userId = requireUserId(authentication, authHeader, headerUserId, internalAttestation);
         GitHubIdentityDto response = gitHubAuthenticationUseCase.linkAccount(
                 userId,
                 request.code(),
@@ -100,11 +112,12 @@ public class GitHubAuthController {
      */
     @PostMapping("/disconnect")
     public ResponseEntity<Map<String, String>> disconnect(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
             @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = requireUserId(authentication, headerUserId, internalAttestation);
+        UUID userId = requireUserId(authentication, authHeader, headerUserId, internalAttestation);
         gitHubAuthenticationUseCase.disconnectAccount(userId);
         return ResponseEntity.ok(Map.of("message", "GitHub account unlinked successfully"));
     }
@@ -115,23 +128,32 @@ public class GitHubAuthController {
      */
     @GetMapping("/status")
     public ResponseEntity<GitHubStatusResponse> getStatus(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
             @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalAttestation,
             Authentication authentication) {
 
-        UUID userId = requireUserId(authentication, headerUserId, internalAttestation);
+        UUID userId = requireUserId(authentication, authHeader, headerUserId, internalAttestation);
         return ResponseEntity.ok(gitHubAuthenticationUseCase.getStatus(userId));
     }
 
-    private UUID requireUserId(Authentication authentication, String headerUserId, String internalAttestation) {
-        UUID userId = resolveOptionalUserId(authentication, headerUserId, internalAttestation);
+    private UUID requireUserId(Authentication authentication, String authHeader, String headerUserId, String internalAttestation) {
+        UUID userId = resolveOptionalUserId(authentication, authHeader, headerUserId, internalAttestation);
         if (userId == null) {
             throw new InvalidCredentialsException("Authentication required");
         }
         return userId;
     }
 
-    private UUID resolveOptionalUserId(Authentication authentication, String headerUserId, String internalAttestation) {
+    private UUID resolveOptionalUserId(Authentication authentication, String authHeader, String headerUserId, String internalAttestation) {
+        // 1. Only trust X-User-Id if attested by internal gateway marker
+        if ("attested".equalsIgnoreCase(internalAttestation) && headerUserId != null && !headerUserId.isBlank()) {
+            try {
+                return UUID.fromString(headerUserId.trim());
+            } catch (IllegalArgumentException ignored) {}
+        }
+
+        // 2. Spring Security Authentication context
         if (authentication != null && authentication.isAuthenticated()) {
             Object principal = authentication.getPrincipal();
             if (principal instanceof UUID uuid) {
@@ -148,12 +170,15 @@ public class GitHubAuthController {
                 } catch (IllegalArgumentException ignored) {}
             }
         }
-        // Only trust X-User-Id if attested by internal gateway marker
-        if ("attested".equalsIgnoreCase(internalAttestation) && headerUserId != null && !headerUserId.isBlank()) {
+
+        // 3. Fallback: Parse Bearer token directly if available
+        if (authHeader != null && authHeader.startsWith("Bearer ") && jwtService != null) {
             try {
-                return UUID.fromString(headerUserId.trim());
-            } catch (IllegalArgumentException ignored) {}
+                String token = authHeader.substring(7).trim();
+                return jwtService.extractUserId(token);
+            } catch (Exception ignored) {}
         }
+
         return null;
     }
 }

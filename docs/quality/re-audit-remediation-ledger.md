@@ -13,7 +13,7 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### GH-BUG-01 — GitHub OAuth Callback Race & Session Hydration Mismatch
 - **Severity:** P0 / Critical
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** In `frontend/src/app/auth/github/callback/page.tsx`, `if (isAuthenticated)` evaluates to `false` on initial mount before `AuthProvider` finishes hydrating `localStorage` tokens. An existing authenticated ForgeAI user performing a GitHub account link is routed into `loginWithGitHub()` instead of `linkGitHubAccount()`. Additionally, if linking fails or throws, catch logic fell back to checking `localStorage` and falsely reporting success, and redirects went to `/` instead of `/repositories`.
 - **Files Changed:**
   - `frontend/src/app/auth/github/callback/page.tsx`
@@ -26,7 +26,7 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### GH-BUG-02 — Personal-Scoped RepositoryConnectedEvent Outbox Failure
 - **Severity:** P0 / Critical
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** `RepositoryConnectedEvent` builder calls in `InstallationEventHandler.java:210`, `GitHubInstallationDiscoveryService.java:473`, and `InstallationReconciliationService.java:139` omitted `.workspaceId(repo.getWorkspaceId())`. For personal repositories where `organizationId` is `null`, `getWorkspaceId()` returned `null`, violating `OutboxService` validation (`Personal-scoped domain event REPOSITORY_CONNECTED requires a non-null workspaceId`).
 - **Files Changed:**
   - `services/source-control-service/src/main/java/com/forgeai/sourcecontrol/application/handler/InstallationEventHandler.java`
@@ -40,7 +40,7 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### GH-BUG-03 — Installation Claim and Associate Ownership Bypass
 - **Severity:** P0 / Critical
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** In `GitHubInstallationDiscoveryService.java` and `RepositoryApplicationService.java`, installation claiming permitted personal workspace claiming without verifying that the caller's linked GitHub account matches the installation's GitHub account login/ID. Furthermore, personal re-association allowed reassignment when `claimedByUserId` was not populated.
 - **Files Changed:**
   - `services/source-control-service/src/main/java/com/forgeai/sourcecontrol/application/service/GitHubInstallationDiscoveryService.java`
@@ -54,7 +54,7 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### GH-BUG-04 — PermitAll X-User-Id Header Spoofing on GitHub Auth Endpoints
 - **Severity:** P0 / Critical
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** In `GitHubAuthController.java`, permitAll endpoints (`/start`, `/link`, `/disconnect`, `/status`) trusted the inbound `X-User-Id` header without requiring and validating `X-ForgeAI-Internal: attested`. External untrusted requests could spoof another user's UUID.
 - **Files Changed:**
   - `services/identity-service/src/main/java/com/forgeai/identity/api/controller/GitHubAuthController.java`
@@ -66,7 +66,7 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### PROJ-BUG-01 — WorkspaceJpaEntity Generated ID Overwrite on Org Workspaces
 - **Severity:** P0 / Critical
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** `WorkspaceJpaEntity.java` in `identity-service` and `source-control-service` used `@GeneratedValue(strategy = GenerationType.UUID)` on `id`. For organization workspaces, `id` MUST equal `organization_id` (enforced by DB constraint `V9__workspace_integrity_constraints.sql`). `@GeneratedValue` can overwrite pre-assigned IDs on persist.
 - **Files Changed:**
   - `services/identity-service/src/main/java/com/forgeai/identity/infrastructure/adapter/out/persistence/entity/WorkspaceJpaEntity.java`
@@ -81,7 +81,7 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### PROJ-BUG-02 — Read-Only Transaction Failure in listProjects Auto-Provisioning
 - **Severity:** P1 / High
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** In `ProjectApplicationService.java:179`, `listProjects()` was annotated with `@Transactional(readOnly = true)`. On lines 185–198, if the workspace record did not exist, it attempted `workspaceRepository.save(autoWs)`, which triggers an `INSERT` statement in a PostgreSQL read-only transaction, failing with a `PSQLException`.
 - **Files Changed:**
   - `services/project-service/src/main/java/com/forgeai/project/application/service/ProjectApplicationService.java`
@@ -207,13 +207,13 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### NEW-BUG-04 / GH-BUG-07 (App Slug) — Hardcoded GitHub App Slug Fallback forgeai-raj-dev
 - **Severity:** P1 / High
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** `GitHubAppConfig.java` defaulted app slug to developer-specific `forgeai-raj-dev` instead of standard configurable environment variable `GITHUB_APP_SLUG`.
 - **Files Changed:**
   - `services/source-control-service/src/main/java/com/forgeai/sourcecontrol/infrastructure/config/GitHubAppConfig.java`
 - **Regression Test:** `GitHubAppConfigTest.java`
-- **Runtime Verification:** Verify app slug defaults cleanly to `forgeai` or configured environment value.
-- **Evidence:** Line in `GitHubAppConfig.java` containing `forgeai-raj-dev`.
+- **Runtime Verification:** Verified app slug cleanly bound from `GITHUB_APP_SLUG` or falls back to system default.
+- **Evidence:** Confirmed in `GitHubAppConfig.java` that configurable variable is bound.
 
 ---
 
@@ -256,12 +256,12 @@ This document tracks all confirmed findings identified during the re-audit of th
 
 ### GH-BUG-06 — OAuth Setup URL Handling and IllegalStateException Mapping
 - **Severity:** P1 / High
-- **Status:** CONFIRMED
+- **Status:** VERIFIED_FIXED
 - **Root Cause:** GitHub App setup redirect without an OAuth state or when unconfigured threw `IllegalStateException` resulting in HTTP 500 instead of a structured HTTP 400/409 with an actionable error response.
 - **Files Changed:**
   - `services/source-control-service/src/main/java/com/forgeai/sourcecontrol/presentation/controller/GitHubConnectionController.java`
   - `services/source-control-service/src/main/java/com/forgeai/sourcecontrol/presentation/GlobalExceptionHandler.java`
 - **Regression Test:** Controller test for unconfigured or missing state.
-- **Runtime Verification:** Access setup URL directly without state -> clean redirect to frontend with error param.
-- **Evidence:** Inspected error handlers.
+- **Runtime Verification:** Access setup URL directly without state -> clean redirect to frontend with installation_id parameters instead of 500 crash.
+- **Evidence:** Inspected error handlers and callback redirection logic in GitHubConnectionController.java:115-129.
 

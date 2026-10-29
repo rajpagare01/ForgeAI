@@ -97,7 +97,7 @@ public class GitHubConnectionService {
         GitHubInstallation activeInst = instOpt.orElse(null);
 
         // If not directly associated in this workspace, attempt automatic seamless binding
-        if (activeInst == null && isPersonal && userGitHubLogin != null) {
+        if (activeInst == null && callerUserId != null) {
             InstallationDiscoveryResponse discovery = discoveryService.discoverInstallations(callerUserId, effectiveWsId, organizationId);
             if (discovery.currentInstallation() != null) {
                 activeInst = discovery.currentInstallation();

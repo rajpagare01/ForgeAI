@@ -124,13 +124,28 @@ public class GitHubInstallationDiscoveryService {
         if (isPersonal && gitHubConnected && userGitHubLogin != null) {
             // Check local DB first for installations matching this user's account
             List<GitHubInstallation> matchingDbInstalls = new ArrayList<>();
+            java.util.Set<Long> seenInstallationIds = new java.util.HashSet<>();
             if (userGitHubId != null) {
-                installationRepository.findByAccountId(userGitHubId).ifPresent(matchingDbInstalls::add);
+                installationRepository.findByAccountId(userGitHubId).ifPresent(inst -> {
+                    if (seenInstallationIds.add(inst.getInstallationId())) {
+                        matchingDbInstalls.add(inst);
+                    }
+                });
             }
-            matchingDbInstalls.addAll(installationRepository.findByAccountLogin(userGitHubLogin));
+            for (GitHubInstallation inst : installationRepository.findByAccountLogin(userGitHubLogin)) {
+                if (seenInstallationIds.add(inst.getInstallationId())) {
+                    matchingDbInstalls.add(inst);
+                }
+            }
 
+            UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
             for (GitHubInstallation inst : matchingDbInstalls) {
-                boolean alreadyAssociated = inst.getWorkspaceId() != null && !inst.getWorkspaceId().equals(effectiveWsId);
+                boolean alreadyAssociated = (inst.getWorkspaceId() != null
+                        && !inst.getWorkspaceId().equals(QUARANTINE_ORG_ID)
+                        && !inst.getWorkspaceId().equals(effectiveWsId))
+                        || (inst.getOrganizationId() != null
+                        && !inst.getOrganizationId().equals(QUARANTINE_ORG_ID)
+                        && !inst.getOrganizationId().equals(organizationId));
                 candidates.add(new InstallationCandidateDto(
                         inst.getInstallationId(),
                         inst.getAccountId(),
@@ -276,8 +291,8 @@ public class GitHubInstallationDiscoveryService {
         String scope = isPersonal ? "PERSONAL" : "ORGANIZATION";
 
         // 2. Strict Ownership Validation (Anti-Spoofing)
-        if (isPersonal) {
-            if (callerUserId != null) {
+        if (callerUserId != null) {
+            if (isPersonal || "User".equalsIgnoreCase(details.accountType())) {
                 Optional<IdentityServiceClient.UserGitHubProfile> profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
                 if (profileOpt.isEmpty() || !profileOpt.get().connected()) {
                     log.warn("[Security] Caller {} has not linked a GitHub account", callerUserId);
@@ -491,6 +506,7 @@ public class GitHubInstallationDiscoveryService {
                     .repositoryId(repo.getId())
                     .organizationId(repo.getOrganizationId())
                     .workspaceId(repo.getWorkspaceId())
+                    .scope(repo.getScope() != null ? repo.getScope() : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL"))
                     .githubRepoId(repo.getGithubRepoId())
                     .fullName(repo.getFullName())
                     .defaultBranch(repo.getDefaultBranch())

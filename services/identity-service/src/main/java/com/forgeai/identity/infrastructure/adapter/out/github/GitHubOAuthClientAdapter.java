@@ -78,7 +78,8 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
 
             if (response.statusCode() != 200) {
                 log.error("GitHub token exchange failed with HTTP status: {}", response.statusCode());
-                throw new InvalidCredentialsException("GitHub OAuth token exchange failed with status: " + response.statusCode());
+                throw new InvalidCredentialsException(
+                        "GitHub OAuth token exchange failed with status: " + response.statusCode());
             }
 
             JsonNode root = objectMapper.readTree(response.body());
@@ -100,9 +101,13 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
             return new OAuthToken(accessToken, tokenType, scope);
         } catch (InvalidCredentialsException e) {
             throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("GitHub token exchange interrupted", e);
+            throw new InvalidCredentialsException("GitHub OAuth request was interrupted: " + e.getMessage());
         } catch (Exception e) {
             log.error("Exception during GitHub token exchange", e);
-            throw new RuntimeException("Failed to exchange code with GitHub", e);
+            throw new InvalidCredentialsException("GitHub OAuth communication failed: " + e.getMessage());
         }
     }
 
@@ -135,9 +140,15 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
             String htmlUrl = root.hasNonNull("html_url") ? root.path("html_url").asText() : null;
 
             return new UserProfile(id, login, name, email, avatarUrl, htmlUrl);
+        } catch (InvalidCredentialsException e) {
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Fetching GitHub user profile interrupted", e);
+            throw new InvalidCredentialsException("GitHub OAuth request was interrupted: " + e.getMessage());
         } catch (Exception e) {
             log.error("Exception fetching GitHub user profile", e);
-            throw new RuntimeException("Failed to fetch GitHub user profile", e);
+            throw new InvalidCredentialsException("GitHub OAuth communication failed: " + e.getMessage());
         }
     }
 
@@ -169,6 +180,9 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
                     }
                 }
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Could not fetch user emails from GitHub (interrupted): {}", e.getMessage());
         } catch (Exception e) {
             log.warn("Could not fetch user emails from GitHub (non-fatal): {}", e.getMessage());
         }

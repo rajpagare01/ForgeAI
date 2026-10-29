@@ -193,9 +193,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If organization name was provided during registration, create it
         if (orgName && orgName.trim()) {
           try {
+            const orgSlug = orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "org-" + Date.now();
             await apiClient.post<any>("/api/v1/organizations", {
               name: orgName.trim(),
-              slug: orgName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-"),
+              slug: orgSlug,
               description: `Organization ${orgName.trim()}`,
             });
           } catch (orgErr) {

@@ -58,17 +58,17 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
 
     @Override
     public Optional<GitHubInstallation> findByOrganizationId(UUID organizationId) {
-        return jpaRepository.findByOrganizationId(organizationId).map(mapper::toDomain);
+        return jpaRepository.findFirstByOrganizationIdOrderByUpdatedAtDesc(organizationId).map(mapper::toDomain);
     }
 
     @Override
     public Optional<GitHubInstallation> findByWorkspaceId(UUID workspaceId) {
-        return jpaRepository.findByWorkspaceId(workspaceId).map(mapper::toDomain);
+        return jpaRepository.findFirstByWorkspaceIdOrderByUpdatedAtDesc(workspaceId).map(mapper::toDomain);
     }
 
     @Override
     public Optional<GitHubInstallation> findByAccountId(Long accountId) {
-        return jpaRepository.findByAccountId(accountId).map(mapper::toDomain);
+        return jpaRepository.findFirstByAccountIdOrderByUpdatedAtDesc(accountId).map(mapper::toDomain);
     }
 
     @Override

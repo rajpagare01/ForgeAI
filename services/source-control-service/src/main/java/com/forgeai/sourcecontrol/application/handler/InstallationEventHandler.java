@@ -107,7 +107,7 @@ public class InstallationEventHandler {
                 log.warn("Unknown GitHub installation {}: no ForgeAI organization mapping found. Quarantining with SUSPENDED status under quarantine tenant {}. Requires explicit onboarding.", installationId, QUARANTINE_ORG_ID);
                 installation = GitHubInstallation.builder()
                         .organizationId(QUARANTINE_ORG_ID)
-                        .workspaceId(QUARANTINE_ORG_ID)
+                        .workspaceId(null)
                         .scope("ORGANIZATION")
                         .installationId(installationId)
                         .githubAppId(appId)
@@ -211,6 +211,7 @@ public class InstallationEventHandler {
                     .repositoryId(repo.getId())
                     .organizationId(repo.getOrganizationId())
                     .workspaceId(repo.getWorkspaceId())
+                    .scope(repo.getScope() != null ? repo.getScope() : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL"))
                     .githubRepoId(repo.getGithubRepoId())
                     .fullName(repo.getFullName())
                     .defaultBranch(repo.getDefaultBranch())

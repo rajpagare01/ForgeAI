@@ -42,7 +42,7 @@ public class WorkspaceService {
      * Gets or idempotently creates a PERSONAL workspace for the given user.
      * Guarantees at most ONE personal workspace per user via DB unique index.
      */
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public Workspace getOrCreatePersonalWorkspace(UUID userId, String username) {
         if (userId == null) {
             throw new IllegalArgumentException("User ID is required to get or create a personal workspace");
