@@ -9,6 +9,7 @@ public final class TenantContext {
     private static final ThreadLocal<UUID> CURRENT_ORG_ID = new ThreadLocal<>();
     private static final ThreadLocal<UUID> CURRENT_USER_ID = new ThreadLocal<>();
     private static final ThreadLocal<List<String>> CURRENT_PERMISSIONS = new ThreadLocal<>();
+    private static final ThreadLocal<UUID> CURRENT_WORKSPACE_ID = new ThreadLocal<>();
 
     private TenantContext() {}
 
@@ -16,6 +17,14 @@ public final class TenantContext {
         CURRENT_ORG_ID.set(organizationId);
         CURRENT_USER_ID.set(userId);
         CURRENT_PERMISSIONS.set(permissions != null ? permissions : Collections.emptyList());
+    }
+
+    public static void setWorkspaceId(UUID workspaceId) {
+        CURRENT_WORKSPACE_ID.set(workspaceId);
+    }
+
+    public static UUID getWorkspaceId() {
+        return CURRENT_WORKSPACE_ID.get();
     }
 
     public static UUID getOrganizationId() {
@@ -40,5 +49,6 @@ public final class TenantContext {
         CURRENT_ORG_ID.remove();
         CURRENT_USER_ID.remove();
         CURRENT_PERMISSIONS.remove();
+        CURRENT_WORKSPACE_ID.remove();
     }
 }

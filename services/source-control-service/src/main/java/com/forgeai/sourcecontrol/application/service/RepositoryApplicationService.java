@@ -296,6 +296,10 @@ public class RepositoryApplicationService {
         List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestMetadata> ghPrs =
                 gitHubAppClient.listPullRequests(repo.getInstallationId(), repo.getFullName());
 
+        if (ghPrs == null || ghPrs.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
         List<com.forgeai.sourcecontrol.domain.model.PullRequest> savedList = new java.util.ArrayList<>();
         for (var ghPr : ghPrs) {
             Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing =
@@ -973,6 +977,13 @@ public class RepositoryApplicationService {
         }
         if (organizationId != null) {
             return organizationId;
+        }
+        if (com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId() != null && workspaceRepository != null) {
+            var personalWs = workspaceRepository.findByOwnerUserIdAndType(
+                    com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId(), "PERSONAL");
+            if (personalWs.isPresent()) {
+                return personalWs.get().getId();
+            }
         }
         throw new IllegalArgumentException("Either organization ID or workspace ID must be provided");
     }

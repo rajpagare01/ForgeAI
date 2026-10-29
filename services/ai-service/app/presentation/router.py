@@ -332,6 +332,8 @@ async def analyze_pull_request(
         pr_number=req.pr_number,
         title=req.title,
         description=req.description,
+        head_sha=req.head_sha,
+        base_sha=req.base_sha,
         changed_symbols=req.changed_symbols,
         changed_files=raw_files,
         trace_id=trace_id,

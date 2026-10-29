@@ -5,6 +5,7 @@ import com.forgeai.sourcecontrol.infrastructure.metrics.SourceControlMetrics;
 import com.forgeai.sourcecontrol.infrastructure.persistence.entity.AuditEventEntity;
 import com.forgeai.sourcecontrol.infrastructure.persistence.entity.OutboxEventEntity;
 import com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataOutboxEventRepository;
+import com.forgeai.sourcecontrol.infrastructure.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -343,7 +344,12 @@ public class SourceControlOperationsController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        if (!isAuthorizedOperatorOrAdmin(rolesHeader, permissionsHeader)) {
+        boolean authorized = isAuthorizedOperatorOrAdmin(rolesHeader, permissionsHeader);
+        if (!authorized && organizationId == null && workspaceId != null && TenantContext.getUserId() != null) {
+            authorized = true;
+        }
+
+        if (!authorized) {
             log.warn("Unauthorized audit events access: user lacks operator/admin privileges (roles={}, permissions={})",
                     rolesHeader, permissionsHeader);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();

@@ -7,7 +7,13 @@ from datetime import datetime
 
 class IndexFileInput(BaseModel):
     file_path: str = ""
-    content: str = ""
+    filename: Optional[str] = None
+    content: Optional[str] = ""
+    status: Optional[str] = "modified"
+    additions: Optional[int] = 0
+    deletions: Optional[int] = 0
+    changes: Optional[int] = 0
+    patch: Optional[str] = ""
 
     @model_validator(mode="before")
     @classmethod
@@ -15,6 +21,12 @@ class IndexFileInput(BaseModel):
         if isinstance(data, dict):
             if not data.get("file_path") and data.get("filename"):
                 data["file_path"] = data["filename"]
+            if not data.get("filename") and data.get("file_path"):
+                data["filename"] = data["file_path"]
+            if data.get("content") is None:
+                data["content"] = ""
+            if data.get("patch") is None:
+                data["patch"] = ""
         return data
 
 
@@ -49,6 +61,8 @@ class PRAnalysisRequest(BaseModel):
     pr_number: int
     title: Optional[str] = None
     description: Optional[str] = None
+    head_sha: Optional[str] = None
+    base_sha: Optional[str] = None
     changed_symbols: Optional[List[str]] = None
     changed_files: Optional[List[IndexFileInput]] = None
 

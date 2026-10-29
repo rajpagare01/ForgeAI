@@ -106,6 +106,8 @@ class GeminiOrchestrationService:
         pr_number: int,
         title: Optional[str] = None,
         description: Optional[str] = None,
+        head_sha: Optional[str] = None,
+        base_sha: Optional[str] = None,
         changed_symbols: Optional[List[str]] = None,
         changed_files: Optional[List[Dict[str, Any]]] = None,
         trace_id: Optional[str] = None,
@@ -125,8 +127,8 @@ class GeminiOrchestrationService:
         11. Complete Provenance & Audit Persistence
         """
         start_time = time.time()
-        head_sha = ""
-        base_sha = ""
+        head_sha = head_sha or ""
+        base_sha = base_sha or ""
         repo_full_name = ""
         raw_files = list(changed_files) if changed_files else []
 
@@ -134,7 +136,7 @@ class GeminiOrchestrationService:
         # 1. Authoritative PR Metadata & Changeset Retrieval
         # ----------------------------------------------------------------------
         pr_changes = None
-        if not title or not raw_files:
+        if not title or not raw_files or not head_sha:
             pr_changes = await self.source_control_client.get_pull_request_changes(
                 organization_id=organization_id,
                 repository_id=repository_id,
@@ -144,11 +146,21 @@ class GeminiOrchestrationService:
         if pr_changes:
             title = pr_changes.get("title") or title or f"PR #{pr_number}"
             description = pr_changes.get("body") or description or ""
-            head_sha = pr_changes.get("headSha") or ""
-            base_sha = pr_changes.get("baseSha") or ""
-            repo_full_name = pr_changes.get("repositoryFullName") or ""
+            head_sha = pr_changes.get("headSha") or head_sha or ""
+            base_sha = pr_changes.get("baseSha") or base_sha or ""
+            repo_full_name = pr_changes.get("repositoryFullName") or repo_full_name or ""
             if not raw_files and pr_changes.get("files"):
                 raw_files = pr_changes.get("files")
+            elif raw_files and pr_changes.get("files"):
+                pr_files_map = {f.get("filename") or f.get("file_path"): f for f in pr_changes.get("files", []) if f}
+                for rf in raw_files:
+                    path = rf.get("file_path") or rf.get("filename")
+                    match = pr_files_map.get(path)
+                    if match:
+                        if not rf.get("content") and match.get("content"):
+                            rf["content"] = match["content"]
+                        if not rf.get("patch") and match.get("patch"):
+                            rf["patch"] = match["patch"]
         else:
             title = title or f"PR #{pr_number}"
             description = description or ""

@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface SpringDataWorkspaceRepository extends JpaRepository<WorkspaceJpaEntity, UUID> {
     Optional<WorkspaceJpaEntity> findByTypeAndOwnerUserId(String type, UUID ownerUserId);
+    Optional<WorkspaceJpaEntity> findByOwnerUserIdAndType(UUID ownerUserId, String type);
     Optional<WorkspaceJpaEntity> findByTypeAndOrganizationId(String type, UUID organizationId);
     List<WorkspaceJpaEntity> findByOwnerUserId(UUID ownerUserId);
 }

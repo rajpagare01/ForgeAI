@@ -42,7 +42,8 @@ public class ProjectController {
         if (orgId == null && userId == null) {
             throw new IllegalArgumentException("Either X-Org-Id or authenticated user context must be provided");
         }
-        Project project = projectApplicationService.createProject(command.workspaceId(), orgId, userId, command);
+        UUID effectiveWsId = command.workspaceId() != null ? command.workspaceId() : TenantContext.getWorkspaceId();
+        Project project = projectApplicationService.createProject(effectiveWsId, orgId, userId, command);
         return ResponseEntity.status(HttpStatus.CREATED).body(ProjectResponse.from(project));
     }
 
@@ -58,7 +59,8 @@ public class ProjectController {
     public ResponseEntity<List<ProjectResponse>> listProjects(@RequestParam(required = false) UUID workspaceId) {
         UUID orgId = TenantContext.getOrganizationId();
         UUID userId = TenantContext.getUserId();
-        List<ProjectResponse> list = projectApplicationService.listProjects(workspaceId, orgId, userId).stream()
+        UUID effectiveWsId = workspaceId != null ? workspaceId : TenantContext.getWorkspaceId();
+        List<ProjectResponse> list = projectApplicationService.listProjects(effectiveWsId, orgId, userId).stream()
                 .map(ProjectResponse::from)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(list);

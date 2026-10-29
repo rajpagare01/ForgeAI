@@ -41,9 +41,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 }
                 String userIdHeader = request.getHeader("X-User-Id");
                 String permsHeader = request.getHeader("X-Permissions");
+                String wsIdHeader = request.getHeader("X-Workspace-Id");
 
                 UUID orgId = parseUuid(orgIdHeader);
                 UUID userId = parseUuid(userIdHeader);
+                UUID wsId = parseUuid(wsIdHeader);
                 List<String> permissions = Collections.emptyList();
 
                 if (permsHeader != null && !permsHeader.isBlank()) {
@@ -54,6 +56,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 }
 
                 TenantContext.set(orgId, userId, permissions);
+                if (wsId != null) {
+                    TenantContext.setWorkspaceId(wsId);
+                }
             } else {
                 // Untrusted caller: strip identity headers
                 effectiveRequest = new HttpServletRequestWrapper(request) {
@@ -73,6 +78,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
                         return "X-User-Id".equalsIgnoreCase(name) ||
                                "X-Org-Id".equalsIgnoreCase(name) ||
                                "X-Organization-Id".equalsIgnoreCase(name) ||
+                               "X-Workspace-Id".equalsIgnoreCase(name) ||
                                "X-User-Roles".equalsIgnoreCase(name) ||
                                "X-Permissions".equalsIgnoreCase(name);
                     }

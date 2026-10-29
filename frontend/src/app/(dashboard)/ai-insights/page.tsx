@@ -1113,15 +1113,18 @@ function AiInsightsContent() {
       if (prChangeSet) {
         if (prChangeSet.title) payload.title = prChangeSet.title;
         if (prChangeSet.body) payload.description = prChangeSet.body;
+        if (prChangeSet.headSha) payload.head_sha = prChangeSet.headSha;
+        if (prChangeSet.baseSha) payload.base_sha = prChangeSet.baseSha;
         if (Array.isArray(prChangeSet.files) && prChangeSet.files.length > 0) {
           payload.changed_files = prChangeSet.files.map((f: any) => ({
             file_path: f.filename || f.file_path,
-            status: f.status,
-            additions: f.additions,
-            deletions: f.deletions,
-            changes: f.changes,
-            patch: f.patch,
-            content: f.content,
+            filename: f.filename || f.file_path,
+            status: f.status || "modified",
+            additions: f.additions ?? 0,
+            deletions: f.deletions ?? 0,
+            changes: f.changes ?? 0,
+            patch: f.patch || "",
+            content: f.content || "",
           }));
         }
       }
