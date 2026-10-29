@@ -118,6 +118,7 @@ class GitHubAuthControllerTest {
 
         mockMvc.perform(post("/api/v1/auth/github/link")
                         .header("X-User-Id", userId.toString())
+                        .header("X-ForgeAI-Internal", "attested")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -131,7 +132,8 @@ class GitHubAuthControllerTest {
         UUID userId = UUID.randomUUID();
 
         mockMvc.perform(post("/api/v1/auth/github/disconnect")
-                        .header("X-User-Id", userId.toString()))
+                        .header("X-User-Id", userId.toString())
+                        .header("X-ForgeAI-Internal", "attested"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("GitHub account unlinked successfully"));
 
@@ -150,7 +152,8 @@ class GitHubAuthControllerTest {
         when(gitHubAuthenticationUseCase.getStatus(userId)).thenReturn(statusResponse);
 
         mockMvc.perform(get("/api/v1/auth/github/status")
-                        .header("X-User-Id", userId.toString()))
+                        .header("X-User-Id", userId.toString())
+                        .header("X-ForgeAI-Internal", "attested"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(true))
                 .andExpect(jsonPath("$.identity.githubLogin").value("coder"));

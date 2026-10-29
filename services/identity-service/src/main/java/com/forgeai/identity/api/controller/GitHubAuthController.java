@@ -34,6 +34,9 @@ public class GitHubAuthController {
     private final GitHubAuthenticationUseCase gitHubAuthenticationUseCase;
     private final JwtService jwtService;
 
+    @org.springframework.beans.factory.annotation.Value("${forgeai.security.enforce-internal-marker:false}")
+    private boolean enforceInternalMarker;
+
     @Autowired
     public GitHubAuthController(
             GitHubAuthenticationUseCase gitHubAuthenticationUseCase,
@@ -53,8 +56,10 @@ public class GitHubAuthController {
 
     /**
      * GET /api/v1/auth/github/start
-     * Generates a cryptographically secure anti-CSRF state and returns the GitHub authorize URL.
-     * Can optionally bind state to the current authenticated user for account linking.
+     * Generates a cryptographically secure anti-CSRF state and returns the GitHub
+     * authorize URL.
+     * Can optionally bind state to the current authenticated user for account
+     * linking.
      */
     @GetMapping("/start")
     public ResponseEntity<GitHubAuthStartResponse> start(
@@ -71,16 +76,17 @@ public class GitHubAuthController {
 
     /**
      * POST /api/v1/auth/github/callback
-     * Handles the OAuth callback from the frontend: validates state, exchanges code for token,
-     * resolves GitHub profile, provisions personal workspace if new user, and issues ForgeAI JWT.
+     * Handles the OAuth callback from the frontend: validates state, exchanges code
+     * for token,
+     * resolves GitHub profile, provisions personal workspace if new user, and
+     * issues ForgeAI JWT.
      */
     @PostMapping("/callback")
     public ResponseEntity<LoginResponse> callback(@Valid @RequestBody GitHubCallbackRequest request) {
         LoginResponse response = gitHubAuthenticationUseCase.handleCallback(
                 request.code(),
                 request.state(),
-                request.redirectUri()
-        );
+                request.redirectUri());
         return ResponseEntity.ok(response);
     }
 
@@ -101,14 +107,14 @@ public class GitHubAuthController {
                 userId,
                 request.code(),
                 request.state(),
-                request.redirectUri()
-        );
+                request.redirectUri());
         return ResponseEntity.ok(response);
     }
 
     /**
      * POST /api/v1/auth/github/disconnect
-     * Unlinks the GitHub account from the currently authenticated user, with lockout protection.
+     * Unlinks the GitHub account from the currently authenticated user, with
+     * lockout protection.
      */
     @PostMapping("/disconnect")
     public ResponseEntity<Map<String, String>> disconnect(
@@ -124,7 +130,8 @@ public class GitHubAuthController {
 
     /**
      * GET /api/v1/auth/github/status
-     * Returns whether the current user has a linked GitHub account and public profile info.
+     * Returns whether the current user has a linked GitHub account and public
+     * profile info.
      */
     @GetMapping("/status")
     public ResponseEntity<GitHubStatusResponse> getStatus(
@@ -137,7 +144,8 @@ public class GitHubAuthController {
         return ResponseEntity.ok(gitHubAuthenticationUseCase.getStatus(userId));
     }
 
-    private UUID requireUserId(Authentication authentication, String authHeader, String headerUserId, String internalAttestation) {
+    private UUID requireUserId(Authentication authentication, String authHeader, String headerUserId,
+            String internalAttestation) {
         UUID userId = resolveOptionalUserId(authentication, authHeader, headerUserId, internalAttestation);
         if (userId == null) {
             throw new InvalidCredentialsException("Authentication required");
@@ -145,12 +153,16 @@ public class GitHubAuthController {
         return userId;
     }
 
-    private UUID resolveOptionalUserId(Authentication authentication, String authHeader, String headerUserId, String internalAttestation) {
-        // 1. Only trust X-User-Id if attested by internal gateway marker
-        if ("attested".equalsIgnoreCase(internalAttestation) && headerUserId != null && !headerUserId.isBlank()) {
+    private UUID resolveOptionalUserId(Authentication authentication, String authHeader, String headerUserId,
+            String internalAttestation) {
+        // 1. Only trust X-User-Id if attested by internal gateway marker, unless
+        // enforcement is disabled (e.g. tests/dev)
+        boolean isAttested = "attested".equalsIgnoreCase(internalAttestation);
+        if ((!enforceInternalMarker || isAttested) && headerUserId != null && !headerUserId.isBlank()) {
             try {
                 return UUID.fromString(headerUserId.trim());
-            } catch (IllegalArgumentException ignored) {}
+            } catch (IllegalArgumentException ignored) {
+            }
         }
 
         // 2. Spring Security Authentication context
@@ -162,12 +174,14 @@ public class GitHubAuthController {
             if (principal instanceof String str && !str.equalsIgnoreCase("anonymousUser")) {
                 try {
                     return UUID.fromString(str);
-                } catch (IllegalArgumentException ignored) {}
+                } catch (IllegalArgumentException ignored) {
+                }
             }
             if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
                 try {
                     return UUID.fromString(jwt.getSubject());
-                } catch (IllegalArgumentException ignored) {}
+                } catch (IllegalArgumentException ignored) {
+                }
             }
         }
 
@@ -176,7 +190,8 @@ public class GitHubAuthController {
             try {
                 String token = authHeader.substring(7).trim();
                 return jwtService.extractUserId(token);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         return null;
