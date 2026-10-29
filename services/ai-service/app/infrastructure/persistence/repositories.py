@@ -450,7 +450,17 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
     async def get_by_entity(
         self, org_id: UUID, entity_type: str, entity_id: str
     ) -> List[Analysis]:
-        query = """
+        if entity_id == "%":
+            where_clause = "WHERE organization_id = $1 AND entity_type = $2"
+            params = [org_id, entity_type]
+        elif entity_type == "PR" and "#" not in entity_id:
+            where_clause = "WHERE organization_id = $1 AND entity_type = $2 AND (entity_id = $3 OR entity_id LIKE '%#' || $3)"
+            params = [org_id, entity_type, entity_id]
+        else:
+            where_clause = "WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3"
+            params = [org_id, entity_type, entity_id]
+
+        query = f"""
             SELECT id, organization_id, entity_type, entity_id, model_version,
                prompt_version, summary, risk_level, retrieved_chunks,
                execution_duration_ms, trace_id,
@@ -464,11 +474,11 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                engineering_actions, remediation_summary,
                created_at
             FROM analyses
-            WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3
+            {where_clause}
             ORDER BY created_at DESC;
         """
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(query, org_id, entity_type, entity_id)
+            rows = await conn.fetch(query, *params)
 
         results = []
         for r in rows:
@@ -1695,7 +1705,11 @@ class AsyncpgEngineeringActionRepository(EngineeringActionRepository):
             )
             ON CONFLICT (action_id)
             DO UPDATE SET
-                status = EXCLUDED.status,
+                analysis_id = EXCLUDED.analysis_id,
+                status = CASE
+                    WHEN engineering_actions.status IN ('APPROVED', 'APPLIED') THEN engineering_actions.status
+                    ELSE EXCLUDED.status
+                END,
                 severity = EXCLUDED.severity,
                 confidence = EXCLUDED.confidence,
                 evidence = EXCLUDED.evidence,

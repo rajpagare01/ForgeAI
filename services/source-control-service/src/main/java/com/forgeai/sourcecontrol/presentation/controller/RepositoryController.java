@@ -126,7 +126,9 @@ public class RepositoryController {
     /**
      * Connects a GitHub repository to this ForgeAI organization or workspace.
      */
-    public record ConnectRepositoryRequest(String fullName, UUID workspaceId) {
+    public record ConnectRepositoryRequest(
+            @com.fasterxml.jackson.annotation.JsonProperty("fullName") String fullName,
+            @com.fasterxml.jackson.annotation.JsonProperty("workspaceId") UUID workspaceId) {
         public ConnectRepositoryRequest(String fullName) {
             this(fullName, null);
         }
@@ -138,9 +140,19 @@ public class RepositoryController {
         if (request == null || request.fullName() == null || request.fullName().isBlank()) {
             throw new IllegalArgumentException("fullName is required (format: owner/repo)");
         }
-        UUID effectiveWsId = request.workspaceId() != null ? request.workspaceId() : TenantContext.getWorkspaceId();
+        UUID effectiveWsId = (request != null && request.workspaceId() != null)
+                ? request.workspaceId()
+                : resolveWorkspaceId(null);
+        if (organizationId == null && effectiveWsId == null && TenantContext.getUserId() != null) {
+            try {
+                var inst = repositoryApplicationService.getClaimedInstallation(null, null, TenantContext.getUserId());
+                if (inst != null) {
+                    effectiveWsId = inst.getWorkspaceId();
+                }
+            } catch (Exception ignored) {}
+        }
         Repository repo = repositoryApplicationService.connectRepository(
-                organizationId, effectiveWsId, request.fullName(), TenantContext.getUserId());
+                organizationId, effectiveWsId, request.fullName().trim(), TenantContext.getUserId());
         return ResponseEntity.ok(repo);
     }
 

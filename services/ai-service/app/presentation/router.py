@@ -339,6 +339,7 @@ async def analyze_pull_request(
     meta = analysis.impact_metadata or {}
     return AnalysisResponseDTO(
         id=analysis.id,
+        analysis_id=analysis.id,
         organization_id=analysis.organization_id,
         entity_type=analysis.entity_type,
         entity_id=analysis.entity_id,
@@ -361,6 +362,8 @@ async def analyze_pull_request(
         changed_components=meta.get("changed_components"),
         direct_impact=meta.get("direct_impact"),
         transitive_impact=meta.get("transitive_impact"),
+        engineering_actions=getattr(analysis, "engineering_actions", None) or meta.get("engineering_actions") or [],
+        remediation_summary=getattr(analysis, "remediation_summary", None) or meta.get("remediation_summary"),
         affected_modules=meta.get("affected_modules"),
         affected_tests=meta.get("affected_tests"),
         historical_signals=meta.get("historical_signals"),
@@ -1461,6 +1464,8 @@ async def rescan_analysis_after_fix(
         changed_components=meta.get("changed_components"),
         direct_impact=meta.get("direct_impact"),
         transitive_impact=meta.get("transitive_impact"),
+        engineering_actions=getattr(new_analysis, "engineering_actions", None) or meta.get("engineering_actions") or [],
+        remediation_summary=getattr(new_analysis, "remediation_summary", None) or meta.get("remediation_summary"),
         affected_modules=meta.get("affected_modules"),
         affected_tests=meta.get("affected_tests"),
         historical_signals=meta.get("historical_signals"),

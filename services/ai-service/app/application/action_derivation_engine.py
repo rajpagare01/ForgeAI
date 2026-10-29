@@ -186,7 +186,7 @@ class ActionDerivationEngine:
         severity = cls._map_severity(finding.severity, is_blocker=finding.is_blocker)
 
         # Deterministic stable action_id
-        action_seed = f"sec:{finding.rule_id}:{finding.file_path}:{finding.line_number}:{commit_sha}"
+        action_seed = f"sec:{organization_id}:{repository_id}:{pr_number}:{finding.rule_id}:{finding.file_path}:{finding.line_number}:{commit_sha}"
         action_id = f"act-sec-{hashlib.sha256(action_seed.encode()).hexdigest()[:12]}"
 
         # Grounded description and reason citing finding
@@ -300,7 +300,7 @@ class ActionDerivationEngine:
         analysis_id: Optional[UUID],
     ) -> Tuple[EngineeringAction, RemediationPlan]:
         severity = cls._map_severity(finding.severity, is_blocker=finding.is_blocker)
-        action_seed = f"rel:{finding.rule_id}:{finding.file_path}:{finding.line_number}:{commit_sha}"
+        action_seed = f"rel:{organization_id}:{repository_id}:{pr_number}:{finding.rule_id}:{finding.file_path}:{finding.line_number}:{commit_sha}"
         action_id = f"act-rel-{hashlib.sha256(action_seed.encode()).hexdigest()[:12]}"
 
         title = f"Remediate Reliability Issue: {finding.title}"
@@ -382,7 +382,7 @@ class ActionDerivationEngine:
         analysis_id: Optional[UUID],
     ) -> Tuple[EngineeringAction, RemediationPlan]:
         test_names = [t.get("test_name") for t in must_run_tests[:5]]
-        action_seed = f"run_tests:{','.join(test_names)}:{commit_sha}"
+        action_seed = f"run_tests:{organization_id}:{repository_id}:{pr_number}:{','.join(test_names)}:{commit_sha}"
         action_id = f"act-test-{hashlib.sha256(action_seed.encode()).hexdigest()[:12]}"
 
         affected_files = list({t.get("test_file") for t in must_run_tests if t.get("test_file")})
@@ -452,8 +452,8 @@ class ActionDerivationEngine:
         changed_files: List[Dict[str, Any]],
         analysis_id: Optional[UUID],
     ) -> Tuple[EngineeringAction, RemediationPlan]:
-        first_file = changed_files[0].get("filename") if changed_files else "src/"
-        action_seed = f"add_test:{first_file}:{commit_sha}"
+        first_file = (changed_files[0].get("filename") or changed_files[0].get("file_path") or "src/") if changed_files else "src/"
+        action_seed = f"add_test:{organization_id}:{repository_id}:{pr_number}:{first_file}:{commit_sha}"
         action_id = f"act-addtest-{hashlib.sha256(action_seed.encode()).hexdigest()[:12]}"
 
         title = f"Add Missing Test Coverage for {first_file}"
@@ -525,7 +525,7 @@ class ActionDerivationEngine:
         downstream_impacts: List[Dict[str, Any]],
         analysis_id: Optional[UUID],
     ) -> Tuple[EngineeringAction, RemediationPlan]:
-        action_seed = f"contract:{contract_status}:{commit_sha}"
+        action_seed = f"contract:{organization_id}:{repository_id}:{pr_number}:{contract_status}:{commit_sha}"
         action_id = f"act-contract-{hashlib.sha256(action_seed.encode()).hexdigest()[:12]}"
 
         downstream_names = [imp.get("repository_name", "downstream") for imp in downstream_impacts]

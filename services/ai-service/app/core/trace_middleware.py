@@ -27,7 +27,11 @@ class TraceContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         traceparent = request.headers.get("traceparent")
         incoming_correlation_id = request.headers.get("x-correlation-id")
-        org_id = request.headers.get("x-org-id") or request.headers.get("x-organization-id")
+        org_id = (
+            request.headers.get("x-org-id")
+            or request.headers.get("x-organization-id")
+            or request.headers.get("x-workspace-id")
+        )
         span_id = uuid4().hex[:16]
 
         is_valid_w3c = (

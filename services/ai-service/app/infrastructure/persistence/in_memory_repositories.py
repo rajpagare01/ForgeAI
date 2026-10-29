@@ -160,6 +160,18 @@ class InMemoryAnalysisRepository(AnalysisRepository):
     async def get_by_entity(
         self, org_id: UUID, entity_type: str, entity_id: str
     ) -> List[Analysis]:
+        if entity_id == "%":
+            return [
+                a for a in self.analyses
+                if a.organization_id == org_id and a.entity_type == entity_type
+            ]
+        if entity_type == "PR" and "#" not in entity_id:
+            return [
+                a for a in self.analyses
+                if a.organization_id == org_id
+                and a.entity_type == entity_type
+                and (a.entity_id == entity_id or a.entity_id.endswith(f"#{entity_id}"))
+            ]
         return [
             a for a in self.analyses
             if a.organization_id == org_id and a.entity_type == entity_type and a.entity_id == entity_id

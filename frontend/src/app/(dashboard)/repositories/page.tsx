@@ -83,6 +83,7 @@ export default function RepositoriesPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importingRepoName, setImportingRepoName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -409,6 +410,7 @@ export default function RepositoriesPage() {
   // Single-repo 1-click connect
   const handleConnectSingle = async (fullName: string) => {
     if (!activeWorkspace?.id || !fullName) return;
+    setImportingRepoName(fullName);
     setIsImporting(true);
     setError(null);
     setSuccess(null);
@@ -421,8 +423,14 @@ export default function RepositoriesPage() {
       await fetchData();
     } catch (err: any) {
       console.error("Single connect failed:", err);
-      setError(err?.message || `Failed to connect repository '${fullName}'.`);
+      const msg = err?.message || "";
+      if (msg.includes("not accessible to installation") || msg.includes("Access denied")) {
+        setError(`ForgeAI GitHub App does not have permission for '${fullName}' yet. Please grant repository access on GitHub using 'Configure on GitHub' above.`);
+      } else {
+        setError(msg || `Failed to connect repository '${fullName}'.`);
+      }
     } finally {
+      setImportingRepoName(null);
       setIsImporting(false);
     }
   };
@@ -872,12 +880,12 @@ export default function RepositoriesPage() {
                         disabled={isImporting}
                         className="gap-1.5 text-xs"
                       >
-                        {isImporting ? (
+                        {importingRepoName === repo.fullName ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <Plus className="h-3.5 w-3.5" />
                         )}
-                        Give Access to Repo
+                        {importingRepoName === repo.fullName ? "Connecting..." : "Connect"}
                       </Button>
                     )}
                   </div>

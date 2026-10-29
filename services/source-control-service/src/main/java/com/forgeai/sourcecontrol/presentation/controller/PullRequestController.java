@@ -19,12 +19,17 @@ public class PullRequestController {
 
     private final RepositoryApplicationService repositoryApplicationService;
 
+    private UUID resolveWorkspaceId(UUID workspaceId) {
+        return workspaceId != null ? workspaceId : TenantContext.getWorkspaceId();
+    }
+
     @GetMapping
     public ResponseEntity<List<PullRequest>> listPullRequests(
             @RequestParam(required = false) UUID repositoryId,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(organizationId, workspaceId, repositoryId));
+        return ResponseEntity.ok(repositoryApplicationService.listPullRequests(
+                organizationId, resolveWorkspaceId(workspaceId), repositoryId, TenantContext.getUserId()));
     }
 
     @GetMapping("/{number}")
@@ -33,7 +38,8 @@ public class PullRequestController {
             @RequestParam UUID repositoryId,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getPullRequest(organizationId, workspaceId, repositoryId, number));
+        return ResponseEntity.ok(repositoryApplicationService.getPullRequest(
+                organizationId, resolveWorkspaceId(workspaceId), repositoryId, number));
     }
 
     @GetMapping("/{number}/changes")
@@ -42,6 +48,7 @@ public class PullRequestController {
             @RequestParam UUID repositoryId,
             @RequestParam(required = false) UUID workspaceId) {
         UUID organizationId = TenantContext.getOrganizationId();
-        return ResponseEntity.ok(repositoryApplicationService.getPullRequestChanges(organizationId, workspaceId, repositoryId, number));
+        return ResponseEntity.ok(repositoryApplicationService.getPullRequestChanges(
+                organizationId, resolveWorkspaceId(workspaceId), repositoryId, number));
     }
 }

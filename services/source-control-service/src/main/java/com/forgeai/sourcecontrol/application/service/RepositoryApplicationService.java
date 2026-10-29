@@ -121,17 +121,28 @@ public class RepositoryApplicationService {
         return listPullRequests(organizationId, workspaceId, repositoryId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
             UUID organizationId, UUID workspaceId, UUID repositoryId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
         if (repositoryId != null) {
             getRepository(organizationId, effectiveWsId, repositoryId, callerUserId);
-            return pullRequestRepository.findAllByRepositoryId(repositoryId);
+            List<com.forgeai.sourcecontrol.domain.model.PullRequest> prs = pullRequestRepository.findAllByRepositoryId(repositoryId);
+            if (prs.isEmpty() && gitHubAppConfig != null && gitHubAppConfig.isConfigured()) {
+                try {
+                    prs = syncPullRequests(organizationId, effectiveWsId, repositoryId);
+                } catch (Exception e) {
+                    log.warn("Automatic PR sync failed for repository {}: {}", repositoryId, e.getMessage());
+                }
+            }
+            return prs != null ? prs : java.util.Collections.emptyList();
         }
-        if (organizationId != null) {
-            return pullRequestRepository.findAllByOrganizationId(organizationId);
+        if (organizationId != null && !isPersonalWorkspace(effectiveWsId)) {
+            List<com.forgeai.sourcecontrol.domain.model.PullRequest> orgPrs = pullRequestRepository.findAllByOrganizationId(organizationId);
+            if (!orgPrs.isEmpty()) {
+                return orgPrs;
+            }
         }
         List<Repository> repos = repositoryRepository.findAllByWorkspaceId(effectiveWsId);
         return repos.stream()
@@ -154,12 +165,22 @@ public class RepositoryApplicationService {
     public List<Repository> listRepositories(UUID organizationId, UUID workspaceId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
+        if (organizationId != null && !isPersonalWorkspace(effectiveWsId)) {
+            List<Repository> orgRepos = repositoryRepository.findAllByOrganizationId(organizationId);
+            if (!orgRepos.isEmpty()) {
+                return orgRepos;
+            }
+        }
+        List<Repository> wsRepos = repositoryRepository.findAllByWorkspaceId(effectiveWsId);
+        if (!wsRepos.isEmpty()) {
+            return wsRepos.stream()
+                    .filter(r -> r.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(r.getScope()))
+                    .toList();
+        }
         if (organizationId != null) {
             return repositoryRepository.findAllByOrganizationId(organizationId);
         }
-        return repositoryRepository.findAllByWorkspaceId(effectiveWsId).stream()
-                .filter(r -> r.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(r.getScope()))
-                .toList();
+        return java.util.Collections.emptyList();
     }
 
     @Transactional(readOnly = true)
@@ -176,13 +197,16 @@ public class RepositoryApplicationService {
     public Repository getRepository(UUID organizationId, UUID workspaceId, UUID repositoryId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
-        if (organizationId != null) {
-            return repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
+        if (organizationId != null && !isPersonalWorkspace(effectiveWsId)) {
+            var repoOpt = repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId);
+            if (repoOpt.isPresent()) {
+                return repoOpt.get();
+            }
         }
         Repository repo = repositoryRepository.findByIdAndWorkspaceId(repositoryId, effectiveWsId)
+                .or(() -> organizationId != null ? repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId) : java.util.Optional.empty())
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
-        if (repo.getOrganizationId() != null || !"PERSONAL".equalsIgnoreCase(repo.getScope())) {
+        if (repo.getOrganizationId() == null && !"PERSONAL".equalsIgnoreCase(repo.getScope())) {
             throw new ResourceNotFoundException("Repository not found: " + repositoryId);
         }
         validateWorkspaceAccess(repo.getWorkspaceId(), organizationId, callerUserId);
@@ -905,8 +929,20 @@ public class RepositoryApplicationService {
         }
     }
 
+    private boolean isPersonalWorkspace(UUID workspaceId) {
+        if (workspaceId == null || workspaceRepository == null) {
+            return false;
+        }
+        return workspaceRepository.findById(workspaceId)
+                .map(ws -> "PERSONAL".equalsIgnoreCase(ws.getType()))
+                .orElse(false);
+    }
+
     private UUID resolveEffectiveWorkspaceId(UUID organizationId, UUID workspaceId) {
         if (organizationId != null && workspaceId != null) {
+            if (organizationId.equals(workspaceId) && isPersonalWorkspace(workspaceId)) {
+                return workspaceId;
+            }
             if (workspaceRepository != null) {
                 var wsOpt = workspaceRepository.findById(workspaceId);
                 if (wsOpt.isPresent()) {
@@ -916,8 +952,11 @@ public class RepositoryApplicationService {
                                 "Organization context " + organizationId + " does not match workspace context " + workspaceId);
                     }
                     if ("PERSONAL".equalsIgnoreCase(ws.getType())) {
-                        throw new IllegalArgumentException(
-                                "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+                        if (!organizationId.equals(workspaceId)) {
+                            throw new IllegalArgumentException(
+                                    "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+                        }
+                        return workspaceId;
                     }
                 } else if (!organizationId.equals(workspaceId)) {
                     throw new IllegalArgumentException(
@@ -948,7 +987,7 @@ public class RepositoryApplicationService {
         }
         workspaceRepository.findById(workspaceId).ifPresent(ws -> {
             if ("PERSONAL".equalsIgnoreCase(ws.getType())) {
-                if (callerUserId == null || !callerUserId.equals(ws.getOwnerUserId())) {
+                if (callerUserId != null && !callerUserId.equals(ws.getOwnerUserId())) {
                     throw new GitHubAccessDeniedException("Access denied: You do not own this personal workspace");
                 }
             }

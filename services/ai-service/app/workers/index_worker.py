@@ -114,13 +114,16 @@ class DurableIndexWorker:
                 )
 
                 for f in files:
-                    await self.indexing_service.index_file(
-                        organization_id=org_id,
-                        repository_id=repo_id,
-                        commit_sha=commit_sha,
-                        file_path=f["file_path"],
-                        content=f["content"],
-                    )
+                    f_path = f.get("file_path") or f.get("path") or f.get("filename")
+                    f_content = f.get("content") or ""
+                    if f_path:
+                        await self.indexing_service.index_file(
+                            organization_id=org_id,
+                            repository_id=repo_id,
+                            commit_sha=commit_sha,
+                            file_path=f_path,
+                            content=f_content,
+                        )
 
                 await self.job_repo.mark_job_status(job.id, "COMPLETED")
                 logger.info("Index job %s successfully COMPLETED.", job.id)

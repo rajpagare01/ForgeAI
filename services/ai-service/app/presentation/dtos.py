@@ -214,15 +214,20 @@ class TestValidationResponse(BaseModel):
     def populate_root_metrics(cls, data: Any) -> Any:
         if isinstance(data, dict):
             m = data.get("metrics") or {}
+            aliases = {
+                "total_recommended": m.get("total_recommended") if m.get("total_recommended") is not None else m.get("recommended_count"),
+                "total_actual_executed": m.get("total_actual_executed") if m.get("total_actual_executed") is not None else m.get("executed_count"),
+                "actual_failed_count": m.get("actual_failed_count") if m.get("actual_failed_count") is not None else m.get("total_ci_failures"),
+                "recommended_failed_count": m.get("recommended_failed_count") if m.get("recommended_failed_count") is not None else m.get("failed_count"),
+            }
+            for k, v in aliases.items():
+                if data.get(k) is None and v is not None:
+                    data[k] = v
             for k in [
                 "prediction_to_failure_correlation",
                 "test_selection_efficiency",
                 "high_priority_missed_count",
-                "total_recommended",
-                "total_actual_executed",
-                "actual_failed_count",
-                "recommended_failed_count",
-                "missed_failures"
+                "missed_failures",
             ]:
                 if data.get(k) is None and k in m:
                     data[k] = m[k]

@@ -1028,7 +1028,17 @@ function AiInsightsContent() {
     const fetchPrs = async () => {
       setIsLoadingPrs(true);
       try {
-        const prs = await apiClient.get<any[]>(`/api/v1/pull-requests?repositoryId=${selectedRepoId}`);
+        let prs = await apiClient.get<any[]>(`/api/v1/pull-requests?repositoryId=${selectedRepoId}`);
+        if (!Array.isArray(prs) || prs.length === 0) {
+          try {
+            const synced = await apiClient.post<any[]>(`/api/v1/repositories/${selectedRepoId}/sync/pull-requests`, {});
+            if (Array.isArray(synced) && synced.length > 0) {
+              prs = synced;
+            }
+          } catch (syncErr: any) {
+            console.warn("Pull requests auto-sync fallback failed:", syncErr);
+          }
+        }
         if (Array.isArray(prs)) {
           setPullRequests(prs);
           if (prs.length > 0) {
@@ -1099,6 +1109,22 @@ function AiInsightsContent() {
         repository_id: selectedRepoId,
         pr_number: Number(selectedPrNumber),
       };
+
+      if (prChangeSet) {
+        if (prChangeSet.title) payload.title = prChangeSet.title;
+        if (prChangeSet.body) payload.description = prChangeSet.body;
+        if (Array.isArray(prChangeSet.files) && prChangeSet.files.length > 0) {
+          payload.changed_files = prChangeSet.files.map((f: any) => ({
+            file_path: f.filename || f.file_path,
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            changes: f.changes,
+            patch: f.patch,
+            content: f.content,
+          }));
+        }
+      }
 
       if (manualSymbolsInput.trim()) {
         payload.changed_symbols = manualSymbolsInput
@@ -1376,6 +1402,39 @@ function AiInsightsContent() {
       fetchAnalysisHistory(selectedPrNumber);
     }
   }, [selectedPrNumber, fetchAnalysisHistory]);
+
+  // Restore saved full AnalysisResponseDTO when PR is selected / reloaded
+  useEffect(() => {
+    if (!selectedRepoId || !selectedPrNumber) return;
+
+    const restoreSavedAnalysis = async () => {
+      try {
+        const targetEntityId = `${selectedRepoId}#${selectedPrNumber}`;
+        let analyses = await apiClient.get<any[]>(
+          `/api/v1/ai/analyses/PR/${encodeURIComponent(targetEntityId)}`
+        );
+        if (!Array.isArray(analyses) || analyses.length === 0) {
+          analyses = await apiClient.get<any[]>(
+            `/api/v1/ai/analyses/PR/${selectedPrNumber}`
+          );
+        }
+        if (Array.isArray(analyses) && analyses.length > 0) {
+          const latest = analyses[0];
+          setPrAnalysisResult((current: any) => {
+            if (!current || current.entity_id !== latest.entity_id) {
+              setLifecycleStep("complete");
+              return latest;
+            }
+            return current;
+          });
+        }
+      } catch (err: any) {
+        console.warn("Could not restore saved PR analysis:", err);
+      }
+    };
+
+    restoreSavedAnalysis();
+  }, [selectedRepoId, selectedPrNumber]);
 
   const selectedRepo = repositories.find((r) => r.id === selectedRepoId);
 
