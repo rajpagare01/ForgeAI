@@ -73,13 +73,17 @@ class GeminiProvider(LLMProvider):
                 last_error = e
                 # Check for non-retryable programming or tenant violations vs retryable network/availability
                 err_type = type(e).__name__
+                err_msg = str(e)
                 logger.warning(
                     "Gemini attempt %d/%d failed (%s: %s)",
                     attempt,
                     max_retries,
                     err_type,
-                    str(e)[:120],
+                    err_msg[:120],
                 )
+                if any(x in err_type for x in ("NotFound", "InvalidArgument", "PermissionDenied", "Unauthenticated")) or any(c in err_msg for c in ("404", "400", "401", "403")):
+                    logger.info("Gemini failure is non-retryable (%s); fast-failing to trigger immediate fallback.", err_type)
+                    break
                 if attempt < max_retries:
                     await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
 

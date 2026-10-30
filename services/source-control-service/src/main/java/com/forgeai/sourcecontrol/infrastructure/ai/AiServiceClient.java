@@ -39,7 +39,11 @@ public class AiServiceClient {
             UUID repository_id,
             String commit_sha,
             String ref,
-            List<ChangedFilePayload> files
+            List<ChangedFilePayload> files,
+            String author_name,
+            String author_email,
+            String commit_message,
+            Boolean generate_docs
     ) {}
 
     /**
@@ -47,13 +51,18 @@ public class AiServiceClient {
      * Enforces tenant isolation by attaching the organization_id in the X-Org-Id header.
      */
     public boolean syncPush(UUID organizationId, UUID repositoryId, String commitSha, String ref, List<ChangedFilePayload> files) {
+        return syncPush(organizationId, repositoryId, commitSha, ref, files, null, null, null);
+    }
+
+    public boolean syncPush(UUID organizationId, UUID repositoryId, String commitSha, String ref, List<ChangedFilePayload> files, String authorName, String authorEmail, String commitMessage) {
         if (organizationId == null || repositoryId == null || commitSha == null) {
             log.warn("[AI Client] Skipping push sync due to missing parameters: org={}, repo={}, sha={}", organizationId, repositoryId, commitSha);
             return false;
         }
 
         try {
-            PushSyncPayload payload = new PushSyncPayload(repositoryId, commitSha, ref, files);
+            PushSyncPayload payload = new PushSyncPayload(
+                    repositoryId, commitSha, ref, files, authorName, authorEmail, commitMessage, true);
             String jsonBody = objectMapper.writeValueAsString(payload);
 
             HttpRequest request = HttpRequest.newBuilder()

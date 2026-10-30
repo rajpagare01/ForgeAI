@@ -12,7 +12,7 @@ correlation_id_cv: ContextVar[str] = ContextVar("correlation_id", default="")
 org_id_cv: ContextVar[str] = ContextVar("org_id", default="")
 
 SECRET_PATTERN = re.compile(
-    r"(-----BEGIN[^\r\n]+-----[\s\S]*?-----END[^\r\n]+-----|bearer\s+[\w\-._]+|token[=:]\s*[\w\-._]+|key[=:]\s*(?!-----)[\w\-._]+|password[=:]\s*[\w\-._]+)",
+    r"(-----BEGIN[^\r\n]+-----[\s\S]*?-----END[^\r\n]+-----|bearer\s+[\w\-._]+|token[=:]\s*[\w\-._]+|key[=:]\s*(?!-----)[\w\-._]+|password[=:]\s*[\w\-._]+|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b)",
     re.IGNORECASE,
 )
 

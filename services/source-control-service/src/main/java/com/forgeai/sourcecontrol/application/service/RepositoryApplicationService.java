@@ -20,9 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import com.forgeai.sourcecontrol.domain.model.Commit;
+import com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient;
 
 /**
  * Application service for repository management.
@@ -873,19 +876,74 @@ public class RepositoryApplicationService {
         }
 
         if (currentHead != null && !currentHead.isBlank()) {
+            final String finalHead = currentHead;
             if (!currentHead.equals(repo.getLatestIndexedSha())) {
                 repo.setSyncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCING);
                 repositoryRepository.save(repo);
 
                 boolean syncSuccess = true;
                 if (aiServiceClient != null) {
-                    syncSuccess = aiServiceClient.syncPush(
-                            repo.getOrganizationId() != null ? repo.getOrganizationId() : repo.getWorkspaceId(),
-                            repo.getId(),
-                            currentHead,
-                            "refs/heads/" + repo.getDefaultBranch(),
-                            java.util.List.of()
-                    );
+                    UUID tenantId = repo.getOrganizationId() != null ? repo.getOrganizationId() : repo.getWorkspaceId();
+                    Optional<GitHubAppClient.GitHubCommitDetail> commitDetailOpt = Optional.empty();
+                    if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0) {
+                        try {
+                            commitDetailOpt = gitHubAppClient.getCommitDetail(repo.getInstallationId(), repo.getFullName(), finalHead);
+                        } catch (Exception ex) {
+                            log.warn("[GitHub] Could not fetch commit detail for {}@{}: {}", repo.getFullName(), finalHead, ex.getMessage());
+                        }
+                    }
+
+                    if (commitDetailOpt.isPresent()) {
+                        var commitDetail = commitDetailOpt.get();
+                        // Upsert Commit record into commitRepository
+                        Commit c = commitRepository.findByRepositoryIdAndSha(repo.getId(), finalHead)
+                                .orElseGet(() -> Commit.builder()
+                                        .id(UUID.randomUUID())
+                                        .organizationId(repo.getOrganizationId())
+                                        .workspaceId(repo.getWorkspaceId())
+                                        .repositoryId(repo.getId())
+                                        .sha(finalHead)
+                                        .createdAt(Instant.now())
+                                        .build());
+                        c.setMessage(commitDetail.message());
+                        c.setAuthorName(commitDetail.authorName());
+                        c.setAuthorEmail(commitDetail.authorEmail());
+                        c.setCommittedAt(commitDetail.committedAt());
+                        commitRepository.save(c);
+
+                        List<AiServiceClient.ChangedFilePayload> changedFiles = new ArrayList<>();
+                        int count = 0;
+                        for (var file : commitDetail.files()) {
+                            if (count >= 30) break;
+                            String status = file.status() != null ? file.status() : "modified";
+                            String content = "";
+                            if (!"removed".equalsIgnoreCase(status)) {
+                                content = gitHubAppClient.getFileContent(repo.getInstallationId(), repo.getFullName(), file.filename(), finalHead)
+                                        .orElse(file.patch() != null ? file.patch() : "");
+                            }
+                            changedFiles.add(new AiServiceClient.ChangedFilePayload(file.filename(), status, content));
+                            count++;
+                        }
+
+                        syncSuccess = aiServiceClient.syncPush(
+                                tenantId,
+                                repo.getId(),
+                                finalHead,
+                                "refs/heads/" + repo.getDefaultBranch(),
+                                changedFiles,
+                                commitDetail.authorName(),
+                                commitDetail.authorEmail(),
+                                commitDetail.message()
+                        );
+                    } else {
+                        syncSuccess = aiServiceClient.syncPush(
+                                tenantId,
+                                repo.getId(),
+                                finalHead,
+                                "refs/heads/" + repo.getDefaultBranch(),
+                                java.util.List.of()
+                        );
+                    }
                 }
 
                 if (syncSuccess) {

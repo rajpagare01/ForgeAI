@@ -90,5 +90,12 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<Repository> findAll() {
+        return jpaRepository.findAll().stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
 }
 

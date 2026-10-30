@@ -45,6 +45,8 @@ from app.domain.models import (
     PatchProposal,
     RemediationEffectiveness,
     ActionEvent,
+    GeneratedDocument,
+    CommitAnalysisReport,
 )
 from app.domain.repositories import (
     CodeChunkRepository,
@@ -62,6 +64,8 @@ from app.domain.repositories import (
     PatchProposalRepository,
     RemediationEffectivenessRepository,
     ActionEventRepository,
+    GeneratedDocumentRepository,
+    CommitAnalysisReportRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -2151,6 +2155,269 @@ class AsyncpgActionEventRepository(ActionEventRepository):
                 )
                 for r in rows
             ]
+
+
+class AsyncpgGeneratedDocumentRepository(GeneratedDocumentRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    def _row_to_model(self, r: Any) -> GeneratedDocument:
+        citations = json.loads(r["citations"]) if isinstance(r["citations"], str) else (r["citations"] or [])
+        provenance = json.loads(r["provenance"]) if isinstance(r["provenance"], str) else (r["provenance"] or {})
+        return GeneratedDocument(
+            id=r["id"],
+            organization_id=r["organization_id"],
+            repository_id=r["repository_id"],
+            doc_type=r["doc_type"],
+            target_path=r["target_path"],
+            commit_sha=r["commit_sha"],
+            content_hash=r["content_hash"],
+            content_md=r["content_md"],
+            citations=citations,
+            provenance=provenance,
+            status=r["status"],
+            approved_by=r["approved_by"],
+            pr_url=r["pr_url"],
+            branch_name=r["branch_name"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+
+    async def upsert_document(self, doc: GeneratedDocument) -> GeneratedDocument:
+        query = """
+            INSERT INTO generated_documents (
+                id, organization_id, repository_id, doc_type, target_path,
+                commit_sha, content_hash, content_md, citations, provenance,
+                status, approved_by, pr_url, branch_name, created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb,
+                $11, $12, $13, $14, $15, $16
+            )
+            ON CONFLICT (organization_id, repository_id, doc_type, commit_sha) DO UPDATE SET
+                target_path = EXCLUDED.target_path,
+                content_hash = EXCLUDED.content_hash,
+                content_md = EXCLUDED.content_md,
+                citations = EXCLUDED.citations,
+                provenance = EXCLUDED.provenance,
+                status = CASE
+                    WHEN generated_documents.content_hash = EXCLUDED.content_hash
+                         AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.status
+                    ELSE EXCLUDED.status
+                END,
+                approved_by = CASE
+                    WHEN generated_documents.content_hash = EXCLUDED.content_hash
+                         AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.approved_by
+                    ELSE EXCLUDED.approved_by
+                END,
+                pr_url = CASE
+                    WHEN generated_documents.content_hash = EXCLUDED.content_hash
+                         AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.pr_url
+                    ELSE EXCLUDED.pr_url
+                END,
+                branch_name = CASE
+                    WHEN generated_documents.content_hash = EXCLUDED.content_hash
+                         AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.branch_name
+                    ELSE EXCLUDED.branch_name
+                END,
+                updated_at = NOW()
+            RETURNING id, organization_id, repository_id, doc_type, target_path,
+                      commit_sha, content_hash, content_md, citations, provenance,
+                      status, approved_by, pr_url, branch_name, created_at, updated_at;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                query,
+                doc.id,
+                doc.organization_id,
+                doc.repository_id,
+                doc.doc_type,
+                doc.target_path,
+                doc.commit_sha,
+                doc.content_hash,
+                doc.content_md,
+                json.dumps(doc.citations),
+                json.dumps(doc.provenance),
+                doc.status,
+                doc.approved_by,
+                doc.pr_url,
+                doc.branch_name,
+                doc.created_at,
+                doc.updated_at,
+            )
+            return self._row_to_model(row)
+
+    async def get_document_by_id(self, org_id: UUID, doc_id: UUID) -> Optional[GeneratedDocument]:
+        query = """
+            SELECT id, organization_id, repository_id, doc_type, target_path,
+                   commit_sha, content_hash, content_md, citations, provenance,
+                   status, approved_by, pr_url, branch_name, created_at, updated_at
+            FROM generated_documents
+            WHERE organization_id = $1 AND id = $2;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, org_id, doc_id)
+            if not row:
+                return None
+            return self._row_to_model(row)
+
+    async def list_documents_for_repository(
+        self, org_id: UUID, repo_id: UUID, doc_type: Optional[str] = None
+    ) -> List[GeneratedDocument]:
+        query = """
+            SELECT id, organization_id, repository_id, doc_type, target_path,
+                   commit_sha, content_hash, content_md, citations, provenance,
+                   status, approved_by, pr_url, branch_name, created_at, updated_at
+            FROM generated_documents
+            WHERE organization_id = $1 AND repository_id = $2
+              AND ($3::varchar IS NULL OR doc_type = $3)
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, repo_id, doc_type)
+            return [self._row_to_model(r) for r in rows]
+
+    async def mark_stale_for_repository(self, org_id: UUID, repo_id: UUID, new_commit_sha: str) -> int:
+        query = """
+            UPDATE generated_documents
+            SET status = 'STALE', updated_at = NOW()
+            WHERE organization_id = $1 AND repository_id = $2
+              AND commit_sha != $3
+              AND status IN ('DRAFT', 'APPROVED');
+        """
+        async with self.pool.acquire() as conn:
+            status = await conn.execute(query, org_id, repo_id, new_commit_sha)
+            # status format: "UPDATE <count>"
+            try:
+                return int(status.split()[-1])
+            except Exception:
+                return 0
+
+
+class AsyncpgCommitAnalysisReportRepository(CommitAnalysisReportRepository):
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    def _row_to_model(self, r: Any) -> CommitAnalysisReport:
+        findings = json.loads(r["findings"]) if isinstance(r["findings"], str) else (r["findings"] or [])
+        return CommitAnalysisReport(
+            id=r["id"],
+            organization_id=r["organization_id"],
+            repository_id=r["repository_id"],
+            commit_sha=r["commit_sha"],
+            ref=r["ref"],
+            author_name=r["author_name"],
+            author_email=r["author_email"],
+            commit_message=r["commit_message"],
+            status=r["status"],
+            risk_score=float(r["risk_score"]),
+            secrets_detected=r["secrets_detected"],
+            security_issues=r["security_issues"],
+            reliability_issues=r["reliability_issues"],
+            findings=findings,
+            report_markdown=r["report_markdown"],
+            system_design_doc_id=r["system_design_doc_id"],
+            alert_sent=r["alert_sent"],
+            alert_recipient=r["alert_recipient"],
+            alert_status=r["alert_status"],
+            created_at=r["created_at"],
+        )
+
+    async def upsert_commit_report(self, report: CommitAnalysisReport) -> CommitAnalysisReport:
+        query = """
+            INSERT INTO commit_analysis_reports (
+                id, organization_id, repository_id, commit_sha, ref,
+                author_name, author_email, commit_message, status, risk_score,
+                secrets_detected, security_issues, reliability_issues, findings,
+                report_markdown, system_design_doc_id, alert_sent, alert_recipient,
+                alert_status, created_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19, $20
+            )
+            ON CONFLICT (organization_id, repository_id, commit_sha) DO UPDATE SET
+                ref = EXCLUDED.ref,
+                author_name = EXCLUDED.author_name,
+                author_email = EXCLUDED.author_email,
+                commit_message = EXCLUDED.commit_message,
+                status = EXCLUDED.status,
+                risk_score = EXCLUDED.risk_score,
+                secrets_detected = EXCLUDED.secrets_detected,
+                security_issues = EXCLUDED.security_issues,
+                reliability_issues = EXCLUDED.reliability_issues,
+                findings = EXCLUDED.findings,
+                report_markdown = EXCLUDED.report_markdown,
+                system_design_doc_id = EXCLUDED.system_design_doc_id,
+                alert_sent = EXCLUDED.alert_sent,
+                alert_recipient = EXCLUDED.alert_recipient,
+                alert_status = EXCLUDED.alert_status
+            RETURNING id, organization_id, repository_id, commit_sha, ref,
+                      author_name, author_email, commit_message, status, risk_score,
+                      secrets_detected, security_issues, reliability_issues, findings,
+                      report_markdown, system_design_doc_id, alert_sent, alert_recipient,
+                      alert_status, created_at;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                query,
+                report.id,
+                report.organization_id,
+                report.repository_id,
+                report.commit_sha,
+                report.ref,
+                report.author_name,
+                report.author_email,
+                report.commit_message,
+                report.status,
+                report.risk_score,
+                report.secrets_detected,
+                report.security_issues,
+                report.reliability_issues,
+                json.dumps(report.findings),
+                report.report_markdown,
+                report.system_design_doc_id,
+                report.alert_sent,
+                report.alert_recipient,
+                report.alert_status,
+                report.created_at,
+            )
+            return self._row_to_model(row)
+
+    async def list_commit_reports(
+        self, org_id: UUID, repo_id: UUID, limit: int = 20
+    ) -> List[CommitAnalysisReport]:
+        query = """
+            SELECT id, organization_id, repository_id, commit_sha, ref,
+                   author_name, author_email, commit_message, status, risk_score,
+                   secrets_detected, security_issues, reliability_issues, findings,
+                   report_markdown, system_design_doc_id, alert_sent, alert_recipient,
+                   alert_status, created_at
+            FROM commit_analysis_reports
+            WHERE organization_id = $1 AND repository_id = $2
+            ORDER BY created_at DESC
+            LIMIT $3;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, repo_id, limit)
+            return [self._row_to_model(r) for r in rows]
+
+    async def get_commit_report(
+        self, org_id: UUID, repo_id: UUID, commit_sha: str
+    ) -> Optional[CommitAnalysisReport]:
+        query = """
+            SELECT id, organization_id, repository_id, commit_sha, ref,
+                   author_name, author_email, commit_message, status, risk_score,
+                   secrets_detected, security_issues, reliability_issues, findings,
+                   report_markdown, system_design_doc_id, alert_sent, alert_recipient,
+                   alert_status, created_at
+            FROM commit_analysis_reports
+            WHERE organization_id = $1 AND repository_id = $2 AND commit_sha = $3;
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, org_id, repo_id, commit_sha)
+            if not row:
+                return None
+            return self._row_to_model(row)
+
 
 
 

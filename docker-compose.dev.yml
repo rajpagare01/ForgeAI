@@ -145,12 +145,15 @@ services:
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY:-}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       GITHUB_PRIVATE_KEY_PATH: ${GITHUB_PRIVATE_KEY_PATH:-/app/secrets/github-app-private-key.pem}
+      IDENTITY_SERVICE_URL: http://identity-service:8081
       ENFORCE_INTERNAL_MARKER: "true"
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     volumes:
       - ./secrets:/app/secrets:ro
     depends_on:
       postgres:
+        condition: service_started
+      identity-service:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]

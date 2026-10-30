@@ -455,6 +455,74 @@ public class GitHubAppClient {
         return list;
     }
 
+    public record GitHubCommitFile(String filename, String status, int additions, int deletions, int changes, String patch) {}
+
+    public record GitHubCommitDetail(
+            String sha,
+            String message,
+            String authorName,
+            String authorEmail,
+            Instant committedAt,
+            List<GitHubCommitFile> files
+    ) {}
+
+    public Optional<GitHubCommitDetail> getCommitDetail(Long installationId, String fullName, String sha) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        String url = GITHUB_API + "/repos/" + fullName + "/commits/" + sha;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(20))
+                .build();
+
+        try {
+            HttpResponse<String> response = executeRaw(request, "get commit detail " + fullName + "@" + sha);
+            if (response.statusCode() == 404) {
+                return Optional.empty();
+            }
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return Optional.empty();
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            String resolvedSha = root.path("sha").asText(sha);
+            String message = root.path("commit").path("message").asText("");
+            String authorName = root.path("commit").path("author").path("name").asText("developer");
+            String authorEmail = root.path("commit").path("author").path("email").asText("developer@forgeai.local");
+            String dateStr = root.path("commit").path("author").path("date").asText(null);
+            Instant committedAt = Instant.now();
+            if (dateStr != null && !dateStr.isBlank()) {
+                try {
+                    committedAt = Instant.parse(dateStr);
+                } catch (Exception ignored) {}
+            }
+
+            List<GitHubCommitFile> files = new ArrayList<>();
+            JsonNode filesNode = root.path("files");
+            if (filesNode.isArray()) {
+                for (JsonNode f : filesNode) {
+                    files.add(new GitHubCommitFile(
+                            f.path("filename").asText(""),
+                            f.path("status").asText("modified"),
+                            f.path("additions").asInt(0),
+                            f.path("deletions").asInt(0),
+                            f.path("changes").asInt(0),
+                            f.hasNonNull("patch") ? f.path("patch").asText() : ""
+                    ));
+                }
+            }
+            return Optional.of(new GitHubCommitDetail(resolvedSha, message, authorName, authorEmail, committedAt, files));
+        } catch (Exception e) {
+            log.warn("[GitHub] Failed to fetch commit detail for {}@{}: {}", fullName, sha, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
     public List<GitHubBranchMetadata> listBranches(Long installationId, String fullName) {
         config.requireConfigured();
         String token = getInstallationToken(installationId);

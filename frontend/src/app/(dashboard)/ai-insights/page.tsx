@@ -62,6 +62,8 @@ import {
   Terminal,
   CheckSquare,
   FileText,
+  Mail,
+  BookOpen,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -608,11 +610,53 @@ export interface RepositoryDependencyItem {
   created_at?: string;
 }
 
+export interface GeneratedDocumentItem {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  doc_type: string;
+  target_path: string;
+  commit_sha: string;
+  content_hash: string;
+  content_md: string;
+  citations: Array<{ file_path: string; commit_sha: string; reason?: string }>;
+  provenance: Record<string, any>;
+  status: "DRAFT" | "APPROVED" | "REJECTED" | "APPLIED" | "STALE" | "FAILED";
+  approved_by?: string;
+  pr_url?: string;
+  branch_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommitAnalysisReportItem {
+  id: string;
+  organization_id: string;
+  repository_id: string;
+  commit_sha: string;
+  ref?: string;
+  author_name?: string;
+  author_email?: string;
+  commit_message?: string;
+  status: "CLEAN" | "WARNING" | "CRITICAL_ALERT";
+  risk_score: number;
+  secrets_detected: number;
+  security_issues: number;
+  reliability_issues: number;
+  findings: Array<any>;
+  report_markdown: string;
+  system_design_doc_id?: string;
+  alert_sent: boolean;
+  alert_recipient?: string;
+  alert_status: string;
+  created_at: string;
+}
+
 function AiInsightsContent() {
   const searchParams = useSearchParams();
   const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
   const workspaceDisplayName = isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Workspace";
-  const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact" | "dependencies" | "remediation">("pr");
+  const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact" | "dependencies" | "remediation" | "autodocs" | "commitguard">("pr");
 
   // Authorized repositories
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -695,6 +739,22 @@ function AiInsightsContent() {
   const [rejectReasonInput, setRejectReasonInput] = useState<string>("");
   const [rejectingActionId, setRejectingActionId] = useState<string | null>(null);
   const [localActions, setLocalActions] = useState<EngineeringActionDTO[]>([]);
+
+  // Auto-Docs & System Design state
+  const [documents, setDocuments] = useState<GeneratedDocumentItem[]>([]);
+  const [isLoadingDocs, setIsLoadingDocs] = useState<boolean>(false);
+  const [isGeneratingDocs, setIsGeneratingDocs] = useState<boolean>(false);
+  const [selectedDocPreview, setSelectedDocPreview] = useState<GeneratedDocumentItem | null>(null);
+  const [docActionError, setDocActionError] = useState<string | null>(null);
+  const [docActionSuccess, setDocActionSuccess] = useState<string | null>(null);
+  const [processingDocId, setProcessingDocId] = useState<string | null>(null);
+
+  // Commit Guard & Push Alert Log state
+  const [commitReports, setCommitReports] = useState<CommitAnalysisReportItem[]>([]);
+  const [isLoadingCommitReports, setIsLoadingCommitReports] = useState<boolean>(false);
+  const [selectedCommitReport, setSelectedCommitReport] = useState<CommitAnalysisReportItem | null>(null);
+  const [isOnDemandAnalyzing, setIsOnDemandAnalyzing] = useState<boolean>(false);
+  const [isCheckingNewCommits, setIsCheckingNewCommits] = useState<boolean>(false);
 
   // Engineering Health Navigation & Sub-views
   const [activeHealthSection, setActiveHealthSection] = useState<
@@ -1016,6 +1076,196 @@ function AiInsightsContent() {
       setIsDiscoveringDependencies(false);
     }
   };
+
+  // Auto-Docs & Commit Guard Fetchers
+  const fetchDocuments = useCallback(async () => {
+    if (!selectedRepoId) return;
+    setIsLoadingDocs(true);
+    setDocActionError(null);
+    try {
+      const docs = await apiClient.get<GeneratedDocumentItem[]>(
+        `/api/v1/ai/repositories/${selectedRepoId}/documents`
+      );
+      setDocuments(Array.isArray(docs) ? docs : []);
+    } catch (err: any) {
+      console.warn("Failed to fetch documents:", err);
+      setDocuments([]);
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  }, [selectedRepoId]);
+
+  const fetchCommitReports = useCallback(async () => {
+    if (!selectedRepoId) return;
+    setIsLoadingCommitReports(true);
+    try {
+      const res = await apiClient.get<{ repository_id: string; reports: CommitAnalysisReportItem[] }>(
+        `/api/v1/ai/repositories/${selectedRepoId}/commit-reports?limit=30`
+      );
+      setCommitReports(res?.reports || []);
+    } catch (err: any) {
+      console.warn("Failed to fetch commit reports:", err);
+      setCommitReports([]);
+    } finally {
+      setIsLoadingCommitReports(false);
+    }
+  }, [selectedRepoId]);
+
+  useEffect(() => {
+    if (activeTab === "autodocs") {
+      fetchDocuments();
+    } else if (activeTab === "commitguard") {
+      fetchCommitReports();
+    }
+  }, [activeTab, fetchDocuments, fetchCommitReports]);
+
+  const handleGenerateDocuments = async () => {
+    if (!selectedRepoId) return;
+    setIsGeneratingDocs(true);
+    setDocActionError(null);
+    setDocActionSuccess(null);
+    try {
+      const resp = await apiClient.post<any>(
+        `/api/v1/ai/repositories/${selectedRepoId}/documents/generate`,
+        { commit_sha: prChangeSet?.headSha || "HEAD" }
+      );
+      setDocActionSuccess(`Generated ${resp?.documents?.length || 5} repository documents successfully.`);
+      await fetchDocuments();
+    } catch (err: any) {
+      setDocActionError(err?.message || "Failed to generate repository documents.");
+    } finally {
+      setIsGeneratingDocs(false);
+    }
+  };
+
+  const handleApproveDocument = async (docId: string) => {
+    setProcessingDocId(docId);
+    setDocActionError(null);
+    try {
+      await apiClient.post(`/api/v1/ai/documents/${docId}/approve`, {});
+      setDocActionSuccess("Document approved successfully.");
+      await fetchDocuments();
+      if (selectedDocPreview?.id === docId) {
+        setSelectedDocPreview((prev) => prev ? { ...prev, status: "APPROVED" } : null);
+      }
+    } catch (err: any) {
+      setDocActionError(err?.message || "Failed to approve document.");
+    } finally {
+      setProcessingDocId(null);
+    }
+  };
+
+  const handleRejectDocument = async (docId: string, reason?: string) => {
+    setProcessingDocId(docId);
+    setDocActionError(null);
+    try {
+      await apiClient.post(`/api/v1/ai/documents/${docId}/reject`, { reason: reason || "Rejected by developer" });
+      setDocActionSuccess("Document rejected.");
+      await fetchDocuments();
+      if (selectedDocPreview?.id === docId) {
+        setSelectedDocPreview((prev) => prev ? { ...prev, status: "REJECTED" } : null);
+      }
+    } catch (err: any) {
+      setDocActionError(err?.message || "Failed to reject document.");
+    } finally {
+      setProcessingDocId(null);
+    }
+  };
+
+  const handleApplyDocument = async (docId: string) => {
+    setProcessingDocId(docId);
+    setDocActionError(null);
+    try {
+      const updated = await apiClient.post<GeneratedDocumentItem>(
+        `/api/v1/ai/documents/${docId}/apply`,
+        { write_mode_override: "CONTROLLED_WRITE" }
+      );
+      setDocActionSuccess(`Pull Request created: ${updated.pr_url || updated.branch_name}`);
+      await fetchDocuments();
+      if (selectedDocPreview?.id === docId) {
+        setSelectedDocPreview(updated);
+      }
+    } catch (err: any) {
+      setDocActionError(err?.message || "Failed to apply document.");
+    } finally {
+      setProcessingDocId(null);
+    }
+  };
+
+  const handleAnalyzeCommitOnDemand = async () => {
+    if (!selectedRepoId) return;
+    setIsOnDemandAnalyzing(true);
+    try {
+      await apiClient.post(
+        `/api/v1/ai/repositories/${selectedRepoId}/analyze-commit`,
+        {
+          commit_sha: prChangeSet?.headSha || "HEAD",
+          ref: prChangeSet?.sourceBranch || "main",
+          author_name: prChangeSet?.author || "Developer",
+          author_email: "developer@forgeai.local",
+          commit_message: prChangeSet?.title || "Manual commit analysis",
+          generate_docs: true,
+        }
+      );
+      await fetchCommitReports();
+    } catch (err: any) {
+      console.warn("Manual commit analysis failed:", err);
+    } finally {
+      setIsOnDemandAnalyzing(false);
+    }
+  };
+
+  const handleCheckForNewCommits = async () => {
+    if (!selectedRepoId) return;
+    setIsCheckingNewCommits(true);
+    setDocActionError(null);
+    setDocActionSuccess(null);
+    try {
+      await apiClient.post(`/api/v1/repositories/${selectedRepoId}/reconcile`, {});
+      await Promise.allSettled([
+        fetchDocuments(),
+        fetchCommitReports(),
+        fetchSyncStatus(),
+      ]);
+      setDocActionSuccess("Reconciliation complete. Latest commits synchronized from GitHub.");
+    } catch (err: any) {
+      console.warn("Failed to check for new commits:", err);
+      setDocActionError(err?.message || "Failed to reconcile latest commits from GitHub.");
+    } finally {
+      setIsCheckingNewCommits(false);
+    }
+  };
+
+  // Auto-poll interval (every 15s) for live repository synchronization, documents, and commit reports
+  useEffect(() => {
+    if (!selectedRepoId) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const [syncRes, docsRes, reportsRes] = await Promise.allSettled([
+          apiClient.get<RepositorySyncStatus>(`/api/v1/repositories/${selectedRepoId}/sync-status`),
+          apiClient.get<GeneratedDocumentItem[]>(`/api/v1/ai/repositories/${selectedRepoId}/documents`),
+          apiClient.get<{ repository_id: string; reports: CommitAnalysisReportItem[] }>(
+            `/api/v1/ai/repositories/${selectedRepoId}/commit-reports?limit=30`
+          ),
+        ]);
+
+        if (syncRes.status === "fulfilled" && syncRes.value) {
+          setSyncStatus(syncRes.value);
+        }
+        if (docsRes.status === "fulfilled" && Array.isArray(docsRes.value)) {
+          setDocuments(docsRes.value);
+        }
+        if (reportsRes.status === "fulfilled" && reportsRes.value?.reports) {
+          setCommitReports(reportsRes.value.reports);
+        }
+      } catch (pollErr) {
+        console.warn("Silent background poll error:", pollErr);
+      }
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedRepoId]);
 
   // 2. Fetch real pull requests when selected repository changes
   useEffect(() => {
@@ -2195,6 +2445,38 @@ function AiInsightsContent() {
           {localActions.length > 0 && (
             <Badge className="ml-1 bg-purple-500/20 text-purple-300 border-purple-500/30 text-[10px] px-1.5 py-0 font-mono">
               {localActions.length}
+            </Badge>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("autodocs")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+            activeTab === "autodocs"
+              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+          }`}
+        >
+          <BookOpen className="h-4 w-4" />
+          System Design & Auto-Docs
+          {documents.length > 0 && (
+            <Badge className="ml-1 bg-sky-500/20 text-sky-300 border-sky-500/30 text-[10px] px-1.5 py-0 font-mono">
+              {documents.length}
+            </Badge>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("commitguard")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+            activeTab === "commitguard"
+              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+          }`}
+        >
+          <ShieldAlert className="h-4 w-4" />
+          Commit Push Guard
+          {commitReports.some((r) => r.status === "CRITICAL_ALERT") && (
+            <Badge className="ml-1 bg-rose-500/20 text-rose-300 border-rose-500/30 text-[10px] px-1.5 py-0 font-mono">
+              ALERT
             </Badge>
           )}
         </button>
@@ -5620,6 +5902,673 @@ function AiInsightsContent() {
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: AUTOMATED REPOSITORY DOCUMENTATION & SYSTEM DESIGN (STEP 7)        */}
+      {/* ========================================================================= */}
+      {activeTab === "autodocs" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header Action Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border border-sky-500/20 bg-slate-900/60 backdrop-blur-md">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <BookOpen className="h-5 w-5 text-sky-400" />
+                <h2 className="text-lg font-bold text-white tracking-tight">
+                  Automated Documentation & System Design
+                </h2>
+                <Badge variant="outline" className="border-sky-500/30 text-sky-300 text-xs font-mono">
+                  v1.0 Engine
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                4 deterministic documents (Overview, API, Data Model, Dependencies) + Grounded LLM System Design with verified citations. Managed through DRAFT &rarr; APPROVED &rarr; APPLIED lifecycle.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchDocuments}
+                disabled={isLoadingDocs}
+                className="gap-2 text-xs border-slate-700 hover:text-white"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingDocs ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button
+                variant="glow"
+                size="sm"
+                onClick={handleGenerateDocuments}
+                disabled={isGeneratingDocs || !selectedRepoId}
+                className="gap-2 text-xs"
+              >
+                {isGeneratingDocs ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Generating Docs...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-3.5 w-3.5 text-amber-300" />
+                    Generate Repository Docs
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Feedback Banners */}
+          {docActionSuccess && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-3 text-xs text-emerald-300">
+              <Check className="h-4 w-4 shrink-0 text-emerald-400" />
+              <span>{docActionSuccess}</span>
+            </div>
+          )}
+          {docActionError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              <span>{docActionError}</span>
+            </div>
+          )}
+
+          {/* Document Cards Grid */}
+          {isLoadingDocs ? (
+            <div className="flex flex-col items-center justify-center p-16 rounded-2xl border border-slate-800 bg-slate-900/30 space-y-3">
+              <RefreshCw className="h-8 w-8 text-sky-400 animate-spin" />
+              <p className="text-xs text-slate-400">Loading generated repository documents...</p>
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-16 rounded-2xl border border-dashed border-slate-800 bg-slate-900/20 text-center space-y-4">
+              <BookOpen className="h-12 w-12 text-slate-600" />
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-white">No Generated Documents Yet</h3>
+                <p className="text-xs text-slate-400 max-w-md">
+                  Click &ldquo;Generate Repository Docs&rdquo; above to automatically create the 5 repository documents and System Design specification for this repo.
+                </p>
+              </div>
+              <Button
+                variant="glow"
+                size="sm"
+                onClick={handleGenerateDocuments}
+                disabled={isGeneratingDocs || !selectedRepoId}
+                className="gap-2 text-xs"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Generate Now
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {documents.map((doc) => {
+                const isSystemDesign = doc.doc_type === "SYSTEM_DESIGN" || doc.doc_type === "ARCHITECTURE";
+                const isDraft = doc.status === "DRAFT";
+                const isApproved = doc.status === "APPROVED";
+                const isApplied = doc.status === "APPLIED";
+                const isStale = doc.status === "STALE";
+
+                return (
+                  <Card key={doc.id} className="border-slate-800 bg-slate-900/40 hover:border-slate-700 transition-all flex flex-col justify-between">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] font-mono uppercase ${
+                            isSystemDesign
+                              ? "border-purple-500/30 text-purple-300 bg-purple-950/20"
+                              : "border-sky-500/30 text-sky-300 bg-sky-950/20"
+                          }`}
+                        >
+                          {doc.doc_type}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] font-mono ${
+                            isApplied
+                              ? "border-emerald-500/40 text-emerald-300 bg-emerald-950/30"
+                              : isApproved
+                              ? "border-sky-500/40 text-sky-300 bg-sky-950/30"
+                              : isStale
+                              ? "border-amber-500/40 text-amber-300 bg-amber-950/30"
+                              : "border-slate-600 text-slate-400"
+                          }`}
+                        >
+                          {doc.status}
+                        </Badge>
+                      </div>
+                      <CardTitle className="text-sm font-semibold text-white font-mono mt-2 truncate">
+                        {doc.target_path}
+                      </CardTitle>
+                      <CardDescription className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1 font-mono">
+                        <GitCommit className="h-3 w-3 text-slate-500" />
+                        sha: {doc.commit_sha ? doc.commit_sha.slice(0, 8) : "HEAD"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3 pt-0">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-2.5">
+                        <span>Citations: {doc.citations?.length || 0} files</span>
+                        <span className="font-mono text-[10px] text-slate-500 truncate max-w-[120px]">
+                          hash: {doc.content_hash?.slice(0, 8)}
+                        </span>
+                      </div>
+
+                      {doc.provenance && (
+                        <div className="text-[10px] text-slate-500 bg-slate-950/50 p-2 rounded-lg border border-slate-800/60 font-mono">
+                          {doc.provenance.generator === "ai_grounded" ? (
+                            <span>AI: {doc.provenance.model || "Gemini"} ({doc.provenance.provider})</span>
+                          ) : (
+                            <span>Deterministic Engine v{doc.provenance.generator_version || "1.0"}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedDocPreview(doc)}
+                          className="flex-1 text-xs gap-1 h-8"
+                        >
+                          <Eye className="h-3 w-3" />
+                          Preview
+                        </Button>
+
+                        {isDraft && (
+                          <Button
+                            variant="glow"
+                            size="sm"
+                            disabled={processingDocId === doc.id}
+                            onClick={() => handleApproveDocument(doc.id)}
+                            className="text-xs h-8 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+                          >
+                            {processingDocId === doc.id ? (
+                              <RefreshCw className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Check className="h-3 w-3" />
+                            )}
+                            Approve
+                          </Button>
+                        )}
+
+                        {isApproved && (
+                          <Button
+                            variant="glow"
+                            size="sm"
+                            disabled={processingDocId === doc.id}
+                            onClick={() => handleApplyDocument(doc.id)}
+                            className="text-xs h-8 px-2.5 gap-1.5"
+                          >
+                            {processingDocId === doc.id ? (
+                              <RefreshCw className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <GitPullRequest className="h-3 w-3" />
+                            )}
+                            Open PR
+                          </Button>
+                        )}
+
+                        {isApplied && doc.pr_url && (
+                          <a href={doc.pr_url} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="sm" className="text-xs h-8 px-2 border-emerald-500/30 text-emerald-300">
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </a>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 7: COMMIT GUARD & PUSH-TRIGGERED ALERT LOG (STEP 7)                  */}
+      {/* ========================================================================= */}
+      {activeTab === "commitguard" && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header Action Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border border-rose-500/20 bg-slate-900/60 backdrop-blur-md">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                <h2 className="text-lg font-bold text-white tracking-tight">
+                  Autonomous Push-Triggered Commit Guard
+                </h2>
+                <Badge variant="outline" className="border-rose-500/30 text-rose-300 text-xs font-mono">
+                  Real-Time Audit & Alert
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                Every developer push triggers incremental indexing, secret leak scanning, vulnerability analysis, system design auto-refresh, and immediate email alerts on critical findings.
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckForNewCommits}
+                disabled={isCheckingNewCommits || !selectedRepoId}
+                className="gap-2 text-xs border-emerald-500/30 text-emerald-300 hover:bg-emerald-950/30"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isCheckingNewCommits ? "animate-spin" : ""}`} />
+                {isCheckingNewCommits ? "Checking GitHub..." : "Check for New Commits Now"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchCommitReports}
+                disabled={isLoadingCommitReports}
+                className="gap-2 text-xs border-slate-700 hover:text-white"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingCommitReports ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button
+                variant="glow"
+                size="sm"
+                onClick={handleAnalyzeCommitOnDemand}
+                disabled={isOnDemandAnalyzing || !selectedRepoId}
+                className="gap-2 text-xs"
+              >
+                {isOnDemandAnalyzing ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Scanning Head Commit...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3.5 w-3.5 text-sky-400" />
+                    Scan Commit On-Demand
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Feedback Banners */}
+          {docActionSuccess && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-3 text-xs text-emerald-300">
+              <Check className="h-4 w-4 shrink-0 text-emerald-400" />
+              <span>{docActionSuccess}</span>
+            </div>
+          )}
+          {docActionError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              <span>{docActionError}</span>
+            </div>
+          )}
+
+          {/* Metric Stats Banner */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Card className="border-slate-800 bg-slate-900/40 p-4">
+              <div className="text-xs text-slate-400">Total Scanned Commits</div>
+              <div className="text-2xl font-bold text-white mt-1">{commitReports.length}</div>
+            </Card>
+            <Card className="border-rose-500/20 bg-rose-950/10 p-4">
+              <div className="text-xs text-rose-300">Critical Alerts Triggered</div>
+              <div className="text-2xl font-bold text-rose-400 mt-1">
+                {commitReports.filter((r) => r.status === "CRITICAL_ALERT").length}
+              </div>
+            </Card>
+            <Card className="border-amber-500/20 bg-amber-950/10 p-4">
+              <div className="text-xs text-amber-300">Secret Leaks Detected</div>
+              <div className="text-2xl font-bold text-amber-400 mt-1">
+                {commitReports.reduce((acc, r) => acc + (r.secrets_detected || 0), 0)}
+              </div>
+            </Card>
+            <Card className="border-sky-500/20 bg-sky-950/10 p-4">
+              <div className="text-xs text-sky-300">Alert Emails Sent / Dry-run</div>
+              <div className="text-2xl font-bold text-sky-400 mt-1">
+                {commitReports.filter((r) => r.alert_sent).length}
+              </div>
+            </Card>
+          </div>
+
+          {/* Reports Table */}
+          <Card className="border-slate-800 bg-slate-900/40">
+            <CardHeader className="border-b border-slate-800/80 pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold text-white">Commit Security & Alert Ledger</CardTitle>
+                <Badge variant="outline" className="text-xs text-slate-400 font-mono">
+                  {commitReports.length} records
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isLoadingCommitReports ? (
+                <div className="flex flex-col items-center justify-center p-12 space-y-2">
+                  <RefreshCw className="h-6 w-6 text-sky-400 animate-spin" />
+                  <p className="text-xs text-slate-400">Fetching commit analysis reports...</p>
+                </div>
+              ) : commitReports.length === 0 ? (
+                <div className="p-12 text-center space-y-3">
+                  <ShieldCheck className="h-10 w-10 text-slate-600 mx-auto" />
+                  <p className="text-sm text-slate-300 font-semibold">No Commit Reports Recorded Yet</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Push code to this repository via git or click &ldquo;Scan Commit On-Demand&rdquo; to analyze the current head commit.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60">
+                  {commitReports.map((report) => {
+                    const isCritical = report.status === "CRITICAL_ALERT";
+                    const isWarning = report.status === "WARNING";
+
+                    return (
+                      <div
+                        key={report.id}
+                        className="p-4 hover:bg-slate-900/60 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      >
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-mono font-bold uppercase ${
+                                isCritical
+                                  ? "border-rose-500/40 text-rose-300 bg-rose-950/30"
+                                  : isWarning
+                                  ? "border-amber-500/40 text-amber-300 bg-amber-950/30"
+                                  : "border-emerald-500/40 text-emerald-300 bg-emerald-950/30"
+                              }`}
+                            >
+                              {report.status}
+                            </Badge>
+                            <span className="font-mono text-xs text-sky-400 font-bold">
+                              {report.commit_sha ? report.commit_sha.slice(0, 8) : "HEAD"}
+                            </span>
+                            <span className="text-xs text-slate-400 font-mono">
+                              ({report.ref || "main"})
+                            </span>
+                            {report.author_name && (
+                              <span className="text-xs text-slate-300">
+                                by {report.author_name}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-200 line-clamp-1 font-sans">
+                            {report.commit_message || "Commit push"}
+                          </p>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
+                            <span className={report.secrets_detected > 0 ? "text-amber-400 font-semibold" : ""}>
+                              Secrets: {report.secrets_detected}
+                            </span>
+                            <span>Security: {report.security_issues}</span>
+                            <span>Reliability: {report.reliability_issues}</span>
+                            <span>Risk Score: {report.risk_score?.toFixed(1) || "0.0"}</span>
+                            {report.alert_sent && (
+                              <Badge variant="outline" className="text-[9px] border-sky-500/30 text-sky-300 gap-1 py-0">
+                                <Mail className="h-2.5 w-2.5" />
+                                Alert: {report.alert_status}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedCommitReport(report)}
+                            className="text-xs gap-1.5 h-8 border-slate-700 hover:text-white"
+                          >
+                            <Eye className="h-3 w-3" />
+                            View Full Report
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: GENERATED DOCUMENT PREVIEW & ACTIONS                               */}
+      {/* ========================================================================= */}
+      {selectedDocPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-4xl rounded-2xl border border-sky-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="text-[10px] font-mono uppercase border-sky-500/40 text-sky-300 bg-sky-950/30">
+                    {selectedDocPreview.doc_type}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono border-slate-700 text-slate-300">
+                    {selectedDocPreview.status}
+                  </Badge>
+                  <span className="font-mono text-xs text-slate-400">
+                    commit: {selectedDocPreview.commit_sha ? selectedDocPreview.commit_sha.slice(0, 8) : "HEAD"}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-white font-mono mt-1.5">
+                  {selectedDocPreview.target_path}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDocPreview(null)}
+                className="text-slate-400 hover:text-white rounded-lg p-1 hover:bg-slate-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Citations List */}
+            {selectedDocPreview.citations && selectedDocPreview.citations.length > 0 && (
+              <div className="space-y-1.5 bg-slate-900/40 p-3 rounded-xl border border-slate-800">
+                <div className="text-xs font-semibold text-slate-300">Verified Citations:</div>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {selectedDocPreview.citations.map((c, idx) => (
+                    <span
+                      key={idx}
+                      className="font-mono text-[10px] bg-slate-950 border border-slate-700/80 px-2 py-0.5 rounded text-sky-300"
+                    >
+                      {c.file_path}@{c.commit_sha ? c.commit_sha.slice(0, 7) : "HEAD"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Document Content */}
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-slate-300">Markdown Content:</div>
+              <div className="max-h-96 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/90 p-4 font-mono text-xs text-slate-200 whitespace-pre-wrap select-text leading-relaxed">
+                {selectedDocPreview.content_md}
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between border-t border-slate-800/80 pt-4">
+              <div className="text-[11px] text-slate-500 font-mono">
+                Hash: {selectedDocPreview.content_hash}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedDocPreview(null)}
+                  className="text-xs border-slate-700 text-slate-300"
+                >
+                  Close
+                </Button>
+
+                {selectedDocPreview.status === "DRAFT" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={processingDocId === selectedDocPreview.id}
+                      onClick={() => handleRejectDocument(selectedDocPreview.id)}
+                      className="text-xs border-rose-500/30 text-rose-300 hover:bg-rose-950/20"
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      variant="glow"
+                      size="sm"
+                      disabled={processingDocId === selectedDocPreview.id}
+                      onClick={() => handleApproveDocument(selectedDocPreview.id)}
+                      className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white"
+                    >
+                      Approve
+                    </Button>
+                  </>
+                )}
+
+                {selectedDocPreview.status === "APPROVED" && (
+                  <Button
+                    variant="glow"
+                    size="sm"
+                    disabled={processingDocId === selectedDocPreview.id}
+                    onClick={() => handleApplyDocument(selectedDocPreview.id)}
+                    className="text-xs gap-1.5"
+                  >
+                    <GitPullRequest className="h-3.5 w-3.5" />
+                    Open Pull Request
+                  </Button>
+                )}
+
+                {selectedDocPreview.status === "APPLIED" && selectedDocPreview.pr_url && (
+                  <a href={selectedDocPreview.pr_url} target="_blank" rel="noopener noreferrer">
+                    <Button variant="glow" size="sm" className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-500">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      View Pull Request
+                    </Button>
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: COMMIT ANALYSIS REPORT PREVIEW & AUDIT                             */}
+      {/* ========================================================================= */}
+      {selectedCommitReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-4xl rounded-2xl border border-rose-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-mono font-bold uppercase ${
+                      selectedCommitReport.status === "CRITICAL_ALERT"
+                        ? "border-rose-500/40 text-rose-300 bg-rose-950/30"
+                        : selectedCommitReport.status === "WARNING"
+                        ? "border-amber-500/40 text-amber-300 bg-amber-950/30"
+                        : "border-emerald-500/40 text-emerald-300 bg-emerald-950/30"
+                    }`}
+                  >
+                    {selectedCommitReport.status}
+                  </Badge>
+                  <span className="font-mono text-xs text-sky-400 font-bold">
+                    sha: {selectedCommitReport.commit_sha}
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">
+                    ref: {selectedCommitReport.ref || "main"}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-400 mt-1 flex items-center gap-3">
+                  <span>Author: <strong className="text-white">{selectedCommitReport.author_name || "Unknown"}</strong> ({selectedCommitReport.author_email || "no-email"})</span>
+                  <span>Scanned: {new Date(selectedCommitReport.created_at).toLocaleString()}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCommitReport(null)}
+                className="text-slate-400 hover:text-white rounded-lg p-1 hover:bg-slate-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Commit Message */}
+            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs text-slate-200">
+              <div className="text-[10px] text-slate-500 font-mono uppercase mb-1">Commit Message</div>
+              <p className="font-sans">{selectedCommitReport.commit_message || "No commit message"}</p>
+            </div>
+
+            {/* Email Alert Banner */}
+            <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between text-xs flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-sky-400" />
+                <span>Notification Dispatch Status: <strong className="text-white">{selectedCommitReport.alert_status}</strong></span>
+              </div>
+              {selectedCommitReport.alert_recipient && (
+                <span className="text-slate-400 font-mono text-[11px]">Recipient: {selectedCommitReport.alert_recipient}</span>
+              )}
+            </div>
+
+            {/* Redacted Findings */}
+            {selectedCommitReport.findings && selectedCommitReport.findings.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-300">
+                  Detected Findings ({selectedCommitReport.findings.length}):
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {selectedCommitReport.findings.map((f: any, idx: number) => (
+                    <div key={idx} className="p-3 rounded-xl border border-rose-500/20 bg-rose-950/20 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-white">{f.title || f.category || "Issue"}</span>
+                        <Badge variant="outline" className="text-[10px] text-rose-300 border-rose-500/30 uppercase">
+                          {f.severity || "HIGH"}
+                        </Badge>
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        {f.file_path}{f.line_number ? `:${f.line_number}` : ""}
+                      </div>
+                      {f.redacted_evidence && (
+                        <div className="font-mono text-[10px] text-amber-300 bg-black/40 p-2 rounded border border-amber-500/20">
+                          {f.redacted_evidence}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Full Markdown Report */}
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-slate-300">Audit & Intelligence Report:</div>
+              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/90 p-4 font-mono text-xs text-slate-200 whitespace-pre-wrap select-text leading-relaxed">
+                {selectedCommitReport.report_markdown}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-slate-800/80 pt-4">
+              <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
+                <span>Risk Score: {selectedCommitReport.risk_score?.toFixed(1) || "0.0"}</span>
+                <span>Secrets: {selectedCommitReport.secrets_detected}</span>
+                <span>Security: {selectedCommitReport.security_issues}</span>
+                <span>Reliability: {selectedCommitReport.reliability_issues}</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedCommitReport(null)}
+                className="text-xs border-slate-700 text-slate-300"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

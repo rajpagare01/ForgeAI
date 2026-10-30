@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # Cross-Repository & Distributed Intelligence Settings
     MAX_CROSS_REPO_DEPTH: int = 2
 
+    # SMTP & Alert Notification Settings
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "alerts@forgeai.dev"
+    SMTP_USE_TLS: bool = True
+    ALERT_FALLBACK_EMAIL: str = "developer@forgeai.local"
+
     def get_async_db_url(self) -> str:
         if self.ASYNC_DATABASE_URL:
             return self.ASYNC_DATABASE_URL

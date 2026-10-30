@@ -64,6 +64,7 @@ class PushEventAndSyncTest {
     @DisplayName("Push webhook processes commits, updates sync state, and maintains delivery idempotency")
     void pushWebhookProcessesCommitsAndUpdatesSyncState() throws Exception {
         when(aiServiceClient.syncPush(any(), any(), any(), any(), any())).thenReturn(true);
+        when(aiServiceClient.syncPush(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         UUID orgId = UUID.randomUUID();
         Long githubRepoId = 12345678L;

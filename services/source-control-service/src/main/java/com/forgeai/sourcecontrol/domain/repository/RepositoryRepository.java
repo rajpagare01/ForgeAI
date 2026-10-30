@@ -15,5 +15,6 @@ public interface RepositoryRepository {
     List<Repository> findAllByOrganizationId(UUID organizationId);
     List<Repository> findAllByWorkspaceId(UUID workspaceId);
     List<Repository> findAllByInstallationId(Long installationId);
+    List<Repository> findAll();
 }
 

@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob, RepositoryDependency, DependencyEvidence
+from app.domain.models import (
+    CodeChunk, GraphEdge, Analysis, IndexJob, RepositoryDependency, DependencyEvidence,
+    GeneratedDocument, CommitAnalysisReport
+)
 
 
 class CodeChunkRepository(ABC):
@@ -320,6 +323,52 @@ class ActionEventRepository(ABC):
     @abstractmethod
     async def get_events_for_action(self, org_id: UUID, action_id: str) -> List[Any]:
         pass
+
+
+class GeneratedDocumentRepository(ABC):
+    @abstractmethod
+    async def upsert_document(self, doc: GeneratedDocument) -> GeneratedDocument:
+        """Upsert generated document idempotently by (organization_id, repository_id, doc_type, commit_sha)."""
+        pass
+
+    @abstractmethod
+    async def get_document_by_id(self, org_id: UUID, doc_id: UUID) -> Optional[GeneratedDocument]:
+        """Tenant-isolated retrieval by document ID."""
+        pass
+
+    @abstractmethod
+    async def list_documents_for_repository(
+        self, org_id: UUID, repo_id: UUID, doc_type: Optional[str] = None
+    ) -> List[GeneratedDocument]:
+        """List generated documents for repository, optionally filtered by doc_type."""
+        pass
+
+    @abstractmethod
+    async def mark_stale_for_repository(self, org_id: UUID, repo_id: UUID, new_commit_sha: str) -> int:
+        """Mark existing DRAFT/APPROVED documents with commit_sha != new_commit_sha as STALE."""
+        pass
+
+
+class CommitAnalysisReportRepository(ABC):
+    @abstractmethod
+    async def upsert_commit_report(self, report: CommitAnalysisReport) -> CommitAnalysisReport:
+        """Upsert push commit analysis report by (organization_id, repository_id, commit_sha)."""
+        pass
+
+    @abstractmethod
+    async def list_commit_reports(
+        self, org_id: UUID, repo_id: UUID, limit: int = 20
+    ) -> List[CommitAnalysisReport]:
+        """List recent push commit analysis reports for repository."""
+        pass
+
+    @abstractmethod
+    async def get_commit_report(
+        self, org_id: UUID, repo_id: UUID, commit_sha: str
+    ) -> Optional[CommitAnalysisReport]:
+        """Get commit analysis report by commit SHA."""
+        pass
+
 
 
 

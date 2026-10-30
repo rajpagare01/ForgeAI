@@ -48,7 +48,12 @@ forgeai:
     # Webhook shared secret — must match the secret configured in GitHub App settings.
     # Set via GITHUB_WEBHOOK_SECRET environment variable.
     webhook-secret: ${GITHUB_WEBHOOK_SECRET:}
+    commit-polling-enabled: ${GITHUB_COMMIT_POLLING_ENABLED:true}
+    commit-poll-interval-ms: ${GITHUB_COMMIT_POLL_INTERVAL_MS:30000}
+    commit-poll-initial-delay-ms: ${GITHUB_COMMIT_POLL_INITIAL_DELAY_MS:15000}
   services:
+    identity-service:
+      url: ${IDENTITY_SERVICE_URL:http://localhost:8081}
     testing-service:
       url: ${TESTING_SERVICE_URL:http://testing-service:8083}
     ai-service:

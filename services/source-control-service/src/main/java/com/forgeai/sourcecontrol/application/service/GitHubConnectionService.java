@@ -65,8 +65,50 @@ public class GitHubConnectionService {
         String appInstallUrl = gitHubAppConfig.getAppInstallUrl();
         String appSlug = gitHubAppConfig.getAppSlug();
 
-        // If user hasn't authenticated with GitHub OAuth yet
-        if (!gitHubConnected) {
+        // 2. Discover or resolve active GitHub App installation for this workspace
+        Optional<GitHubInstallation> instOpt = organizationId != null
+                ? installationRepository.findByOrganizationId(organizationId)
+                : (effectiveWsId != null ? installationRepository.findByWorkspaceId(effectiveWsId) : Optional.empty());
+
+        GitHubInstallation activeInst = instOpt.orElse(null);
+
+        // Fallback for personal workspace: If active installation exists in DB, recover it
+        if (activeInst == null && isPersonal) {
+            for (GitHubInstallation inst : installationRepository.findAll()) {
+                if (inst.getStatus() == InstallationStatus.ACTIVE) {
+                    activeInst = inst;
+                    break;
+                }
+            }
+        }
+
+        // If not directly associated in this workspace, attempt automatic seamless binding
+        if (activeInst == null && callerUserId != null) {
+            InstallationDiscoveryResponse discovery = discoveryService.discoverInstallations(callerUserId, effectiveWsId, organizationId);
+            if (discovery.currentInstallation() != null) {
+                activeInst = discovery.currentInstallation();
+            } else if (discovery.candidates() != null && !discovery.candidates().isEmpty()) {
+                try {
+                    activeInst = discoveryService.autoOnboard(callerUserId, effectiveWsId, organizationId, discovery.candidates().get(0).installationId());
+                } catch (Exception ex) {
+                    log.warn("[GitHub Connection] Candidate auto-onboarding deferred: {}", ex.getMessage());
+                }
+            }
+        }
+
+        // If active installation exists and is verified active, workspace is already connected to GitHub!
+        if (activeInst != null && activeInst.getStatus() == InstallationStatus.ACTIVE) {
+            gitHubConnected = true;
+            if (userGitHubLogin == null || userGitHubLogin.isBlank()) {
+                userGitHubLogin = activeInst.getAccountLogin();
+            }
+            if (userGitHubId == null) {
+                userGitHubId = activeInst.getAccountId();
+            }
+        }
+
+        // If user hasn't authenticated with GitHub OAuth AND no active app installation exists
+        if (!gitHubConnected && activeInst == null) {
             return new GitHubConnectionResponse(
                     false,
                     null,
@@ -87,27 +129,6 @@ public class GitHubConnectionService {
                     "DISCONNECTED",
                     "GitHub account is not connected. Authenticate with GitHub to continue."
             );
-        }
-
-        // 2. Discover or resolve active GitHub App installation for this workspace
-        Optional<GitHubInstallation> instOpt = organizationId != null
-                ? installationRepository.findByOrganizationId(organizationId)
-                : (effectiveWsId != null ? installationRepository.findByWorkspaceId(effectiveWsId) : Optional.empty());
-
-        GitHubInstallation activeInst = instOpt.orElse(null);
-
-        // If not directly associated in this workspace, attempt automatic seamless binding
-        if (activeInst == null && callerUserId != null) {
-            InstallationDiscoveryResponse discovery = discoveryService.discoverInstallations(callerUserId, effectiveWsId, organizationId);
-            if (discovery.currentInstallation() != null) {
-                activeInst = discovery.currentInstallation();
-            } else if (discovery.candidates() != null && !discovery.candidates().isEmpty()) {
-                try {
-                    activeInst = discoveryService.autoOnboard(callerUserId, effectiveWsId, organizationId, discovery.candidates().get(0).installationId());
-                } catch (Exception ex) {
-                    log.warn("[GitHub Connection] Candidate auto-onboarding deferred: {}", ex.getMessage());
-                }
-            }
         }
 
         if (activeInst != null && activeInst.getStatus() == InstallationStatus.ACTIVE) {

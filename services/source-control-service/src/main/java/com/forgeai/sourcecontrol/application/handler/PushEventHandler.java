@@ -171,13 +171,38 @@ public class PushEventHandler {
                         changedFiles.add(new AiServiceClient.ChangedFilePayload(path, status, content));
                     }
 
-                    boolean syncSuccess = aiServiceClient.syncPush(
-                            repository.getOrganizationId() != null ? repository.getOrganizationId() : repository.getWorkspaceId(),
-                            repository.getId(),
-                            afterSha,
-                            ref,
-                            changedFiles
-                    );
+                    JsonNode headCommitNode = rootNode.path("head_commit");
+                    String authorName = null;
+                    String authorEmail = null;
+                    String commitMessage = null;
+                    if (!headCommitNode.isMissingNode() && !headCommitNode.isNull()) {
+                        JsonNode authorNode = headCommitNode.path("author");
+                        authorName = authorNode.path("name").asText(null);
+                        authorEmail = authorNode.path("email").asText(null);
+                        commitMessage = headCommitNode.path("message").asText(null);
+                    }
+
+                    boolean syncSuccess;
+                    if (authorName != null || authorEmail != null || commitMessage != null) {
+                        syncSuccess = aiServiceClient.syncPush(
+                                repository.getOrganizationId() != null ? repository.getOrganizationId() : repository.getWorkspaceId(),
+                                repository.getId(),
+                                afterSha,
+                                ref,
+                                changedFiles,
+                                authorName,
+                                authorEmail,
+                                commitMessage
+                        );
+                    } else {
+                        syncSuccess = aiServiceClient.syncPush(
+                                repository.getOrganizationId() != null ? repository.getOrganizationId() : repository.getWorkspaceId(),
+                                repository.getId(),
+                                afterSha,
+                                ref,
+                                changedFiles
+                        );
+                    }
 
                     if (syncSuccess) {
                         repository.setLatestIndexedSha(afterSha);

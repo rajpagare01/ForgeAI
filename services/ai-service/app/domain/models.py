@@ -720,3 +720,63 @@ class ActionEvent(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class DocumentType(str, Enum):
+    OVERVIEW = "OVERVIEW"
+    API = "API"
+    DATA_MODEL = "DATA_MODEL"
+    DEPENDENCIES = "DEPENDENCIES"
+    ARCHITECTURE = "ARCHITECTURE"
+    SYSTEM_DESIGN = "SYSTEM_DESIGN"
+
+
+class DocumentStatus(str, Enum):
+    DRAFT = "DRAFT"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    APPLIED = "APPLIED"
+    STALE = "STALE"
+    FAILED = "FAILED"
+
+
+class GeneratedDocument(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    organization_id: UUID
+    repository_id: UUID
+    doc_type: str
+    target_path: str
+    commit_sha: str
+    content_hash: str
+    content_md: str
+    citations: List[Any] = Field(default_factory=list)
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    status: str = DocumentStatus.DRAFT.value
+    approved_by: Optional[str] = None
+    pr_url: Optional[str] = None
+    branch_name: Optional[str] = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
+class CommitAnalysisReport(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    organization_id: UUID
+    repository_id: UUID
+    commit_sha: str
+    ref: Optional[str] = None
+    author_name: Optional[str] = None
+    author_email: Optional[str] = None
+    commit_message: Optional[str] = None
+    status: str = "CLEAN"  # CLEAN, WARNING, CRITICAL_ALERT
+    risk_score: float = 0.0
+    secrets_detected: int = 0
+    security_issues: int = 0
+    reliability_issues: int = 0
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
+    report_markdown: str = ""
+    system_design_doc_id: Optional[UUID] = None
+    alert_sent: bool = False
+    alert_recipient: Optional[str] = None
+    alert_status: str = "NONE"  # NONE, SENT, LOGGED_DRY_RUN, FAILED
+    created_at: datetime = Field(default_factory=utc_now)
+
+

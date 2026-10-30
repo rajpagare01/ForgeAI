@@ -296,6 +296,10 @@ class PushSyncRequest(BaseModel):
     commit_sha: str
     ref: Optional[str] = None
     files: List[PushSyncFileItem] = Field(default_factory=list)
+    author_name: Optional[str] = None
+    author_email: Optional[str] = None
+    commit_message: Optional[str] = None
+    generate_docs: bool = True
 
 
 class PushSyncResponse(BaseModel):
@@ -307,6 +311,12 @@ class PushSyncResponse(BaseModel):
     chunks_indexed: int
     cache_hits: int
     edges_indexed: int
+    commit_report_id: Optional[UUID] = None
+    commit_status: Optional[str] = None
+    secrets_detected: int = 0
+    alert_sent: bool = False
+    alert_status: Optional[str] = None
+    system_design_doc_id: Optional[UUID] = None
 
 
 # ============================================================
@@ -626,6 +636,85 @@ class AnalysisHistoryItemDTO(BaseModel):
     high_findings_count: int = 0
     resolved_findings_from_previous: List[str] = Field(default_factory=list)
     new_findings_from_previous: List[str] = Field(default_factory=list)
+
+
+# ============================================================
+# AUTOMATED REPOSITORY DOCUMENTATION & COMMIT GUARD DTOS
+# ============================================================
+
+class GeneratedDocumentDTO(BaseModel):
+    id: UUID
+    organization_id: UUID
+    repository_id: UUID
+    doc_type: str
+    target_path: str
+    commit_sha: str
+    content_hash: str
+    content_md: str
+    citations: List[Dict[str, Any]] = Field(default_factory=list)
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    status: str
+    approved_by: Optional[str] = None
+    pr_url: Optional[str] = None
+    branch_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class GenerateDocumentsRequestDTO(BaseModel):
+    commit_sha: Optional[str] = None
+    doc_types: Optional[List[str]] = None
+    files: Optional[List[Dict[str, str]]] = None
+
+
+class GenerateDocumentsResponseDTO(BaseModel):
+    job_id: str
+    repository_id: UUID
+    commit_sha: str
+    documents: List[GeneratedDocumentDTO]
+
+
+class DocumentApplyRequestDTO(BaseModel):
+    write_mode_override: Optional[str] = None
+
+
+class CommitAnalysisReportDTO(BaseModel):
+    id: UUID
+    organization_id: UUID
+    repository_id: UUID
+    commit_sha: str
+    ref: Optional[str] = None
+    author_name: Optional[str] = None
+    author_email: Optional[str] = None
+    commit_message: Optional[str] = None
+    status: str
+    risk_score: float
+    secrets_detected: int
+    security_issues: int
+    reliability_issues: int
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
+    report_markdown: str
+    system_design_doc_id: Optional[UUID] = None
+    alert_sent: bool
+    alert_recipient: Optional[str] = None
+    alert_status: str
+    created_at: datetime
+
+
+class CommitReportListResponseDTO(BaseModel):
+    repository_id: UUID
+    reports: List[CommitAnalysisReportDTO]
+
+
+class AnalyzeCommitRequestDTO(BaseModel):
+    commit_sha: str
+    ref: Optional[str] = None
+    author_name: Optional[str] = None
+    author_email: Optional[str] = None
+    commit_message: Optional[str] = None
+    files: Optional[List[PushSyncFileItem]] = None
+    generate_docs: bool = True
+
 
 
 

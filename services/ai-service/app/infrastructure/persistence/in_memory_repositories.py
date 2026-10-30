@@ -1,7 +1,10 @@
 import math
 from typing import List, Dict, Any, Optional
 from uuid import UUID
-from app.domain.models import CodeChunk, GraphEdge, Analysis, IndexJob
+from app.domain.models import (
+    CodeChunk, GraphEdge, Analysis, IndexJob,
+    GeneratedDocument, CommitAnalysisReport, DocumentStatus, utc_now
+)
 from app.domain.repositories import (
     CodeChunkRepository,
     GraphEdgeRepository,
@@ -15,6 +18,8 @@ from app.domain.repositories import (
     PatchProposalRepository,
     RemediationEffectivenessRepository,
     ActionEventRepository,
+    GeneratedDocumentRepository,
+    CommitAnalysisReportRepository,
 )
 
 
@@ -455,6 +460,93 @@ class InMemoryActionEventRepository(ActionEventRepository):
             if getattr(e, "organization_id", None) == org_id
             and getattr(e, "action_id", None) == action_id
         ]
+
+
+class InMemoryGeneratedDocumentRepository(GeneratedDocumentRepository):
+    def __init__(self):
+        self.documents: Dict[str, GeneratedDocument] = {}
+
+    def _unique_key(self, org_id: UUID, repo_id: UUID, doc_type: str, commit_sha: str) -> str:
+        return f"{org_id}:{repo_id}:{doc_type}:{commit_sha}"
+
+    async def upsert_document(self, doc: GeneratedDocument) -> GeneratedDocument:
+        key = self._unique_key(doc.organization_id, doc.repository_id, doc.doc_type, doc.commit_sha)
+        existing = self.documents.get(key)
+        if existing:
+            # Preserve APPROVED or APPLIED if content_hash has not changed
+            if existing.content_hash == doc.content_hash and existing.status in [DocumentStatus.APPROVED.value, DocumentStatus.APPLIED.value]:
+                doc.status = existing.status
+                doc.approved_by = existing.approved_by
+                doc.pr_url = existing.pr_url
+                doc.branch_name = existing.branch_name
+            doc.id = existing.id
+            doc.created_at = existing.created_at
+            doc.updated_at = utc_now()
+            self.documents[key] = doc
+            return doc
+        self.documents[key] = doc
+        return doc
+
+    async def get_document_by_id(self, org_id: UUID, doc_id: UUID) -> Optional[GeneratedDocument]:
+        for doc in self.documents.values():
+            if doc.organization_id == org_id and doc.id == doc_id:
+                return doc
+        return None
+
+    async def list_documents_for_repository(
+        self, org_id: UUID, repo_id: UUID, doc_type: Optional[str] = None
+    ) -> List[GeneratedDocument]:
+        results = [
+            doc for doc in self.documents.values()
+            if doc.organization_id == org_id and doc.repository_id == repo_id
+            and (doc_type is None or doc.doc_type == doc_type)
+        ]
+        results.sort(key=lambda d: d.created_at, reverse=True)
+        return results
+
+    async def mark_stale_for_repository(self, org_id: UUID, repo_id: UUID, new_commit_sha: str) -> int:
+        count = 0
+        for doc in self.documents.values():
+            if doc.organization_id == org_id and doc.repository_id == repo_id:
+                if doc.commit_sha != new_commit_sha and doc.status in [DocumentStatus.DRAFT.value, DocumentStatus.APPROVED.value]:
+                    doc.status = DocumentStatus.STALE.value
+                    doc.updated_at = utc_now()
+                    count += 1
+        return count
+
+
+class InMemoryCommitAnalysisReportRepository(CommitAnalysisReportRepository):
+    def __init__(self):
+        self.reports: Dict[str, CommitAnalysisReport] = {}
+
+    def _unique_key(self, org_id: UUID, repo_id: UUID, commit_sha: str) -> str:
+        return f"{org_id}:{repo_id}:{commit_sha}"
+
+    async def upsert_commit_report(self, report: CommitAnalysisReport) -> CommitAnalysisReport:
+        key = self._unique_key(report.organization_id, report.repository_id, report.commit_sha)
+        existing = self.reports.get(key)
+        if existing:
+            report.id = existing.id
+            report.created_at = existing.created_at
+        self.reports[key] = report
+        return report
+
+    async def list_commit_reports(
+        self, org_id: UUID, repo_id: UUID, limit: int = 20
+    ) -> List[CommitAnalysisReport]:
+        results = [
+            r for r in self.reports.values()
+            if r.organization_id == org_id and r.repository_id == repo_id
+        ]
+        results.sort(key=lambda r: r.created_at, reverse=True)
+        return results[:limit]
+
+    async def get_commit_report(
+        self, org_id: UUID, repo_id: UUID, commit_sha: str
+    ) -> Optional[CommitAnalysisReport]:
+        key = self._unique_key(org_id, repo_id, commit_sha)
+        return self.reports.get(key)
+
 
 
 

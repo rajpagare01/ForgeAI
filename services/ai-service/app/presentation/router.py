@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict, Any, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from app.presentation.dependencies import (
     get_tenant_org_id,
     get_trace_id,
@@ -46,8 +46,18 @@ from app.presentation.dtos import (
     ExplainFindingResponseDTO,
     DependencySecurityStatusDTO,
     AnalysisHistoryItemDTO,
+    GeneratedDocumentDTO,
+    GenerateDocumentsRequestDTO,
+    GenerateDocumentsResponseDTO,
+    DocumentApplyRequestDTO,
+    CommitAnalysisReportDTO,
+    CommitReportListResponseDTO,
+    AnalyzeCommitRequestDTO,
 )
 from app.application.security_intelligence_engine import SecurityIntelligenceEngine
+from app.application.reliability_intelligence_engine import ReliabilityIntelligenceEngine
+from app.application.document_generation_service import DocumentGenerationService
+from app.infrastructure.notifications.email_notifier import EmailNotificationService
 from app.application.dependency_vulnerability_scanner import DependencyVulnerabilityScanner
 from app.core.database import db_pool
 from app.domain.models import (
@@ -58,6 +68,10 @@ from app.domain.models import (
     DependencyEvidenceType,
     DependencyConfidence,
     GitHubWriteMode,
+    DocumentType,
+    DocumentStatus,
+    GeneratedDocument,
+    CommitAnalysisReport,
 )
 from app.infrastructure.persistence.repositories import (
     AsyncpgCodeChunkRepository,
@@ -75,6 +89,8 @@ from app.infrastructure.persistence.repositories import (
     AsyncpgPatchProposalRepository,
     AsyncpgRemediationEffectivenessRepository,
     AsyncpgActionEventRepository,
+    AsyncpgGeneratedDocumentRepository,
+    AsyncpgCommitAnalysisReportRepository,
 )
 from app.application.indexing_service import IndexingService
 from app.application.retrieval_service import RetrievalService
@@ -222,8 +238,24 @@ async def sync_push_event(
     - Re-indexes modified and added files with content hash embedding reuse
     - Enforces tenant and repository isolation
     - Idempotently succeeds if commit state is already indexed
+    - Marks prior generated documents STALE
+    - Runs security (secret scan) and reliability engines on the push snapshot
+    - Automatically updates OVERVIEW and SYSTEM_DESIGN documents
+    - Dispatches CommitAnalysisReport and triggers EmailNotificationService if critical findings/secrets are detected
     """
-    indexing_service, *_ = await get_services()
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+    edge_repo = AsyncpgGraphEdgeRepository(pool)
+    job_repo = AsyncpgIndexJobRepository(pool)
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    report_repo = AsyncpgCommitAnalysisReportRepository(pool)
+    source_client = SourceControlClient()
+    email_notifier = EmailNotificationService()
+
+    indexing_service = IndexingService(chunk_repo, edge_repo, job_repo=job_repo)
+    doc_service = DocumentGenerationService(chunk_repo, edge_repo, dep_repo, doc_repo, source_client)
+
     files_payload = [{"file_path": f.file_path, "status": f.status, "content": f.content} for f in req.files]
     result = await indexing_service.sync_incremental_push(
         organization_id=org_id,
@@ -232,6 +264,168 @@ async def sync_push_event(
         ref=req.ref,
         files=files_payload,
     )
+
+    # If no files payload provided in push event, fall back to repository's indexed code chunks
+    if not files_payload:
+        try:
+            indexed_chunks = await chunk_repo.get_by_repository(org_id, req.repository_id)
+            if indexed_chunks:
+                seen_paths = set()
+                for ch in indexed_chunks:
+                    if ch.file_path and ch.file_path not in seen_paths:
+                        seen_paths.add(ch.file_path)
+                        files_payload.append({
+                            "file_path": ch.file_path,
+                            "status": "modified",
+                            "content": ch.content or "",
+                        })
+        except Exception as e:
+            logger.warning("Could not fetch indexed chunks for fallback files_payload in push sync: %s", e)
+
+    # 1. Mark older documents for this repository as STALE
+    await doc_repo.mark_stale_for_repository(org_id, req.repository_id, req.commit_sha)
+
+    # 2. Run deterministic security snapshot scan & reliability analysis on pushed files
+    sec_assessment = SecurityIntelligenceEngine.scan_repository_snapshot(
+        organization_id=org_id,
+        repository_id=req.repository_id,
+        files=files_payload,
+        commit_sha=req.commit_sha,
+    )
+    rel_assessment = ReliabilityIntelligenceEngine.analyze_reliability(
+        organization_id=org_id,
+        repository_id=req.repository_id,
+        changed_files=files_payload,
+        commit_sha=req.commit_sha,
+    )
+
+    secrets_detected = getattr(sec_assessment, "secret_findings_count", None) or len([f for f in sec_assessment.findings if "SECRET" in getattr(f, "category", "").upper()])
+    sec_issues = sec_assessment.critical_count + sec_assessment.high_count
+    rel_issues = rel_assessment.critical_count + rel_assessment.high_count
+
+    # Determine commit health status
+    if secrets_detected > 0 or sec_assessment.critical_count > 0:
+        commit_status = "CRITICAL_ALERT"
+    elif sec_issues > 0 or rel_issues > 0:
+        commit_status = "WARNING"
+    else:
+        commit_status = "CLEAN"
+
+    risk_score = round(min(100.0, (secrets_detected * 35.0) + (sec_issues * 20.0) + (rel_issues * 10.0)), 1)
+
+    # 3. Format findings for report (strictly redacted)
+    all_findings: List[Dict[str, Any]] = []
+    for f in sec_assessment.findings:
+        all_findings.append({
+            "rule_id": f.rule_id,
+            "category": f.category,
+            "severity": f.severity,
+            "title": f.title,
+            "file_path": f.file_path,
+            "line_number": f.line_number,
+            "evidence": f.redacted_evidence or "[REDACTED]",
+            "remediation": f.remediation,
+        })
+    for f in rel_assessment.findings:
+        all_findings.append({
+            "rule_id": f.rule_id,
+            "category": f.category,
+            "severity": f.severity,
+            "title": f.title,
+            "file_path": f.file_path,
+            "line_number": f.line_number,
+            "evidence": f.evidence,
+            "remediation": f.remediation,
+        })
+
+    # 4. Generate/update all 5 documents if requested
+    system_design_doc_id: Optional[UUID] = None
+    if req.generate_docs:
+        try:
+            docs = await doc_service.generate_documents(
+                organization_id=org_id,
+                repository_id=req.repository_id,
+                commit_sha=req.commit_sha,
+                doc_types=["OVERVIEW", "API", "DATA_MODEL", "DEPENDENCIES", "SYSTEM_DESIGN"],
+                files=files_payload,
+            )
+            for d in docs:
+                if d.doc_type in ("SYSTEM_DESIGN", "ARCHITECTURE"):
+                    system_design_doc_id = d.id
+                    break
+        except Exception as e:
+            logger.warning("Automated doc generation during push sync had error: %s", e)
+
+    # 5. Build report markdown
+    report_md = f"""# Commit Analysis Report: `{req.commit_sha[:10]}`
+- **Repository:** `{req.repository_id}`
+- **Branch / Ref:** `{req.ref or 'main'}`
+- **Author:** `{req.author_name or 'Unknown'}` (`{req.author_email or 'N/A'}`)
+- **Commit Message:** {req.commit_message or 'No message provided'}
+- **Status:** **{commit_status}**
+- **Risk Score:** {risk_score} / 100.0
+
+## Findings Summary
+- Secrets Detected: **{secrets_detected}**
+- Security Vulnerabilities: **{sec_issues}**
+- Reliability Anti-Patterns: **{rel_issues}**
+"""
+    if all_findings:
+        report_md += "\n## Detailed Findings\n"
+        for idx, f in enumerate(all_findings, 1):
+            report_md += f"\n### {idx}. [{f['severity']}] {f['title']}\n"
+            report_md += f"- **File:** `{f['file_path']}:{f.get('line_number') or 0}`\n"
+            report_md += f"- **Evidence:** `{f['evidence']}`\n"
+            report_md += f"- **Remediation:** {f['remediation']}\n"
+
+    # 6. Create and upsert CommitAnalysisReport
+    commit_report = CommitAnalysisReport(
+        organization_id=org_id,
+        repository_id=req.repository_id,
+        commit_sha=req.commit_sha,
+        ref=req.ref,
+        author_name=req.author_name,
+        author_email=req.author_email,
+        commit_message=req.commit_message,
+        status=commit_status,
+        risk_score=risk_score,
+        secrets_detected=secrets_detected,
+        security_issues=sec_issues,
+        reliability_issues=rel_issues,
+        findings=all_findings,
+        report_markdown=report_md,
+        system_design_doc_id=system_design_doc_id,
+        alert_sent=False,
+        alert_recipient=req.author_email,
+        alert_status="NONE",
+    )
+
+    # 7. Trigger Email Alert if secrets_detected > 0 or commit_status != "CLEAN"
+    alert_sent = False
+    alert_status = "NONE"
+    if secrets_detected > 0 or commit_status in ("CRITICAL_ALERT", "WARNING"):
+        target_email = req.author_email or settings.ALERT_FALLBACK_EMAIL or "developer@forgeai.local"
+        alert_sent, alert_status, recipient = await email_notifier.send_commit_alert_email(
+            to_email=target_email,
+            repo_name=f"Repo {req.repository_id}",
+            commit_sha=req.commit_sha,
+            branch_ref=req.ref,
+            author_name=req.author_name,
+            risk_score=risk_score,
+            status=commit_status,
+            secrets_detected=secrets_detected,
+            security_issues=sec_issues,
+            reliability_issues=rel_issues,
+            findings=all_findings,
+            report_markdown=report_md,
+            system_design_doc_id=system_design_doc_id,
+        )
+        commit_report.alert_sent = alert_sent
+        commit_report.alert_status = alert_status
+        commit_report.alert_recipient = recipient
+
+    saved_report = await report_repo.upsert_commit_report(commit_report)
+
     return PushSyncResponse(
         status=result.get("status", "COMPLETED"),
         repository_id=req.repository_id,
@@ -241,6 +435,12 @@ async def sync_push_event(
         chunks_indexed=result.get("chunks_indexed", 0),
         cache_hits=result.get("cache_hits", 0),
         edges_indexed=result.get("edges_indexed", 0),
+        commit_report_id=saved_report.id,
+        commit_status=saved_report.status,
+        secrets_detected=secrets_detected,
+        alert_sent=alert_sent,
+        alert_status=alert_status,
+        system_design_doc_id=system_design_doc_id,
     )
 
 
@@ -1665,6 +1865,532 @@ async def get_analysis_history_comparison(
         prev_rule_ids = current_rule_ids
 
     return results
+
+
+# ============================================================
+# AUTOMATED REPOSITORY DOCUMENTATION & COMMIT GUARD ENDPOINTS
+# ============================================================
+
+@router.post("/repositories/{repository_id}/documents/generate", response_model=GenerateDocumentsResponseDTO)
+async def generate_repository_documents(
+    repository_id: UUID,
+    req: GenerateDocumentsRequestDTO,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Generates deterministic repository documentation and grounded system design documents.
+    Idempotently returns existing versions if the commit was already processed.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+    edge_repo = AsyncpgGraphEdgeRepository(pool)
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    source_client = SourceControlClient()
+
+    doc_service = DocumentGenerationService(chunk_repo, edge_repo, dep_repo, doc_repo, source_client)
+    commit_sha = req.commit_sha or "HEAD"
+
+    docs = await doc_service.generate_documents(
+        organization_id=org_id,
+        repository_id=repository_id,
+        commit_sha=commit_sha,
+        doc_types=req.doc_types,
+        files=req.files,
+    )
+
+    doc_dtos = [
+        GeneratedDocumentDTO(
+            id=d.id,
+            organization_id=d.organization_id,
+            repository_id=d.repository_id,
+            doc_type=d.doc_type,
+            target_path=d.target_path,
+            commit_sha=d.commit_sha,
+            content_hash=d.content_hash,
+            content_md=d.content_md,
+            citations=d.citations or [],
+            provenance=d.provenance or {},
+            status=d.status,
+            approved_by=d.approved_by,
+            pr_url=d.pr_url,
+            branch_name=d.branch_name,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+        for d in docs
+    ]
+
+    import uuid
+    job_id = f"docgen-{uuid.uuid4().hex[:8]}"
+    return GenerateDocumentsResponseDTO(
+        job_id=job_id,
+        repository_id=repository_id,
+        commit_sha=commit_sha,
+        documents=doc_dtos,
+    )
+
+
+@router.get("/repositories/{repository_id}/documents", response_model=List[GeneratedDocumentDTO])
+async def list_repository_documents(
+    repository_id: UUID,
+    doc_type: Optional[str] = Query(None),
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Lists generated documentation records for a repository.
+    Enforces strict tenant isolation by organization_id.
+    """
+    pool = await db_pool.get_pool()
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    docs = await doc_repo.list_documents_for_repository(org_id, repository_id, doc_type)
+    return [
+        GeneratedDocumentDTO(
+            id=d.id,
+            organization_id=d.organization_id,
+            repository_id=d.repository_id,
+            doc_type=d.doc_type,
+            target_path=d.target_path,
+            commit_sha=d.commit_sha,
+            content_hash=d.content_hash,
+            content_md=d.content_md,
+            citations=d.citations or [],
+            provenance=d.provenance or {},
+            status=d.status,
+            approved_by=d.approved_by,
+            pr_url=d.pr_url,
+            branch_name=d.branch_name,
+            created_at=d.created_at,
+            updated_at=d.updated_at,
+        )
+        for d in docs
+    ]
+
+
+@router.get("/documents/{document_id}", response_model=GeneratedDocumentDTO)
+async def get_document_by_id(
+    document_id: UUID,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Retrieves a single generated document.
+    Enforces strict tenant isolation (returns 404 if belonging to another tenant).
+    """
+    pool = await db_pool.get_pool()
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    doc = await doc_repo.get_document_by_id(org_id, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
+    return GeneratedDocumentDTO(
+        id=doc.id,
+        organization_id=doc.organization_id,
+        repository_id=doc.repository_id,
+        doc_type=doc.doc_type,
+        target_path=doc.target_path,
+        commit_sha=doc.commit_sha,
+        content_hash=doc.content_hash,
+        content_md=doc.content_md,
+        citations=doc.citations or [],
+        provenance=doc.provenance or {},
+        status=doc.status,
+        approved_by=doc.approved_by,
+        pr_url=doc.pr_url,
+        branch_name=doc.branch_name,
+        created_at=doc.created_at,
+        updated_at=doc.updated_at,
+    )
+
+
+@router.post("/documents/{document_id}/approve", response_model=GeneratedDocumentDTO)
+async def approve_document(
+    document_id: UUID,
+    request: Request,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Approves a DRAFT document. Enforces tenant boundary.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+    edge_repo = AsyncpgGraphEdgeRepository(pool)
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    source_client = SourceControlClient()
+    doc_service = DocumentGenerationService(chunk_repo, edge_repo, dep_repo, doc_repo, source_client)
+
+    actor_id = request.headers.get("X-User-Id", "system")
+    try:
+        doc = await doc_service.approve_document(org_id, document_id, actor_id=actor_id)
+    except Exception as e:
+        if "404" in str(e) or "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return GeneratedDocumentDTO(
+        id=doc.id,
+        organization_id=doc.organization_id,
+        repository_id=doc.repository_id,
+        doc_type=doc.doc_type,
+        target_path=doc.target_path,
+        commit_sha=doc.commit_sha,
+        content_hash=doc.content_hash,
+        content_md=doc.content_md,
+        citations=doc.citations or [],
+        provenance=doc.provenance or {},
+        status=doc.status,
+        approved_by=doc.approved_by,
+        pr_url=doc.pr_url,
+        branch_name=doc.branch_name,
+        created_at=doc.created_at,
+        updated_at=doc.updated_at,
+    )
+
+
+@router.post("/documents/{document_id}/reject", response_model=GeneratedDocumentDTO)
+async def reject_document(
+    document_id: UUID,
+    request: Request,
+    reason: str = Query("Rejected by reviewer"),
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Rejects a document. Enforces tenant boundary.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+    edge_repo = AsyncpgGraphEdgeRepository(pool)
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    source_client = SourceControlClient()
+    doc_service = DocumentGenerationService(chunk_repo, edge_repo, dep_repo, doc_repo, source_client)
+
+    actor_id = request.headers.get("X-User-Id", "system")
+    try:
+        doc = await doc_service.reject_document(org_id, document_id, actor_id=actor_id, reason=reason)
+    except Exception as e:
+        if "404" in str(e) or "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return GeneratedDocumentDTO(
+        id=doc.id,
+        organization_id=doc.organization_id,
+        repository_id=doc.repository_id,
+        doc_type=doc.doc_type,
+        target_path=doc.target_path,
+        commit_sha=doc.commit_sha,
+        content_hash=doc.content_hash,
+        content_md=doc.content_md,
+        citations=doc.citations or [],
+        provenance=doc.provenance or {},
+        status=doc.status,
+        approved_by=doc.approved_by,
+        pr_url=doc.pr_url,
+        branch_name=doc.branch_name,
+        created_at=doc.created_at,
+        updated_at=doc.updated_at,
+    )
+
+
+@router.post("/documents/{document_id}/apply", response_model=GeneratedDocumentDTO)
+async def apply_document(
+    document_id: UUID,
+    request: Request,
+    req: Optional[DocumentApplyRequestDTO] = None,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Applies an APPROVED document by opening a Pull Request to docs/generated/<name>.md.
+    Enforces write-mode (requires CONTROLLED_WRITE; ADVISORY_ONLY blocks with 403).
+    Never writes directly to main or master branch.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+    edge_repo = AsyncpgGraphEdgeRepository(pool)
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    source_client = SourceControlClient()
+    doc_service = DocumentGenerationService(chunk_repo, edge_repo, dep_repo, doc_repo, source_client)
+
+    actor_id = request.headers.get("X-User-Id", "system")
+    override_mode = req.write_mode_override if req else None
+
+    try:
+        doc = await doc_service.apply_document(
+            organization_id=org_id,
+            document_id=document_id,
+            actor_id=actor_id,
+            write_mode_override=override_mode,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        err_msg = str(e)
+        if "404" in err_msg or "not found" in err_msg.lower():
+            raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
+        if "403" in err_msg or "advisory_only" in err_msg.lower() or "mode" in err_msg.lower():
+            raise HTTPException(status_code=403, detail=err_msg)
+        raise HTTPException(status_code=400, detail=err_msg)
+
+    return GeneratedDocumentDTO(
+        id=doc.id,
+        organization_id=doc.organization_id,
+        repository_id=doc.repository_id,
+        doc_type=doc.doc_type,
+        target_path=doc.target_path,
+        commit_sha=doc.commit_sha,
+        content_hash=doc.content_hash,
+        content_md=doc.content_md,
+        citations=doc.citations or [],
+        provenance=doc.provenance or {},
+        status=doc.status,
+        approved_by=doc.approved_by,
+        pr_url=doc.pr_url,
+        branch_name=doc.branch_name,
+        created_at=doc.created_at,
+        updated_at=doc.updated_at,
+    )
+
+
+@router.get("/repositories/{repository_id}/commit-reports", response_model=CommitReportListResponseDTO)
+async def list_commit_analysis_reports(
+    repository_id: UUID,
+    limit: int = Query(20, ge=1, le=100),
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Lists push-triggered commit intelligence and email alert records for a repository.
+    Enforces strict tenant isolation.
+    """
+    pool = await db_pool.get_pool()
+    report_repo = AsyncpgCommitAnalysisReportRepository(pool)
+    reports = await report_repo.list_commit_reports(org_id, repository_id, limit=limit)
+    report_dtos = [
+        CommitAnalysisReportDTO(
+            id=r.id,
+            organization_id=r.organization_id,
+            repository_id=r.repository_id,
+            commit_sha=r.commit_sha,
+            ref=r.ref,
+            author_name=r.author_name,
+            author_email=r.author_email,
+            commit_message=r.commit_message,
+            status=r.status,
+            risk_score=r.risk_score,
+            secrets_detected=r.secrets_detected,
+            security_issues=r.security_issues,
+            reliability_issues=r.reliability_issues,
+            findings=r.findings or [],
+            report_markdown=r.report_markdown,
+            system_design_doc_id=r.system_design_doc_id,
+            alert_sent=r.alert_sent,
+            alert_recipient=r.alert_recipient,
+            alert_status=r.alert_status,
+            created_at=r.created_at,
+        )
+        for r in reports
+    ]
+    return CommitReportListResponseDTO(repository_id=repository_id, reports=report_dtos)
+
+
+@router.post("/repositories/{repository_id}/analyze-commit", response_model=CommitAnalysisReportDTO)
+async def analyze_commit_on_demand(
+    repository_id: UUID,
+    req: AnalyzeCommitRequestDTO,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """
+    Executes an on-demand commit security & reliability analysis, generates system design docs,
+    persists a CommitAnalysisReport, and triggers email notifications if issues exist.
+    """
+    pool = await db_pool.get_pool()
+    chunk_repo = AsyncpgCodeChunkRepository(pool)
+    edge_repo = AsyncpgGraphEdgeRepository(pool)
+    dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    doc_repo = AsyncpgGeneratedDocumentRepository(pool)
+    report_repo = AsyncpgCommitAnalysisReportRepository(pool)
+    source_client = SourceControlClient()
+    email_notifier = EmailNotificationService()
+
+    doc_service = DocumentGenerationService(chunk_repo, edge_repo, dep_repo, doc_repo, source_client)
+
+    files_payload = [{"file_path": f.file_path, "status": f.status, "content": f.content} for f in (req.files or [])]
+    if not files_payload:
+        try:
+            indexed_chunks = await chunk_repo.get_by_repository(org_id, repository_id)
+            if indexed_chunks:
+                seen_paths = set()
+                for ch in indexed_chunks:
+                    if ch.file_path and ch.file_path not in seen_paths:
+                        seen_paths.add(ch.file_path)
+                        files_payload.append({
+                            "file_path": ch.file_path,
+                            "status": "modified",
+                            "content": ch.content or "",
+                        })
+        except Exception as e:
+            logger.warning("Could not fetch indexed chunks for on-demand analysis fallback files_payload: %s", e)
+
+    # 1. Run security & reliability scan
+    sec_assessment = SecurityIntelligenceEngine.scan_repository_snapshot(
+        organization_id=org_id,
+        repository_id=repository_id,
+        files=files_payload,
+        commit_sha=req.commit_sha,
+    )
+    rel_assessment = ReliabilityIntelligenceEngine.analyze_reliability(
+        organization_id=org_id,
+        repository_id=repository_id,
+        changed_files=files_payload,
+        commit_sha=req.commit_sha,
+    )
+
+    secrets_detected = getattr(sec_assessment, "secret_findings_count", None) or len([f for f in sec_assessment.findings if "SECRET" in getattr(f, "category", "").upper()])
+    sec_issues = sec_assessment.critical_count + sec_assessment.high_count
+    rel_issues = rel_assessment.critical_count + rel_assessment.high_count
+
+    if secrets_detected > 0 or sec_assessment.critical_count > 0:
+        commit_status = "CRITICAL_ALERT"
+    elif sec_issues > 0 or rel_issues > 0:
+        commit_status = "WARNING"
+    else:
+        commit_status = "CLEAN"
+
+    risk_score = round(min(100.0, (secrets_detected * 35.0) + (sec_issues * 20.0) + (rel_issues * 10.0)), 1)
+
+    all_findings = []
+    for f in sec_assessment.findings:
+        all_findings.append({
+            "rule_id": f.rule_id,
+            "category": f.category,
+            "severity": f.severity,
+            "title": f.title,
+            "file_path": f.file_path,
+            "line_number": f.line_number,
+            "evidence": f.redacted_evidence or "[REDACTED]",
+            "remediation": f.remediation,
+        })
+    for f in rel_assessment.findings:
+        all_findings.append({
+            "rule_id": f.rule_id,
+            "category": f.category,
+            "severity": f.severity,
+            "title": f.title,
+            "file_path": f.file_path,
+            "line_number": f.line_number,
+            "evidence": f.evidence,
+            "remediation": f.remediation,
+        })
+
+    # 2. System design and all 5 docs generation
+    system_design_doc_id = None
+    if req.generate_docs:
+        try:
+            docs = await doc_service.generate_documents(
+                organization_id=org_id,
+                repository_id=repository_id,
+                commit_sha=req.commit_sha,
+                doc_types=["OVERVIEW", "API", "DATA_MODEL", "DEPENDENCIES", "SYSTEM_DESIGN"],
+                files=files_payload,
+            )
+            for d in docs:
+                if d.doc_type in ("SYSTEM_DESIGN", "ARCHITECTURE"):
+                    system_design_doc_id = d.id
+                    break
+        except Exception as e:
+            logger.warning("Doc generation during on-demand commit analysis had error: %s", e)
+
+    # 3. Report markdown
+    report_md = f"""# Commit Analysis Report: `{req.commit_sha[:10]}`
+- **Repository:** `{repository_id}`
+- **Branch / Ref:** `{req.ref or 'main'}`
+- **Author:** `{req.author_name or 'Unknown'}` (`{req.author_email or 'N/A'}`)
+- **Commit Message:** {req.commit_message or 'No message provided'}
+- **Status:** **{commit_status}**
+- **Risk Score:** {risk_score} / 100.0
+
+## Findings Summary
+- Secrets Detected: **{secrets_detected}**
+- Security Vulnerabilities: **{sec_issues}**
+- Reliability Anti-Patterns: **{rel_issues}**
+"""
+    if all_findings:
+        report_md += "\n## Detailed Findings\n"
+        for idx, f in enumerate(all_findings, 1):
+            report_md += f"\n### {idx}. [{f['severity']}] {f['title']}\n"
+            report_md += f"- **File:** `{f['file_path']}:{f.get('line_number') or 0}`\n"
+            report_md += f"- **Evidence:** `{f['evidence']}`\n"
+            report_md += f"- **Remediation:** {f['remediation']}\n"
+
+    commit_report = CommitAnalysisReport(
+        organization_id=org_id,
+        repository_id=repository_id,
+        commit_sha=req.commit_sha,
+        ref=req.ref,
+        author_name=req.author_name,
+        author_email=req.author_email,
+        commit_message=req.commit_message,
+        status=commit_status,
+        risk_score=risk_score,
+        secrets_detected=secrets_detected,
+        security_issues=sec_issues,
+        reliability_issues=rel_issues,
+        findings=all_findings,
+        report_markdown=report_md,
+        system_design_doc_id=system_design_doc_id,
+        alert_sent=False,
+        alert_recipient=req.author_email,
+        alert_status="NONE",
+    )
+
+    alert_sent = False
+    alert_status = "NONE"
+    if secrets_detected > 0 or commit_status in ("CRITICAL_ALERT", "WARNING"):
+        target_email = req.author_email or settings.ALERT_FALLBACK_EMAIL or "developer@forgeai.local"
+        alert_sent, alert_status, recipient = await email_notifier.send_commit_alert_email(
+            to_email=target_email,
+            repo_name=f"Repo {repository_id}",
+            commit_sha=req.commit_sha,
+            branch_ref=req.ref,
+            author_name=req.author_name,
+            risk_score=risk_score,
+            status=commit_status,
+            secrets_detected=secrets_detected,
+            security_issues=sec_issues,
+            reliability_issues=rel_issues,
+            findings=all_findings,
+            report_markdown=report_md,
+            system_design_doc_id=system_design_doc_id,
+        )
+        commit_report.alert_sent = alert_sent
+        commit_report.alert_status = alert_status
+        commit_report.alert_recipient = recipient
+
+    saved_report = await report_repo.upsert_commit_report(commit_report)
+
+    return CommitAnalysisReportDTO(
+        id=saved_report.id,
+        organization_id=saved_report.organization_id,
+        repository_id=saved_report.repository_id,
+        commit_sha=saved_report.commit_sha,
+        ref=saved_report.ref,
+        author_name=saved_report.author_name,
+        author_email=saved_report.author_email,
+        commit_message=saved_report.commit_message,
+        status=saved_report.status,
+        risk_score=saved_report.risk_score,
+        secrets_detected=saved_report.secrets_detected,
+        security_issues=saved_report.security_issues,
+        reliability_issues=saved_report.reliability_issues,
+        findings=saved_report.findings or [],
+        report_markdown=saved_report.report_markdown,
+        system_design_doc_id=saved_report.system_design_doc_id,
+        alert_sent=saved_report.alert_sent,
+        alert_recipient=saved_report.alert_recipient,
+        alert_status=saved_report.alert_status,
+        created_at=saved_report.created_at,
+    )
+
 
 
 
