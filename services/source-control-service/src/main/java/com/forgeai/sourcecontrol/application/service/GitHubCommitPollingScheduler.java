@@ -4,6 +4,7 @@ import com.forgeai.sourcecontrol.domain.model.Repository;
 import com.forgeai.sourcecontrol.domain.repository.RepositoryRepository;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubAppClient;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubAppConfig;
+import com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubCommitMetadata;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,28 +52,54 @@ public class GitHubCommitPollingScheduler {
             }
 
             try {
-                List<GitHubCommitMetadata> commits = gitHubAppClient.listCommits(
+                // Poll remote branches so commits pushed to any branch are detected and reconciled
+                List<GitHubBranchMetadata> branches = gitHubAppClient.listBranches(
                         repo.getInstallationId(),
-                        repo.getFullName(),
-                        1
+                        repo.getFullName()
                 );
 
-                if (commits.isEmpty()) {
-                    continue;
+                String latestSha = null;
+                String targetBranch = null;
+
+                if (branches != null && !branches.isEmpty()) {
+                    for (GitHubBranchMetadata b : branches) {
+                        if (repo.getDefaultBranch() != null && repo.getDefaultBranch().equalsIgnoreCase(b.name())) {
+                            if (!b.commitSha().equals(repo.getLatestIndexedSha())) {
+                                latestSha = b.commitSha();
+                                targetBranch = b.name();
+                                break;
+                            }
+                        }
+                    }
+                    if (latestSha == null) {
+                        for (GitHubBranchMetadata b : branches) {
+                            if (!b.commitSha().equals(repo.getLatestIndexedSha())) {
+                                latestSha = b.commitSha();
+                                targetBranch = b.name();
+                                break;
+                            }
+                        }
+                    }
                 }
 
-                String latestSha = commits.get(0).sha();
-                if (latestSha == null || latestSha.isBlank()) {
-                    continue;
+                if (latestSha == null) {
+                    List<GitHubCommitMetadata> commits = gitHubAppClient.listCommits(
+                            repo.getInstallationId(),
+                            repo.getFullName(),
+                            1
+                    );
+                    if (!commits.isEmpty()) {
+                        latestSha = commits.get(0).sha();
+                    }
                 }
 
-                if (!latestSha.equals(repo.getLatestIndexedSha())) {
-                    log.info("[Poller] Auto-detected new commit {} on repository {} (previous indexed SHA: {}); triggering autonomous sync & analysis",
-                            latestSha, repo.getFullName(), repo.getLatestIndexedSha());
+                if (latestSha != null && !latestSha.isBlank() && !latestSha.equals(repo.getLatestIndexedSha())) {
+                    log.info("[Poller] Auto-detected new commit {} on repository {} (branch: {}, previous indexed SHA: {}); triggering autonomous sync & analysis",
+                            latestSha, repo.getFullName(), targetBranch, repo.getLatestIndexedSha());
 
                     UUID orgId = repo.getOrganizationId();
                     UUID wsId = repo.getWorkspaceId();
-                    repositoryApplicationService.reconcileRepository(orgId, wsId, repo.getId());
+                    repositoryApplicationService.reconcileRepository(orgId, wsId, repo.getId(), targetBranch);
                 }
             } catch (Exception e) {
                 log.warn("[Poller] Error polling repository {}: {}", repo.getFullName(), e.getMessage());

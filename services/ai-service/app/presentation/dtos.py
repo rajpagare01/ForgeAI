@@ -326,8 +326,10 @@ class PushSyncResponse(BaseModel):
 class DependencyEvidenceDTO(BaseModel):
     id: Optional[UUID] = None
     evidence_kind: Optional[str] = None
+    evidence_type: Optional[str] = None
     file_path: Optional[str] = None
     excerpt: Optional[str] = None
+    snippet: Optional[str] = None
     commit_sha: Optional[str] = None
 
 
@@ -336,12 +338,15 @@ class RepositoryDependencyDTO(BaseModel):
     organization_id: UUID
     source_repository_id: UUID
     target_repository_id: UUID
+    source_repository_name: Optional[str] = None
+    target_repository_name: Optional[str] = None
     dependency_type: str
     evidence_type: str = "EXPLICIT"
     confidence: str = "HIGH"
     source_reference: Optional[str] = None
     target_reference: Optional[str] = None
     current_state: str = "ACTIVE"
+    state: str = "ACTIVE"
     metadata: Dict[str, Any] = Field(default_factory=dict)
     evidence: List[DependencyEvidenceDTO] = Field(default_factory=list)
 

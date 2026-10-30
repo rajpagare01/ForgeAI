@@ -29,6 +29,7 @@ export default function OverviewDashboardPage() {
   const [repoCount, setRepoCount] = useState<number>(0);
   const [testRunCount, setTestRunCount] = useState<number>(0);
   const [prCount, setPrCount] = useState<number>(0);
+  const [recentInsights, setRecentInsights] = useState<any[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -47,8 +48,42 @@ export default function OverviewDashboardPage() {
         }
         if (repos.status === "fulfilled" && Array.isArray(repos.value)) {
           setRepoCount(repos.value.length);
-          const totalPrs = repos.value.reduce((acc, r) => acc + (r.openPullRequestsCount || 0), 0);
-          setPrCount(totalPrs);
+          let totalOpenPrs = 0;
+          const insightsList: any[] = [];
+          for (const r of repos.value) {
+            try {
+              const prs = await apiClient.get<any[]>(`/api/v1/repositories/${r.id}/pull-requests`);
+              if (Array.isArray(prs)) {
+                totalOpenPrs += prs.filter((p) => p.status === "OPEN" || p.state === "open").length;
+                for (const p of prs.slice(0, 3)) {
+                  insightsList.push({
+                    pr: `#${p.number || p.prNumber}`,
+                    title: p.title || `PR #${p.number || p.prNumber}`,
+                    risk: p.riskLevel || "LOW",
+                    score: p.riskScore ? Math.round(p.riskScore) : 15,
+                    symbols: p.changedFilesCount || p.changedFiles || 1,
+                  });
+                }
+              }
+            } catch (ignored) {}
+
+            try {
+              const reports = await apiClient.get<any[]>(`/api/v1/ai/repositories/${r.id}/commit-reports?limit=5`);
+              if (Array.isArray(reports)) {
+                for (const cr of reports) {
+                  insightsList.push({
+                    pr: `Commit ${cr.commit_sha?.substring(0, 7) || "HEAD"}`,
+                    title: cr.commit_message || `Push on ${cr.ref || "branch"}`,
+                    risk: cr.secrets_detected > 0 ? "CRITICAL" : (cr.bugs_detected > 0 ? "HIGH" : "LOW"),
+                    score: cr.secrets_detected > 0 ? 95 : (cr.bugs_detected > 0 ? 65 : 10),
+                    symbols: cr.files_changed_count || 1,
+                  });
+                }
+              }
+            } catch (ignored) {}
+          }
+          setPrCount(totalOpenPrs);
+          setRecentInsights(insightsList.slice(0, 5));
         }
         if (testRuns.status === "fulfilled" && Array.isArray(testRuns.value)) {
           setTestRunCount(testRuns.value.length);
@@ -215,60 +250,45 @@ export default function OverviewDashboardPage() {
             </Link>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[
-              {
-                pr: "#42",
-                title: "feat(gateway): add reactive Redis JWT revocation filter",
-                risk: "LOW",
-                score: 18,
-                symbols: 4,
-              },
-              {
-                pr: "#47",
-                title: "feat(ai-service): parse Java AST and compute dependency edges",
-                risk: "MEDIUM",
-                score: 42,
-                symbols: 12,
-              },
-              {
-                pr: "#51",
-                title: "refactor(source-control): replace direct dispatch with Outbox table",
-                risk: "HIGH",
-                score: 78,
-                symbols: 26,
-              },
-            ].map((item) => (
-              <div
-                key={item.pr}
-                className="flex items-center justify-between p-3 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-800/30 transition-colors"
-              >
-                <div className="space-y-1 truncate pr-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-semibold text-sky-400">
-                      {item.pr}
-                    </span>
-                    <span className="text-xs font-medium text-slate-200 truncate">
-                      {item.title}
+            {recentInsights.length === 0 ? (
+              <div className="p-6 text-center rounded-xl border border-dashed border-slate-800 bg-slate-950/20 text-xs text-slate-400">
+                <Sparkles className="h-5 w-5 text-slate-600 mx-auto mb-2" />
+                No commits or PR analyses detected yet. Push a commit or select a PR in AI Insights to view live AST blast radius insights.
+              </div>
+            ) : (
+              recentInsights.map((item, idx) => (
+                <div
+                  key={`${item.pr}-${idx}`}
+                  className="flex items-center justify-between p-3 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-800/30 transition-colors"
+                >
+                  <div className="space-y-1 truncate pr-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-semibold text-sky-400">
+                        {item.pr}
+                      </span>
+                      <span className="text-xs font-medium text-slate-200 truncate">
+                        {item.title}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      Impacted files / symbols: {item.symbols}
                     </span>
                   </div>
-                  <span className="text-[11px] text-slate-400">
-                    Impacted AST symbols: {item.symbols}
-                  </span>
+                  <Badge
+                    variant={
+                      item.risk === "LOW"
+                        ? "success"
+                        : item.risk === "MEDIUM"
+                        ? "warning"
+                        : "destructive"
+                    }
+                    className="text-[10px]"
+                  >
+                    {item.risk} RISK ({item.score}%)
+                  </Badge>
                 </div>
-                <Badge
-                  variant={
-                    item.risk === "LOW"
-                      ? "success"
-                      : item.risk === "MEDIUM"
-                      ? "warning"
-                      : "destructive"
-                  }
-                  className="text-[10px]"
-                >
-                  {item.risk} RISK ({item.score}%)
-                </Badge>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 

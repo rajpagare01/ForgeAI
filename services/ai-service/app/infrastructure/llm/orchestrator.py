@@ -40,7 +40,7 @@ class FailoverLLMOrchestrator(LLMProvider):
         is_test_mode = (
             not is_production
             and (
-                settings.ENVIRONMENT in ("test", "dev", "development")
+                settings.ENVIRONMENT == "test"
                 or settings.ALLOW_TEST_FALLBACK
                 or bool(settings.GEMINI_API_KEY and any(settings.GEMINI_API_KEY.startswith(p) for p in ("mock", "test")))
                 or "pytest" in sys.modules
@@ -114,5 +114,5 @@ class FailoverLLMOrchestrator(LLMProvider):
         )
         ai_metrics.record_analysis(success=False, latency_ms=elapsed_ms, fallback_used=True, provider_failed=True)
         raise AIUnavailableException(
-            "All configured AI providers (Gemini primary, Groq fallback) are currently unavailable."
+            "AI API is not working currently (Gemini primary and Groq fallback failed)."
         )

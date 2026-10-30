@@ -355,6 +355,9 @@ export interface PrAnalysisResponse {
     distributed_impact?: DistributedRiskAssessmentDTO;
     contract_status?: "COMPATIBLE" | "POTENTIALLY_BREAKING" | "BREAKING" | string;
     contract_rationale?: string;
+    showing_previous_ai_data?: boolean;
+    ai_api_unavailable?: boolean;
+    banner_message?: string;
   };
   retrieved_chunks?: Array<{
     chunk_id?: string;
@@ -672,6 +675,11 @@ function AiInsightsContent() {
   });
   const [isLoadingRepos, setIsLoadingRepos] = useState<boolean>(true);
 
+  // Interactive Branch Selector State
+  const [branches, setBranches] = useState<Array<{ name: string; commitSha: string; isProtected?: boolean }>>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>("");
+  const [isLoadingBranches, setIsLoadingBranches] = useState<boolean>(false);
+
   // Authoritative Repository Selector Handler with Persistence
   const handleSelectRepo = useCallback((repoId: string) => {
     setSelectedRepoId(repoId);
@@ -702,6 +710,11 @@ function AiInsightsContent() {
   const [isAnalyzingPr, setIsAnalyzingPr] = useState<boolean>(false);
   const [prAnalysisResult, setPrAnalysisResult] = useState<PrAnalysisResponse | null>(null);
   const [prError, setPrError] = useState<string | null>(null);
+
+  // Active repository and branch resolution
+  const selectedRepo = repositories.find((r) => r.id === selectedRepoId);
+  const activeBranchObj = branches.find((b) => b.name === selectedBranch);
+  const activeBranchSha = activeBranchObj?.commitSha || prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD";
 
   // Advanced override
   const [showAdvancedOverride, setShowAdvancedOverride] = useState<boolean>(false);
@@ -1139,11 +1152,58 @@ function AiInsightsContent() {
     fetchSyncStatus();
   }, [selectedRepoId, fetchSyncStatus]);
 
+  // Fetch branches for selected repository
+  const fetchBranches = useCallback(async () => {
+    if (!selectedRepoId) {
+      setBranches([]);
+      setSelectedBranch("");
+      return;
+    }
+    setIsLoadingBranches(true);
+    try {
+      const data = await apiClient.get<Array<{ name: string; commitSha: string; isProtected?: boolean }>>(
+        `/api/v1/repositories/${selectedRepoId}/branches`
+      );
+      if (Array.isArray(data) && data.length > 0) {
+        setBranches(data);
+        const savedBranch = typeof window !== "undefined"
+          ? localStorage.getItem(`forgeai_selected_branch_${selectedRepoId}`)
+          : null;
+        if (savedBranch && data.some((b) => b.name === savedBranch)) {
+          setSelectedBranch(savedBranch);
+        } else {
+          const defaultB = selectedRepo?.defaultBranch || data[0].name;
+          const matched = data.find((b) => b.name === defaultB) || data[0];
+          setSelectedBranch(matched.name);
+          if (typeof window !== "undefined") {
+            localStorage.setItem(`forgeai_selected_branch_${selectedRepoId}`, matched.name);
+          }
+        }
+      } else {
+        const fallback = [{ name: selectedRepo?.defaultBranch || "main", commitSha: syncStatus?.latestObservedSha || "HEAD" }];
+        setBranches(fallback);
+        setSelectedBranch(selectedRepo?.defaultBranch || "main");
+      }
+    } catch (err) {
+      console.warn("Could not fetch repository branches:", err);
+      const fallback = [{ name: selectedRepo?.defaultBranch || "main", commitSha: syncStatus?.latestObservedSha || "HEAD" }];
+      setBranches(fallback);
+      setSelectedBranch(selectedRepo?.defaultBranch || "main");
+    } finally {
+      setIsLoadingBranches(false);
+    }
+  }, [selectedRepoId, selectedRepo?.defaultBranch, syncStatus?.latestObservedSha]);
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
+
   const handleReconcile = async () => {
     if (!selectedRepoId) return;
     setIsReconciling(true);
     try {
-      const res = await apiClient.post<RepositorySyncStatus>(`/api/v1/repositories/${selectedRepoId}/reconcile`, {});
+      const branchParam = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : "";
+      const res = await apiClient.post<RepositorySyncStatus>(`/api/v1/repositories/${selectedRepoId}/reconcile${branchParam}`, {});
       if (res && typeof res === "object") {
         setSyncStatus(res);
       }
@@ -1257,7 +1317,7 @@ function AiInsightsContent() {
       const resp = await apiClient.post<any>(
         `/api/v1/ai/repositories/${selectedRepoId}/documents/generate`,
         {
-          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
+          commit_sha: activeBranchSha,
           files: filesPayload,
         }
       );
@@ -1340,8 +1400,8 @@ function AiInsightsContent() {
       await apiClient.post(
         `/api/v1/ai/repositories/${selectedRepoId}/analyze-commit`,
         {
-          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
-          ref: prChangeSet?.sourceBranch || "main",
+          commit_sha: activeBranchSha,
+          ref: selectedBranch || prChangeSet?.sourceBranch || "main",
           author_name: prChangeSet?.author || "Developer",
           author_email: "developer@forgeai.local",
           commit_message: prChangeSet?.title || "Manual commit analysis",
@@ -1363,7 +1423,7 @@ function AiInsightsContent() {
     setDocActionError(null);
     setDocActionSuccess(null);
     try {
-      await apiClient.post(`/api/v1/repositories/${selectedRepoId}/reconcile`, {});
+      await apiClient.post(`/api/v1/repositories/${selectedRepoId}/reconcile?branch=${encodeURIComponent(selectedBranch || selectedRepo?.defaultBranch || "main")}`, {});
       await Promise.allSettled([
         fetchDocuments(),
         fetchCommitReports(),
@@ -1529,29 +1589,45 @@ function AiInsightsContent() {
       }
 
       const result = await apiClient.post<any>("/api/v1/ai/pr-analysis", payload);
-      setPrAnalysisResult(result);
-      setIsUsingLastAnalysis(false);
-      setLifecycleStep("complete");
 
-      // Cache successful analysis in localStorage for offline resiliency
-      try {
-        const repoObj = repositories.find((r) => r.id === selectedRepoId);
-        const cacheObj = {
-          timestamp: new Date().toISOString(),
-          repoId: selectedRepoId,
-          repoName: repoObj?.fullName || "Selected Repository",
-          prNumber: selectedPrNumber,
-          data: result,
-        };
-        if (selectedRepoId && selectedPrNumber) {
-          localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`, JSON.stringify(cacheObj));
+      if (result?.impact_metadata?.showing_previous_ai_data === true) {
+        setPrAnalysisResult(result);
+        setIsUsingLastAnalysis(true);
+        setLastAnalysisTimestamp(
+          result.impact_metadata.previous_analysis_timestamp
+            ? new Date(result.impact_metadata.previous_analysis_timestamp).toLocaleString()
+            : "Previous AI run"
+        );
+        setLifecycleStep("complete");
+        // Do NOT overwrite localStorage cache with fallback responses!
+      } else if (result?.provider === "TEST_FALLBACK") {
+        setLifecycleStep("idle");
+        triggerAiApiUnavailablePopup("AI API is not working currently.");
+      } else {
+        setPrAnalysisResult(result);
+        setIsUsingLastAnalysis(false);
+        setLifecycleStep("complete");
+
+        // Cache successful analysis in localStorage for offline resiliency
+        try {
+          const repoObj = repositories.find((r) => r.id === selectedRepoId);
+          const cacheObj = {
+            timestamp: new Date().toISOString(),
+            repoId: selectedRepoId,
+            repoName: repoObj?.fullName || "Selected Repository",
+            prNumber: selectedPrNumber,
+            data: result,
+          };
+          if (selectedRepoId && selectedPrNumber) {
+            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`, JSON.stringify(cacheObj));
+          }
+          if (selectedRepoId) {
+            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}`, JSON.stringify(cacheObj));
+          }
+          localStorage.setItem(`forgeai_last_analysis_global`, JSON.stringify(cacheObj));
+        } catch (cacheErr) {
+          console.warn("Failed to cache analysis to localStorage:", cacheErr);
         }
-        if (selectedRepoId) {
-          localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}`, JSON.stringify(cacheObj));
-        }
-        localStorage.setItem(`forgeai_last_analysis_global`, JSON.stringify(cacheObj));
-      } catch (cacheErr) {
-        console.warn("Failed to cache analysis to localStorage:", cacheErr);
       }
     } catch (err: any) {
       console.warn("PR analysis failed:", err);
@@ -1662,7 +1738,7 @@ function AiInsightsContent() {
       const res = await apiClient.post<SecretScanResultDTO>(
         `/api/v1/ai/repositories/${selectedRepoId}/secret-scan`,
         {
-          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
+          commit_sha: activeBranchSha,
           files: prChangeSet?.files?.map((f) => ({
             file_path: f.filename,
             filename: f.filename,
@@ -1687,7 +1763,7 @@ function AiInsightsContent() {
       const res = await apiClient.post<SecurityAssessmentDTO>(
         `/api/v1/ai/repositories/${selectedRepoId}/security-scan`,
         {
-          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
+          commit_sha: activeBranchSha,
           files: prChangeSet?.files?.map((f) => ({
             file_path: f.filename,
             filename: f.filename,
@@ -1880,8 +1956,6 @@ function AiInsightsContent() {
     restoreSavedAnalysis();
   }, [selectedRepoId, selectedPrNumber]);
 
-  const selectedRepo = repositories.find((r) => r.id === selectedRepoId);
-
   // Filtered provenance chunks
   const filteredChunks = React.useMemo(() => {
     if (!prAnalysisResult || !Array.isArray(prAnalysisResult.retrieved_chunks)) return [];
@@ -1935,10 +2009,40 @@ function AiInsightsContent() {
             )}
           </div>
           {selectedRepo && (
-            <Badge variant="outline" className="text-xs font-mono flex items-center gap-1">
-              <GitBranch className="h-3 w-3 text-indigo-400" />
-              {selectedRepo.defaultBranch}
-            </Badge>
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 shadow-sm">
+              <GitBranch className="h-4 w-4 text-indigo-400" />
+              <span className="text-xs text-slate-400">Branch:</span>
+              {isLoadingBranches ? (
+                <Loader2 className="h-3 w-3 animate-spin text-indigo-400" />
+              ) : (
+                <select
+                  aria-label="Repository Branch Selection"
+                  value={selectedBranch || selectedRepo.defaultBranch}
+                  onChange={async (e) => {
+                    const newBranch = e.target.value;
+                    setSelectedBranch(newBranch);
+                    if (typeof window !== "undefined" && selectedRepoId) {
+                      localStorage.setItem(`forgeai_selected_branch_${selectedRepoId}`, newBranch);
+                    }
+                    if (selectedRepoId) {
+                      try {
+                        await apiClient.post(`/api/v1/repositories/${selectedRepoId}/reconcile?branch=${encodeURIComponent(newBranch)}`, {});
+                        await Promise.allSettled([fetchSyncStatus(), fetchDocuments(), fetchCommitReports()]);
+                      } catch (err) {
+                        console.warn("Branch reconcile warning:", err);
+                      }
+                    }
+                  }}
+                  className="bg-transparent text-xs text-indigo-300 font-mono font-medium focus:outline-none cursor-pointer"
+                >
+                  {(branches.length > 0 ? branches : [{ name: selectedRepo.defaultBranch, commitSha: "" }]).map((b) => (
+                    <option key={b.name} value={b.name} className="bg-slate-900 text-white">
+                      {b.name} {b.commitSha ? `(${b.commitSha.substring(0, 7)})` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -1980,14 +2084,18 @@ function AiInsightsContent() {
             <div className="flex items-center gap-1.5 font-mono text-[11px] bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-md">
               <span className="text-slate-500">GitHub HEAD:</span>
               <span className="text-slate-300 font-semibold">
-                {syncStatus?.latestObservedSha ? syncStatus.latestObservedSha.substring(0, 7) : "None"}
+                {(syncStatus?.latestObservedSha || (syncStatus as any)?.currentGithubHead)
+                  ? (syncStatus?.latestObservedSha || (syncStatus as any)?.currentGithubHead).substring(0, 7)
+                  : "None"}
               </span>
             </div>
 
             <div className="flex items-center gap-1.5 font-mono text-[11px] bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-md">
               <span className="text-slate-500">Indexed HEAD:</span>
               <span className="text-indigo-400 font-semibold">
-                {syncStatus?.latestIndexedSha ? syncStatus.latestIndexedSha.substring(0, 7) : "None"}
+                {(syncStatus?.latestIndexedSha || (syncStatus as any)?.indexedHead)
+                  ? (syncStatus?.latestIndexedSha || (syncStatus as any)?.indexedHead).substring(0, 7)
+                  : "None"}
               </span>
             </div>
 
@@ -2976,8 +3084,8 @@ function AiInsightsContent() {
           {/* Analysis Results */}
           {prAnalysisResult && (
             <div className="space-y-6">
-              {/* Fallback Banner when viewing last cached analysis */}
-              {isUsingLastAnalysis && (
+              {/* Fallback Banner when viewing previous AI data */}
+              {(isUsingLastAnalysis || prAnalysisResult?.impact_metadata?.showing_previous_ai_data) && (
                 <div className="p-4 rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-400 shrink-0">
@@ -2985,7 +3093,7 @@ function AiInsightsContent() {
                     </div>
                     <div>
                       <div className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
-                        <span>Offline Mode: Viewing Last Analysis by AI Service</span>
+                        <span>This is the previous data — AI API is not working currently.</span>
                         {lastAnalysisTimestamp && (
                           <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-950/60 text-amber-300 font-mono">
                             Recorded: {lastAnalysisTimestamp}
@@ -2993,7 +3101,7 @@ function AiInsightsContent() {
                         )}
                       </div>
                       <p className="text-xs text-slate-300 mt-1">
-                        The live AI API is currently not responding. Displaying the last analysis performed by ForgeAI. Live real-time derivation is paused.
+                        The live AI API is currently not responding. Displaying the last real analysis performed by ForgeAI. Live real-time derivation is paused.
                       </p>
                     </div>
                   </div>
@@ -6251,6 +6359,23 @@ function AiInsightsContent() {
             </div>
           )}
 
+          {/* Previous AI Data Banner */}
+          {documents.some((d) => d.provenance?.showing_previous_ai_data) && (
+            <div className="flex items-center gap-3 rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 p-4 text-xs text-amber-200 shadow-md">
+              <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-400 shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-bold text-amber-300 text-sm">
+                  This is the previous data — AI API is not working currently.
+                </p>
+                <p className="text-slate-300 mt-0.5">
+                  The live AI API is currently unreachable. Displaying the most recent AI-analyzed System Design & Architecture document.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Document Cards Grid */}
           {isLoadingDocs ? (
             <div className="flex flex-col items-center justify-center p-16 rounded-2xl border border-slate-800 bg-slate-900/30 space-y-3">
@@ -6482,6 +6607,23 @@ function AiInsightsContent() {
             </div>
           )}
 
+          {/* Previous AI Data Banner */}
+          {documents.some((d) => d.provenance?.showing_previous_ai_data) && (
+            <div className="flex items-center gap-3 rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 p-4 text-xs text-amber-200 shadow-md">
+              <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-400 shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-bold text-amber-300 text-sm">
+                  This is the previous data — AI API is not working currently.
+                </p>
+                <p className="text-slate-300 mt-0.5">
+                  The live AI API is currently unreachable. Displaying the most recent AI-analyzed System Design & Architecture document.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Metric Stats Banner */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card className="border-slate-800 bg-slate-900/40 p-4">
@@ -6641,6 +6783,14 @@ function AiInsightsContent() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {/* Warning Banner in Modal */}
+            {selectedDocPreview.provenance?.showing_previous_ai_data && (
+              <div className="p-3.5 rounded-xl border border-amber-500/50 bg-amber-950/40 text-amber-200 text-xs flex items-center gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                <span className="font-semibold">This is the previous data — AI API is not working currently.</span>
+              </div>
+            )}
 
             {/* Citations List */}
             {selectedDocPreview.citations && selectedDocPreview.citations.length > 0 && (

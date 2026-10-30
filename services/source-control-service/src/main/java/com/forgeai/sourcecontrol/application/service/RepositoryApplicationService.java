@@ -235,8 +235,17 @@ public class RepositoryApplicationService {
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        return listCommits(organizationId, workspaceId, repositoryId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(
+            UUID organizationId, UUID workspaceId, UUID repositoryId, String branch) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         getRepository(organizationId, workspaceId, repositoryId);
+        if (branch != null && !branch.isBlank()) {
+            return syncCommits(organizationId, workspaceId, repositoryId, branch);
+        }
         return commitRepository.findAllByRepositoryId(repositoryId);
     }
 
@@ -251,21 +260,39 @@ public class RepositoryApplicationService {
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         Repository repo = getRepository(organizationId, workspaceId, repositoryId);
-        return gitHubAppClient.listBranches(repo.getInstallationId(), repo.getFullName());
+        if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0) {
+            try {
+                var branches = gitHubAppClient.listBranches(repo.getInstallationId(), repo.getFullName());
+                if (branches != null && !branches.isEmpty()) {
+                    return branches;
+                }
+            } catch (Exception e) {
+                log.warn("[GitHub] Could not fetch branches for {}: {}", repo.getFullName(), e.getMessage());
+            }
+        }
+        String defaultBranch = repo.getDefaultBranch() != null ? repo.getDefaultBranch() : "main";
+        String sha = repo.getLatestObservedSha() != null ? repo.getLatestObservedSha() : "HEAD";
+        return List.of(new com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata(defaultBranch, sha, true));
     }
 
     @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.Commit> syncCommits(UUID organizationId, UUID repositoryId) {
-        return syncCommits(organizationId, null, repositoryId);
+        return syncCommits(organizationId, null, repositoryId, null);
     }
 
     @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.Commit> syncCommits(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        return syncCommits(organizationId, workspaceId, repositoryId, null);
+    }
+
+    @Transactional
+    public List<com.forgeai.sourcecontrol.domain.model.Commit> syncCommits(
+            UUID organizationId, UUID workspaceId, UUID repositoryId, String branch) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         Repository repo = getRepository(organizationId, workspaceId, repositoryId);
         List<com.forgeai.sourcecontrol.infrastructure.github.GitHubCommitMetadata> ghCommits =
-                gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), 30);
+                gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), branch, 30);
 
         List<com.forgeai.sourcecontrol.domain.model.Commit> savedList = new java.util.ArrayList<>();
         for (var ghCommit : ghCommits) {
@@ -293,7 +320,7 @@ public class RepositoryApplicationService {
                 savedList.add(commitRepository.save(c));
             }
         }
-        log.info("[GitHub] Synchronized {} commits for repo: {}", savedList.size(), repo.getFullName());
+        log.info("[GitHub] Synchronized {} commits for repo: {} (branch: {})", savedList.size(), repo.getFullName(), branch);
         return savedList;
     }
 
@@ -837,10 +864,13 @@ public class RepositoryApplicationService {
 
         return com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO.builder()
                 .repositoryId(repo.getId())
+                .organizationId(repo.getOrganizationId())
                 .repositoryFullName(repo.getFullName())
                 .defaultBranch(repo.getDefaultBranch())
                 .currentGithubHead(repo.getLatestObservedSha())
                 .indexedHead(repo.getLatestIndexedSha())
+                .latestObservedSha(repo.getLatestObservedSha())
+                .latestIndexedSha(repo.getLatestIndexedSha())
                 .syncStatus(status)
                 .lastSyncedAt(repo.getLastSyncedAt())
                 .lastError(repo.getLastError())
@@ -849,34 +879,45 @@ public class RepositoryApplicationService {
 
     @Transactional
     public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(UUID organizationId, UUID repositoryId) {
-        return reconcileRepository(organizationId, null, repositoryId);
+        return reconcileRepository(organizationId, null, repositoryId, null);
     }
 
     @Transactional
     public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
+        return reconcileRepository(organizationId, workspaceId, repositoryId, null);
+    }
+
+    @Transactional
+    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(
+            UUID organizationId, UUID workspaceId, UUID repositoryId, String targetBranch) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         Repository repo = getRepository(organizationId, workspaceId, repositoryId);
+
+        String effectiveBranch = (targetBranch != null && !targetBranch.isBlank())
+                ? targetBranch.trim()
+                : (repo.getDefaultBranch() != null ? repo.getDefaultBranch() : "main");
 
         String currentHead = null;
         if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0) {
             try {
-                // Find default branch HEAD
+                // Find branch HEAD
                 var branches = gitHubAppClient.listBranches(repo.getInstallationId(), repo.getFullName());
                 for (var b : branches) {
-                    if (repo.getDefaultBranch().equalsIgnoreCase(b.name())) {
+                    if (effectiveBranch.equalsIgnoreCase(b.name())) {
                         currentHead = b.commitSha();
                         break;
                     }
                 }
                 if (currentHead == null) {
-                    var commits = gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), 1);
+                    var commits = gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), effectiveBranch, 1);
                     if (!commits.isEmpty()) {
                         currentHead = commits.get(0).sha();
                     }
                 }
             } catch (Exception e) {
-                log.warn("[GitHub] Could not query remote HEAD during reconciliation for repo {}: {}", repo.getFullName(), e.getMessage());
+                log.warn("[GitHub] Could not query remote HEAD during reconciliation for repo {} (branch {}): {}",
+                        repo.getFullName(), effectiveBranch, e.getMessage());
             }
         }
 
@@ -888,7 +929,8 @@ public class RepositoryApplicationService {
 
         if (currentHead != null && !currentHead.isBlank()) {
             final String finalHead = currentHead;
-            if (!currentHead.equals(repo.getLatestIndexedSha())) {
+            boolean branchTargetExplicit = (targetBranch != null && !targetBranch.isBlank());
+            if (!currentHead.equals(repo.getLatestIndexedSha()) || branchTargetExplicit) {
                 repo.setSyncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCING);
                 repositoryRepository.save(repo);
 
@@ -940,7 +982,7 @@ public class RepositoryApplicationService {
                                 tenantId,
                                 repo.getId(),
                                 finalHead,
-                                "refs/heads/" + repo.getDefaultBranch(),
+                                "refs/heads/" + effectiveBranch,
                                 changedFiles,
                                 commitDetail.authorName(),
                                 commitDetail.authorEmail(),
@@ -951,7 +993,7 @@ public class RepositoryApplicationService {
                                 tenantId,
                                 repo.getId(),
                                 finalHead,
-                                "refs/heads/" + repo.getDefaultBranch(),
+                                "refs/heads/" + effectiveBranch,
                                 java.util.List.of()
                         );
                     }

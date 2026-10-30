@@ -9,9 +9,11 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -419,10 +421,21 @@ public class GitHubAppClient {
     // -------------------------------------------------------------------------
 
     public List<GitHubCommitMetadata> listCommits(Long installationId, String fullName, int limit) {
+        return listCommits(installationId, fullName, null, limit);
+    }
+
+    public List<GitHubCommitMetadata> listCommits(Long installationId, String fullName, int perPage, String branchOrSha) {
+        return listCommits(installationId, fullName, branchOrSha, perPage);
+    }
+
+    public List<GitHubCommitMetadata> listCommits(Long installationId, String fullName, String branchOrSha, int limit) {
         config.requireConfigured();
         String token = getInstallationToken(installationId);
         int perPage = Math.min(Math.max(limit, 1), 100);
         String url = GITHUB_API + "/repos/" + fullName + "/commits?per_page=" + perPage;
+        if (branchOrSha != null && !branchOrSha.isBlank()) {
+            url += "&sha=" + URLEncoder.encode(branchOrSha.trim(), StandardCharsets.UTF_8);
+        }
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))

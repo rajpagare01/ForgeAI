@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { OrgSwitcher } from "./OrgSwitcher";
 import { useAuth } from "@/lib/auth-context";
 import { apiClient } from "@/lib/api-client";
@@ -12,6 +13,8 @@ import {
   Unlink,
   ExternalLink,
   AlertCircle,
+  Activity,
+  ShieldCheck,
 } from "lucide-react";
 
 const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
@@ -25,9 +28,12 @@ const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" })
 );
 
 export const TopNav: React.FC = () => {
+  const router = useRouter();
   const { user, logout, githubStatus, disconnectGitHubAccount, fetchGitHubStatus } = useAuth();
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [disconnecting, setDisconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -96,15 +102,25 @@ export const TopNav: React.FC = () => {
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-slate-950/70 px-6 backdrop-blur-xl">
       {/* Left: Search & Breadcrumbs */}
       <div className="flex items-center gap-4">
-        <div className="relative w-64 md:w-80">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (searchQuery.trim()) {
+              router.push(`/projects?q=${encodeURIComponent(searchQuery.trim())}`);
+            }
+          }}
+          className="relative w-64 md:w-80"
+        >
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tasks, PRs, requirements..."
             className="h-9 w-full rounded-lg border border-slate-800 bg-slate-900/90 pl-9 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
             aria-label="Search tasks, PRs, requirements"
           />
-        </div>
+        </form>
       </div>
 
       {/* Right: Gateway Health, OrgSwitcher, GitHub Status, User */}
@@ -186,14 +202,68 @@ export const TopNav: React.FC = () => {
           </button>
         )}
 
-        {/* Notifications Icon (No fake unread activity badge) */}
-        <button
-          type="button"
-          className="relative rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-          title="Notifications"
-        >
-          <Bell className="h-4 w-4" />
-        </button>
+        {/* Notifications Icon & Popover */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setNotificationsOpen(!notificationsOpen)}
+            className="relative rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
+            title="Notifications"
+          >
+            <Bell className="h-4 w-4" />
+          </button>
+
+          {notificationsOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setNotificationsOpen(false)}
+              />
+              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-800 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-xl z-50 space-y-2.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <span className="text-xs font-semibold text-white">System & Governance Alerts</span>
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                    All Active
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                    <Activity className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-slate-200">Gateway Status</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        API Gateway is {gatewayOnline ? "ONLINE and reachable" : "connecting..."}.
+                      </div>
+                    </div>
+                  </div>
+
+                  {isGitHubLinked && (
+                    <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                      <ShieldCheck className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-medium text-slate-200">GitHub App Synced</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Connected as @{githubIdentity?.githubLogin}. Commits & PRs syncing.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                    <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-medium text-slate-200">AI Intelligence Ready</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Real-time PR analysis, AST blast radius & auto-docs are enabled.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* User Profile */}
         <div className="relative">

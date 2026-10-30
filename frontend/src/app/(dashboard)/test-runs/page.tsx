@@ -77,18 +77,44 @@ export default function TestRunsPage() {
       const data = await apiClient.get<any[]>("/api/v1/test-runs");
       if (Array.isArray(data)) {
         const mapped: TestRun[] = data.map((r) => {
-          const passed = r.passedTests ?? r.passedCount ?? (r.conclusion === "success" || r.status === "PASSED" ? 1 : 0);
-          const failed = r.failedTests ?? r.failedCount ?? (r.conclusion === "failure" || r.status === "FAILED" ? 1 : 0);
-          const skipped = r.skippedTests ?? r.skippedCount ?? 0;
-          const total = r.totalTests ?? r.totalCount ?? (passed + failed + skipped);
+          let passed = r.passedTests ?? r.passedCount ?? 0;
+          let failed = r.failedTests ?? r.failedCount ?? 0;
+          let skipped = r.skippedTests ?? r.skippedCount ?? 0;
+          let total = r.totalTests ?? r.totalCount ?? 0;
 
-          const status = (r.status === "FAILED" || r.conclusion === "failure" || failed > 0)
+          const isSuccess = r.conclusion === "success" || r.status === "PASSED" || r.status === "COMPLETED";
+          const isFailed = r.conclusion === "failure" || r.status === "FAILED";
+
+          if (total === 0) {
+            if (isSuccess) {
+              passed = 1;
+              total = 1;
+            } else if (isFailed) {
+              failed = 1;
+              total = 1;
+            }
+          }
+
+          const status = (isFailed || failed > 0)
             ? "FAILED"
-            : (r.status === "COMPLETED" || r.status === "PASSED" || r.conclusion === "success")
+            : (isSuccess)
             ? "PASSED"
             : r.status === "RUNNING" || r.status === "IN_PROGRESS" || r.githubRunStatus === "in_progress"
             ? "RUNNING"
             : "QUEUED";
+
+          let durationMs = r.durationMs;
+          if (!durationMs || durationMs === 0) {
+            const start = r.runStartedAt || r.startedAt || r.createdAt;
+            const end = r.runCompletedAt || r.completedAt || r.updatedAt;
+            if (start && end) {
+              const diff = new Date(end).getTime() - new Date(start).getTime();
+              if (diff > 0) durationMs = diff;
+            }
+          }
+          if (!durationMs || durationMs === 0) {
+            durationMs = 1500;
+          }
 
           const repoName = (r.repositoryId && repoMap[r.repositoryId])
             ? repoMap[r.repositoryId]
@@ -110,7 +136,7 @@ export default function TestRunsPage() {
             failedCount: failed,
             skippedCount: skipped,
             totalCount: total,
-            durationMs: r.durationMs ?? 1500,
+            durationMs,
             createdAt: r.runStartedAt || r.createdAt || new Date().toISOString(),
           } as any;
         });

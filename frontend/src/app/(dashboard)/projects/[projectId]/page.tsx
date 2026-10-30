@@ -60,6 +60,20 @@ function ProjectDetailContent() {
   const [assignee, setAssignee] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Create Requirement modal state
+  const [showReqModal, setShowReqModal] = useState(false);
+  const [reqIdentifier, setReqIdentifier] = useState("");
+  const [reqTitle, setReqTitle] = useState("");
+  const [reqDescription, setReqDescription] = useState("");
+  const [isSubmittingReq, setIsSubmittingReq] = useState(false);
+
+  // Link Repository modal state
+  const [showRepoModal, setShowRepoModal] = useState(false);
+  const [availableRepos, setAvailableRepos] = useState<any[]>([]);
+  const [selectedRepoToLink, setSelectedRepoToLink] = useState("");
+  const [isLoadingAvailableRepos, setIsLoadingAvailableRepos] = useState(false);
+  const [isSubmittingRepo, setIsSubmittingRepo] = useState(false);
+
   const fetchProjectData = useCallback(async () => {
     if (!rawProjectId) {
       setError("No project ID specified in URL route.");
@@ -198,6 +212,74 @@ function ProjectDetailContent() {
     }
   };
 
+  const handleCreateRequirement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reqTitle.trim() || !rawProjectId) return;
+
+    setIsSubmittingReq(true);
+    setError(null);
+
+    try {
+      const generatedId = reqIdentifier.trim() || `REQ-${project?.key || "SYS"}-${Date.now().toString().slice(-4)}`;
+      const payload = {
+        identifier: generatedId,
+        title: reqTitle.trim(),
+        description: reqDescription.trim() || "Engineering requirement specification.",
+      };
+
+      const created = await apiClient.post<any>(`/api/v1/projects/${rawProjectId}/requirements`, payload);
+      setRequirements((prev) => [...prev, created]);
+      setShowReqModal(false);
+      setReqIdentifier("");
+      setReqTitle("");
+      setReqDescription("");
+      // Update count on project
+      setProject((prev) => prev ? { ...prev, requirementCount: (prev.requirementCount || 0) + 1 } : prev);
+    } catch (err: any) {
+      console.error("Failed to create requirement on backend:", err);
+      setError(err?.message || "Failed to create requirement.");
+    } finally {
+      setIsSubmittingReq(false);
+    }
+  };
+
+  const handleOpenRepoModal = async () => {
+    setShowRepoModal(true);
+    setIsLoadingAvailableRepos(true);
+    try {
+      const repos = await apiClient.get<any[]>("/api/v1/repositories");
+      setAvailableRepos(Array.isArray(repos) ? repos : []);
+    } catch (err) {
+      console.warn("Could not fetch available repositories:", err);
+      setAvailableRepos([]);
+    } finally {
+      setIsLoadingAvailableRepos(false);
+    }
+  };
+
+  const handleLinkRepo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRepoToLink || !rawProjectId) return;
+
+    setIsSubmittingRepo(true);
+    setError(null);
+
+    try {
+      const selected = availableRepos.find((r) => r.id === selectedRepoToLink);
+      const repoName = selected?.fullName || selectedRepoToLink;
+      const link = await apiClient.linkProjectRepository<any>(rawProjectId, selectedRepoToLink, repoName);
+      setRepositories([link]);
+      setProject((prev) => prev ? { ...prev, repositoryName: repoName } : prev);
+      setShowRepoModal(false);
+      setSelectedRepoToLink("");
+    } catch (err: any) {
+      console.error("Failed to link repository:", err);
+      setError(err?.message || "Failed to link repository.");
+    } finally {
+      setIsSubmittingRepo(false);
+    }
+  };
+
   const moveTask = async (taskId: string, newStatus: TaskStatus) => {
     // Optimistic UI update
     setTasks((prev) =>
@@ -277,6 +359,24 @@ function ProjectDetailContent() {
           >
             <Plus className="h-4 w-4" />
             Add Task
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowReqModal(true)}
+            className="gap-1.5 border-purple-500/30 text-purple-300 hover:bg-purple-950/30"
+          >
+            <Plus className="h-4 w-4 text-purple-400" />
+            Add Requirement
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenRepoModal}
+            className="gap-1.5 border-indigo-500/30 text-indigo-300 hover:bg-indigo-950/30"
+          >
+            <FolderGit2 className="h-4 w-4 text-indigo-400" />
+            Link Repository
           </Button>
           <Link href={`/projects/${rawProjectId}/traceability`}>
             <Button variant="outline" size="sm" className="gap-2 border-slate-700 text-slate-300">
@@ -387,7 +487,7 @@ function ProjectDetailContent() {
                     </div>
 
                     {/* Quick Move Trigger */}
-                    <div className="flex items-center justify-end gap-1 pt-1">
+                    <div className="flex items-center justify-end gap-1 pt-1 flex-wrap">
                       {col.id !== "TODO" && (
                         <button
                           type="button"
@@ -402,10 +502,20 @@ function ProjectDetailContent() {
                         <button
                           type="button"
                           onClick={() => moveTask(task.id, "IN_PROGRESS")}
-                          className="text-[10px] text-slate-500 hover:text-slate-300 px-1 py-0.5 rounded"
+                          className="text-[10px] text-sky-400 hover:text-sky-300 px-1 py-0.5 rounded"
                           title="Move to In Progress"
                         >
                           {col.id === "TODO" ? "Progress →" : "← Progress"}
+                        </button>
+                      )}
+                      {col.id !== "IN_REVIEW" && (
+                        <button
+                          type="button"
+                          onClick={() => moveTask(task.id, "IN_REVIEW")}
+                          className="text-[10px] text-purple-400 hover:text-purple-300 px-1 py-0.5 rounded"
+                          title="Move to In Review"
+                        >
+                          {col.id === "DONE" ? "← Review" : "Review →"}
                         </button>
                       )}
                       {col.id !== "DONE" && (
@@ -468,7 +578,7 @@ function ProjectDetailContent() {
                   <option value="">None (Unbound Task)</option>
                   {requirements.map((req) => (
                     <option key={req.id} value={req.id}>
-                      {req.reqKey}: {req.title}
+                      {req.identifier || req.reqKey || "REQ"}: {req.title}
                     </option>
                   ))}
                 </select>
@@ -531,6 +641,141 @@ function ProjectDetailContent() {
                 </>
               ) : (
                 "Create Task"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* Create Requirement Modal */}
+      <Dialog open={showReqModal} onOpenChange={setShowReqModal}>
+        <DialogHeader>
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <DialogTitle>Add Specification Requirement</DialogTitle>
+              <DialogDescription>
+                Define an engineering requirement to anchor tasks, test cases, and traceability.
+              </DialogDescription>
+            </div>
+            <DialogClose onClose={() => setShowReqModal(false)} />
+          </div>
+        </DialogHeader>
+
+        <form onSubmit={handleCreateRequirement} className="space-y-4 mt-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-300">Requirement Key</label>
+            <Input
+              placeholder="e.g. REQ-AUTH-01"
+              value={reqIdentifier}
+              onChange={(e) => setReqIdentifier(e.target.value.toUpperCase())}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-300">Title</label>
+            <Input
+              placeholder="e.g. Support Multi-Tenant OAuth2 Token Revocation"
+              value={reqTitle}
+              onChange={(e) => setReqTitle(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-300">Specification Description</label>
+            <textarea
+              placeholder="Detailed description of the requirement and acceptance criteria..."
+              value={reqDescription}
+              onChange={(e) => setReqDescription(e.target.value)}
+              rows={3}
+              className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReqModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="glow" size="sm" disabled={!reqTitle.trim() || isSubmittingReq}>
+              {isSubmittingReq ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  Creating...
+                </>
+              ) : (
+                "Create Requirement"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* Link Repository Modal */}
+      <Dialog open={showRepoModal} onOpenChange={setShowRepoModal}>
+        <DialogHeader>
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <DialogTitle>Link Repository to Project</DialogTitle>
+              <DialogDescription>
+                Associate a source control repository to track commits, PRs, and AI insights.
+              </DialogDescription>
+            </div>
+            <DialogClose onClose={() => setShowRepoModal(false)} />
+          </div>
+        </DialogHeader>
+
+        <form onSubmit={handleLinkRepo} className="space-y-4 mt-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-300">Connected Repository</label>
+            {isLoadingAvailableRepos ? (
+              <div className="flex items-center gap-2 p-3 text-xs text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                Loading connected repositories...
+              </div>
+            ) : availableRepos.length > 0 ? (
+              <select
+                value={selectedRepoToLink}
+                onChange={(e) => setSelectedRepoToLink(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+              >
+                <option value="">Select a repository to link...</option>
+                {availableRepos.map((repo) => (
+                  <option key={repo.id} value={repo.id}>
+                    {repo.fullName || repo.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="p-3 rounded-lg border border-dashed border-slate-800 text-xs text-slate-500 text-center">
+                No connected repositories found. Connect a GitHub repository first.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRepoModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="glow" size="sm" disabled={!selectedRepoToLink || isSubmittingRepo}>
+              {isSubmittingRepo ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  Linking...
+                </>
+              ) : (
+                "Link Repository"
               )}
             </Button>
           </DialogFooter>

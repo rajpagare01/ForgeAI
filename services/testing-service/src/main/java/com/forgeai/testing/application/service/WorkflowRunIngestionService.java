@@ -109,6 +109,22 @@ public class WorkflowRunIngestionService {
                     ? request.getHeadSha()
                     : "0000000000000000000000000000000000000000";
 
+            long computedDurationMs = 0L;
+            if (request.getRunStartedAt() != null && request.getCompletedAt() != null) {
+                computedDurationMs = Math.max(0L, java.time.Duration.between(request.getRunStartedAt(), request.getCompletedAt()).toMillis());
+            }
+
+            int totalTests = 0;
+            int passedTests = 0;
+            int failedTests = 0;
+            if (domainStatus == TestRunStatus.PASSED) {
+                passedTests = 1;
+                totalTests = 1;
+            } else if (domainStatus == TestRunStatus.FAILED) {
+                failedTests = 1;
+                totalTests = 1;
+            }
+
             TestRun run = TestRun.builder()
                     .workspaceId(effectiveWsId)
                     .organizationId(request.getOrganizationId())
@@ -124,11 +140,11 @@ public class WorkflowRunIngestionService {
                     .triggerEvent(request.getTriggerEvent())
                     .htmlUrl(request.getHtmlUrl())
                     .status(domainStatus)
-                    .totalTests(0)
-                    .passedTests(0)
-                    .failedTests(0)
+                    .totalTests(totalTests)
+                    .passedTests(passedTests)
+                    .failedTests(failedTests)
                     .skippedTests(0)
-                    .durationMs(0L)
+                    .durationMs(computedDurationMs)
                     .startedAt(request.getRunStartedAt() != null ? request.getRunStartedAt() : now)
                     .completedAt(request.getCompletedAt())
                     .createdAt(now)
@@ -205,6 +221,26 @@ public class WorkflowRunIngestionService {
             String effectiveConclusion = request.getConclusion() != null ? request.getConclusion() : existing.getConclusion();
             TestRunStatus domainStatus = mapGithubStatusToDomain(incomingStatus, effectiveConclusion);
             existing.setStatus(domainStatus);
+
+            Instant start = request.getRunStartedAt() != null ? request.getRunStartedAt() : existing.getStartedAt();
+            Instant end = request.getCompletedAt() != null ? request.getCompletedAt() : existing.getCompletedAt();
+            if (start != null && end != null) {
+                long computedDurationMs = Math.max(0L, java.time.Duration.between(start, end).toMillis());
+                if (computedDurationMs > 0L) {
+                    existing.setDurationMs(computedDurationMs);
+                }
+            }
+            if (existing.getTotalTests() == null || existing.getTotalTests() == 0) {
+                if (domainStatus == TestRunStatus.PASSED) {
+                    existing.setPassedTests(1);
+                    existing.setTotalTests(1);
+                    existing.setFailedTests(0);
+                } else if (domainStatus == TestRunStatus.FAILED) {
+                    existing.setFailedTests(1);
+                    existing.setTotalTests(1);
+                    existing.setPassedTests(0);
+                }
+            }
             existing.setUpdatedAt(now);
 
             TestRun updated = testRunRepository.save(existing);

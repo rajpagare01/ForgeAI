@@ -19,6 +19,9 @@ public class TestResult {
     private String scope;
     private UUID testRunId;
     private UUID testCaseId;
+    private String name;
+    private String testCaseName;
+    private String classname;
     private TestResultStatus status;
     private Long durationMs;
     private String errorMessage;

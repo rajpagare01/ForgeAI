@@ -2,6 +2,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from app.infrastructure.llm.provider import AIUnavailableException
 from app.presentation.dependencies import (
     get_tenant_org_id,
     get_trace_id,
@@ -526,18 +527,21 @@ async def analyze_pull_request(
     """
     _, _, orchestration_service, *_ = await get_services()
     raw_files = [f.model_dump() for f in req.changed_files] if req.changed_files else None
-    analysis = await orchestration_service.analyze_pull_request(
-        organization_id=org_id,
-        repository_id=req.repository_id,
-        pr_number=req.pr_number,
-        title=req.title,
-        description=req.description,
-        head_sha=req.head_sha,
-        base_sha=req.base_sha,
-        changed_symbols=req.changed_symbols,
-        changed_files=raw_files,
-        trace_id=trace_id,
-    )
+    try:
+        analysis = await orchestration_service.analyze_pull_request(
+            organization_id=org_id,
+            repository_id=req.repository_id,
+            pr_number=req.pr_number,
+            title=req.title,
+            description=req.description,
+            head_sha=req.head_sha,
+            base_sha=req.base_sha,
+            changed_symbols=req.changed_symbols,
+            changed_files=raw_files,
+            trace_id=trace_id,
+        )
+    except AIUnavailableException as e:
+        raise HTTPException(status_code=503, detail=str(e))
     meta = analysis.impact_metadata or {}
     return AnalysisResponseDTO(
         id=analysis.id,
@@ -1086,6 +1090,13 @@ async def list_organization_dependencies(
     """
     pool = await db_pool.get_pool()
     dep_repo = AsyncpgRepositoryDependencyRepository(pool)
+    sc_client = SourceControlClient()
+    try:
+        all_org_repos = await sc_client.get_organization_repositories(org_id)
+        repo_name_map = {str(r.get("id")): r.get("full_name") or r.get("name", "") for r in all_org_repos}
+    except Exception:
+        repo_name_map = {}
+
     deps = await dep_repo.get_all_org_dependencies(org_id, state=state)
 
     results = []
@@ -1096,19 +1107,24 @@ async def list_organization_dependencies(
             organization_id=d.organization_id,
             source_repository_id=d.source_repository_id,
             target_repository_id=d.target_repository_id,
+            source_repository_name=repo_name_map.get(str(d.source_repository_id)),
+            target_repository_name=repo_name_map.get(str(d.target_repository_id)),
             dependency_type=d.dependency_type,
             evidence_type=d.evidence_type,
             confidence=d.confidence,
             source_reference=d.source_reference,
             target_reference=d.target_reference,
             current_state=d.current_state,
+            state=d.current_state,
             metadata=d.metadata,
             evidence=[
                 DependencyEvidenceDTO(
                     id=e.id,
                     evidence_kind=e.evidence_kind,
+                    evidence_type=e.evidence_kind,
                     file_path=e.file_path,
                     excerpt=e.excerpt,
+                    snippet=e.excerpt,
                     commit_sha=e.commit_sha,
                 )
                 for e in evidence_list
@@ -1132,7 +1148,19 @@ async def discover_repository_dependencies(
     sc_client = SourceControlClient()
 
     all_org_repos = await sc_client.get_organization_repositories(org_id)
+    repo_name_map = {str(r.get("id")): r.get("full_name") or r.get("name", "") for r in all_org_repos}
+
     files_payload = [{"file_path": f.file_path, "content": f.content} for f in req.files]
+    if not files_payload:
+        chunk_repo = AsyncpgCodeChunkRepository(pool)
+        chunks = await chunk_repo.get_by_repository(org_id, repository_id)
+        file_map: Dict[str, List[str]] = {}
+        for c in chunks:
+            fp = c.file_path
+            if fp not in file_map:
+                file_map[fp] = []
+            file_map[fp].append(c.content)
+        files_payload = [{"file_path": fp, "content": "\n".join(parts)} for fp, parts in file_map.items()]
 
     discovered = DependencyDiscoveryEngine.discover_dependencies_from_files(
         organization_id=org_id,
@@ -1152,8 +1180,10 @@ async def discover_repository_dependencies(
             ev_dtos.append(DependencyEvidenceDTO(
                 id=saved_ev.id,
                 evidence_kind=saved_ev.evidence_kind,
+                evidence_type=saved_ev.evidence_kind,
                 file_path=saved_ev.file_path,
                 excerpt=saved_ev.excerpt,
+                snippet=saved_ev.excerpt,
                 commit_sha=saved_ev.commit_sha,
             ))
         results.append(RepositoryDependencyDTO(
@@ -1161,12 +1191,15 @@ async def discover_repository_dependencies(
             organization_id=saved.organization_id,
             source_repository_id=saved.source_repository_id,
             target_repository_id=saved.target_repository_id,
+            source_repository_name=repo_name_map.get(str(saved.source_repository_id)),
+            target_repository_name=repo_name_map.get(str(saved.target_repository_id)),
             dependency_type=saved.dependency_type,
             evidence_type=saved.evidence_type,
             confidence=saved.confidence,
             source_reference=saved.source_reference,
             target_reference=saved.target_reference,
             current_state=saved.current_state,
+            state=saved.current_state,
             metadata=saved.metadata,
             evidence=ev_dtos,
         ))

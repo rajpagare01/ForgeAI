@@ -116,11 +116,11 @@ public class PushEventHandler {
             repository.setLatestObservedSha(afterSha);
             repository.setLastDeliveryId(deliveryId);
 
-            boolean isDefaultBranchPush = ref.equals("refs/heads/" + defaultBranch) ||
-                                          ref.equals(defaultBranch) ||
-                                          ref.endsWith("/" + defaultBranch);
+            boolean isBranchPush = ref.startsWith("refs/heads/") ||
+                                   ref.equals(defaultBranch) ||
+                                   ref.endsWith("/" + defaultBranch);
 
-            if (isDefaultBranchPush) {
+            if (isBranchPush) {
                 if (aiServiceClient != null) {
                     repository.setSyncStatus(RepositorySyncStatus.SYNCING);
                     repository = repositoryRepository.save(repository);

@@ -104,6 +104,32 @@ export default function ProjectsPage() {
 
       const res = await apiClient.post<any>("/api/v1/projects", payload);
 
+      let savedRepoName = repoName.trim() || null;
+      if (savedRepoName) {
+        try {
+          const repos = await apiClient.get<any[]>("/api/v1/repositories");
+          let matchedRepoId: string | undefined;
+          if (Array.isArray(repos)) {
+            const matched = repos.find(
+              (r) =>
+                r.fullName?.toLowerCase() === savedRepoName?.toLowerCase() ||
+                r.name?.toLowerCase() === savedRepoName?.toLowerCase()
+            );
+            if (matched) {
+              matchedRepoId = matched.id;
+              savedRepoName = matched.fullName;
+            } else if (repos.length > 0) {
+              matchedRepoId = repos[0].id;
+            }
+          }
+          if (matchedRepoId) {
+            await apiClient.linkProjectRepository(res.id, matchedRepoId, savedRepoName || undefined);
+          }
+        } catch (linkErr) {
+          console.warn("Could not link repository on project creation:", linkErr);
+        }
+      }
+
       const newProj: Project = {
         id: res.id,
         organizationId: res.organizationId,
@@ -111,7 +137,7 @@ export default function ProjectsPage() {
         key: res.key,
         name: res.name,
         description: res.description || description.trim() || "",
-        repositoryName: repoName.trim() || null,
+        repositoryName: savedRepoName,
         repositoryUrl: null,
         requirementCount: 0,
         taskCount: 0,

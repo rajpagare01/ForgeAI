@@ -8,6 +8,7 @@ import com.forgeai.testing.domain.model.TestResult;
 import com.forgeai.testing.domain.model.TestResultStatus;
 import com.forgeai.testing.domain.model.TestRun;
 import com.forgeai.testing.domain.model.TestRunStatus;
+import com.forgeai.testing.domain.repository.TestCaseRepository;
 import com.forgeai.testing.domain.repository.TestResultRepository;
 import com.forgeai.testing.domain.repository.TestRunRepository;
 import com.forgeai.testing.infrastructure.outbox.OutboxService;
@@ -27,6 +28,7 @@ public class TestRunApplicationService {
 
     private final TestRunRepository testRunRepository;
     private final TestResultRepository testResultRepository;
+    private final TestCaseRepository testCaseRepository;
     private final OutboxService outboxService;
 
     private UUID resolveWorkspace(UUID workspaceId, UUID organizationId) {
@@ -183,6 +185,16 @@ public class TestRunApplicationService {
     @Transactional(readOnly = true)
     public List<TestResult> getTestResults(UUID workspaceId, UUID organizationId, UUID runId) {
         UUID effectiveWsId = resolveWorkspace(workspaceId, organizationId);
-        return testResultRepository.findAllByWorkspaceIdAndTestRunId(effectiveWsId, runId);
+        List<TestResult> results = testResultRepository.findAllByWorkspaceIdAndTestRunId(effectiveWsId, runId);
+        for (TestResult r : results) {
+            if (r.getTestCaseId() != null) {
+                testCaseRepository.findByIdAndWorkspaceId(r.getTestCaseId(), effectiveWsId).ifPresent(tc -> {
+                    r.setName(tc.getName());
+                    r.setTestCaseName(tc.getName());
+                    r.setClassname(tc.getClassname());
+                });
+            }
+        }
+        return results;
     }
 }

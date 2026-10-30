@@ -12,6 +12,7 @@ public record RequirementResponse(
         UUID workspaceId,
         UUID organizationId,
         String identifier,
+        String reqKey,
         String title,
         String description,
         RequirementStatus status,
@@ -20,11 +21,13 @@ public record RequirementResponse(
         Instant updatedAt
 ) {
     public static RequirementResponse from(Requirement requirement) {
+        if (requirement == null) return null;
         return new RequirementResponse(
                 requirement.getId(),
                 requirement.getProjectId(),
                 requirement.getWorkspaceId(),
                 requirement.getOrganizationId(),
+                requirement.getIdentifier(),
                 requirement.getIdentifier(),
                 requirement.getTitle(),
                 requirement.getDescription(),

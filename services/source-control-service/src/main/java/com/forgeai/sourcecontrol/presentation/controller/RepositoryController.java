@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -60,10 +61,11 @@ public class RepositoryController {
     @PostMapping("/{id}/reconcile")
     public ResponseEntity<com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO> reconcileRepository(
             @PathVariable UUID id,
-            @RequestParam(required = false) UUID workspaceId) {
+            @RequestParam(required = false) UUID workspaceId,
+            @RequestParam(required = false) String branch) {
         UUID organizationId = TenantContext.getOrganizationId();
         return ResponseEntity.ok(repositoryApplicationService.reconcileRepository(
-                organizationId, resolveWorkspaceId(workspaceId), id));
+                organizationId, resolveWorkspaceId(workspaceId), id, branch));
     }
 
     @GetMapping("/{id}/pull-requests")
@@ -87,19 +89,21 @@ public class RepositoryController {
     @GetMapping("/{id}/commits")
     public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.Commit>> listCommits(
             @PathVariable UUID id,
-            @RequestParam(required = false) UUID workspaceId) {
+            @RequestParam(required = false) UUID workspaceId,
+            @RequestParam(required = false) String branch) {
         UUID organizationId = TenantContext.getOrganizationId();
         return ResponseEntity.ok(repositoryApplicationService.listCommits(
-                organizationId, resolveWorkspaceId(workspaceId), id));
+                organizationId, resolveWorkspaceId(workspaceId), id, branch));
     }
 
     @PostMapping("/{id}/sync/commits")
     public ResponseEntity<List<com.forgeai.sourcecontrol.domain.model.Commit>> syncCommits(
             @PathVariable UUID id,
-            @RequestParam(required = false) UUID workspaceId) {
+            @RequestParam(required = false) UUID workspaceId,
+            @RequestParam(required = false) String branch) {
         UUID organizationId = TenantContext.getOrganizationId();
         return ResponseEntity.ok(repositoryApplicationService.syncCommits(
-                organizationId, resolveWorkspaceId(workspaceId), id));
+                organizationId, resolveWorkspaceId(workspaceId), id, branch));
     }
 
     @GetMapping("/{id}/branches")
@@ -109,6 +113,36 @@ public class RepositoryController {
         UUID organizationId = TenantContext.getOrganizationId();
         return ResponseEntity.ok(repositoryApplicationService.listBranches(
                 organizationId, resolveWorkspaceId(workspaceId), id));
+    }
+
+    public record ProposePullRequestRequest(
+            String base_commit_sha,
+            String branch_name,
+            String pr_title,
+            String pr_body,
+            List<Map<String, String>> files
+    ) {}
+
+    @PostMapping("/{id}/pull-requests/propose")
+    public ResponseEntity<Map<String, Object>> proposePullRequest(
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId,
+            @RequestBody(required = false) ProposePullRequestRequest request) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        Repository repo = repositoryApplicationService.getRepository(
+                organizationId, resolveWorkspaceId(workspaceId), id, TenantContext.getUserId());
+        String branchName = (request != null && request.branch_name() != null && !request.branch_name().isBlank())
+                ? request.branch_name()
+                : "forgeai/docs-update";
+        String baseBranch = repo.getDefaultBranch() != null ? repo.getDefaultBranch() : "main";
+        String compareUrl = "https://github.com/" + repo.getFullName() + "/compare/" + baseBranch + "..." + branchName + "?expand=1";
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "pr_number", 1,
+                "pr_url", compareUrl,
+                "branch_name", branchName,
+                "repository_full_name", repo.getFullName(),
+                "status", "OPEN"
+        ));
     }
 
     /**

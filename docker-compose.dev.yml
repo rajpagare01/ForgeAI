@@ -217,7 +217,7 @@ services:
       GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-models/text-embedding-004}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
-      ALLOW_TEST_FALLBACK: ${ALLOW_TEST_FALLBACK:-true}
+      ALLOW_TEST_FALLBACK: ${ALLOW_TEST_FALLBACK:-false}
       ENFORCE_INTERNAL_MARKER: "true"
     volumes:
       - ./services/ai-service:/app
