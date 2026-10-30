@@ -520,7 +520,7 @@ class ApproveActionRequest(BaseModel):
 
 
 class RejectActionRequest(BaseModel):
-    actor_id: str = "developer"
+    actor_id: Optional[str] = None
     reason: Optional[str] = None
 
 
@@ -664,7 +664,7 @@ class GeneratedDocumentDTO(BaseModel):
 class GenerateDocumentsRequestDTO(BaseModel):
     commit_sha: Optional[str] = None
     doc_types: Optional[List[str]] = None
-    files: Optional[List[Dict[str, str]]] = None
+    files: Optional[List[Any]] = None
 
 
 class GenerateDocumentsResponseDTO(BaseModel):

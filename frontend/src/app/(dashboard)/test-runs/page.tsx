@@ -42,6 +42,13 @@ import { formatDate } from "@/lib/utils";
 export default function TestRunsPage() {
   const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
   const [runs, setRuns] = useState<TestRun[]>([]);
+  const [repositories, setRepositories] = useState<{ id: string; fullName: string; name: string }[]>([]);
+  const [selectedRepoFilter, setSelectedRepoFilter] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("forgeai_selected_repo_id") || "ALL";
+    }
+    return "ALL";
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<TestRun | null>(null);
@@ -52,28 +59,61 @@ export default function TestRunsPage() {
     setIsLoading(true);
     setError(null);
     try {
+      // 1. Fetch repositories concurrently to map real repository names
+      let repoMap: Record<string, string> = {};
+      try {
+        const repoData = await apiClient.get<any[]>("/api/v1/repositories");
+        if (Array.isArray(repoData)) {
+          setRepositories(repoData.map((r) => ({ id: r.id, fullName: r.fullName || r.name, name: r.name })));
+          repoData.forEach((r) => {
+            if (r.id) repoMap[r.id] = r.fullName || r.name;
+          });
+        }
+      } catch (rErr) {
+        console.warn("Could not load repositories for test runs name mapping:", rErr);
+      }
+
+      // 2. Fetch test runs
       const data = await apiClient.get<any[]>("/api/v1/test-runs");
       if (Array.isArray(data)) {
-        const mapped: TestRun[] = data.map((r) => ({
-          id: r.id,
-          repositoryFullName: r.repositoryId ? `repo-${r.repositoryId.substring(0, 8)}` : "governance-core",
-          commitSha: r.commitSha || "main",
-          branch: r.branch || "main",
-          prNumber: r.prNumber ?? undefined,
-          status: (r.status === "COMPLETED" || r.status === "PASSED")
-            ? (r.failedCount > 0 ? "FAILED" : "PASSED")
-            : r.status === "FAILED"
+        const mapped: TestRun[] = data.map((r) => {
+          const passed = r.passedTests ?? r.passedCount ?? (r.conclusion === "success" || r.status === "PASSED" ? 1 : 0);
+          const failed = r.failedTests ?? r.failedCount ?? (r.conclusion === "failure" || r.status === "FAILED" ? 1 : 0);
+          const skipped = r.skippedTests ?? r.skippedCount ?? 0;
+          const total = r.totalTests ?? r.totalCount ?? (passed + failed + skipped);
+
+          const status = (r.status === "FAILED" || r.conclusion === "failure" || failed > 0)
             ? "FAILED"
-            : r.status === "RUNNING"
+            : (r.status === "COMPLETED" || r.status === "PASSED" || r.conclusion === "success")
+            ? "PASSED"
+            : r.status === "RUNNING" || r.status === "IN_PROGRESS" || r.githubRunStatus === "in_progress"
             ? "RUNNING"
-            : "QUEUED",
-          passedCount: r.passedCount ?? 0,
-          failedCount: r.failedCount ?? 0,
-          skippedCount: r.skippedCount ?? 0,
-          totalCount: (r.passedCount ?? 0) + (r.failedCount ?? 0) + (r.skippedCount ?? 0),
-          durationMs: r.durationMs ?? 1500,
-          createdAt: r.createdAt || new Date().toISOString(),
-        }));
+            : "QUEUED";
+
+          const repoName = (r.repositoryId && repoMap[r.repositoryId])
+            ? repoMap[r.repositoryId]
+            : r.repositoryFullName
+            ? r.repositoryFullName
+            : r.repositoryId
+            ? `repo-${r.repositoryId.substring(0, 8)}`
+            : "governance-core";
+
+          return {
+            id: r.id,
+            repositoryId: r.repositoryId,
+            repositoryFullName: repoName,
+            commitSha: r.headSha || r.commitSha || "main",
+            branch: r.headBranch || r.branch || "main",
+            prNumber: r.pullRequestNumber ?? r.prNumber ?? undefined,
+            status,
+            passedCount: passed,
+            failedCount: failed,
+            skippedCount: skipped,
+            totalCount: total,
+            durationMs: r.durationMs ?? 1500,
+            createdAt: r.runStartedAt || r.createdAt || new Date().toISOString(),
+          } as any;
+        });
         setRuns(mapped);
       }
     } catch (err: any) {
@@ -102,9 +142,17 @@ export default function TestRunsPage() {
     }
   };
 
-  const totalRuns = runs.length;
-  const passedRuns = runs.filter((r) => r.status === "PASSED").length;
+  const filteredRuns = selectedRepoFilter === "ALL"
+    ? runs
+    : runs.filter((r) => (r as any).repositoryId === selectedRepoFilter);
+
+  const totalRuns = filteredRuns.length;
+  const passedRuns = filteredRuns.filter((r) => r.status === "PASSED").length;
   const passRate = totalRuns > 0 ? ((passedRuns / totalRuns) * 100).toFixed(1) : "100.0";
+  const meanDurationMs = totalRuns > 0
+    ? filteredRuns.reduce((acc, r) => acc + (r.durationMs || 0), 0) / totalRuns
+    : 0;
+  const meanDurationFormatted = (meanDurationMs / 1000).toFixed(1) + "s";
 
   return (
     <div className="space-y-8">
@@ -126,6 +174,32 @@ export default function TestRunsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {repositories.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+              <Filter className="h-3 w-3 text-slate-400" />
+              <select
+                aria-label="Filter Test Runs by Repository"
+                value={selectedRepoFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedRepoFilter(val);
+                  if (typeof window !== "undefined" && val !== "ALL") {
+                    localStorage.setItem("forgeai_selected_repo_id", val);
+                  }
+                }}
+                className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
+              >
+                <option value="ALL" className="bg-slate-900 text-white">
+                  All Repositories ({repositories.length})
+                </option>
+                {repositories.map((repo) => (
+                  <option key={repo.id} value={repo.id} className="bg-slate-900 text-white">
+                    {repo.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -163,7 +237,7 @@ export default function TestRunsPage() {
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
           <div className="text-xs text-slate-400">Mean Duration</div>
-          <div className="text-xl font-bold text-sky-400 font-mono">2.8s</div>
+          <div className="text-xl font-bold text-sky-400 font-mono">{meanDurationFormatted}</div>
           <div className="text-[10px] text-slate-500">Containerized JVM suites</div>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
@@ -187,7 +261,7 @@ export default function TestRunsPage() {
               <Loader2 className="h-8 w-8 animate-spin text-emerald-400 mb-2" />
               <p className="text-xs">Fetching CI test runs from Gateway...</p>
             </div>
-          ) : runs.length === 0 ? (
+          ) : filteredRuns.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center text-slate-400">
               <CheckCircle2 className="h-10 w-10 text-slate-600 mb-3" />
               <p className="text-xs font-medium text-white">No test runs ingested yet</p>
@@ -210,7 +284,7 @@ export default function TestRunsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {runs.map((run) => (
+                {filteredRuns.map((run) => (
                   <TableRow
                     key={run.id}
                     className="cursor-pointer hover:bg-slate-800/40 transition-colors"
@@ -318,8 +392,8 @@ export default function TestRunsPage() {
                       )}
                       <div>
                         <div className="font-mono text-white font-medium">{t.testCaseName || t.name || `Test Case ${idx + 1}`}</div>
-                        {t.failureMessage && (
-                          <div className="text-[11px] text-rose-400 mt-0.5">{t.failureMessage}</div>
+                        {(t.failureMessage || t.errorMessage) && (
+                          <div className="text-[11px] text-rose-400 mt-0.5">{t.failureMessage || t.errorMessage}</div>
                         )}
                       </div>
                     </div>

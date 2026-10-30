@@ -14,8 +14,8 @@ export interface CodeContextLine {
 }
 
 export interface SecurityStatusResult {
-  status: "CLEAN" | "WARNINGS" | "HIGH RISK" | "CRITICAL / BLOCKED" | "PARTIAL EVIDENCE";
-  color: "emerald" | "yellow" | "amber" | "rose" | "blue";
+  status: "CLEAN" | "WARNINGS" | "HIGH RISK" | "CRITICAL / BLOCKED" | "PARTIAL EVIDENCE" | "NOT_ANALYZED";
+  color: "emerald" | "yellow" | "amber" | "rose" | "blue" | "slate";
   bg: string;
   description: string;
 }
@@ -84,19 +84,11 @@ export function evaluateSecurityStatus(
   dependencySecurityStatus?: string | null
 ): SecurityStatusResult {
   if (!securityAssessment) {
-    if (dependencySecurityStatus === "PARTIAL") {
-      return {
-        status: "PARTIAL EVIDENCE",
-        color: "blue",
-        bg: "bg-blue-950/20 border-blue-500/40 text-blue-300",
-        description: "Dependency CVE scanner database is unconfigured. Code-level scanning verified.",
-      };
-    }
     return {
-      status: "CLEAN",
-      color: "emerald",
-      bg: "bg-emerald-950/20 border-emerald-500/40 text-emerald-300",
-      description: "Zero security vulnerabilities detected across analyzed changes.",
+      status: "NOT_ANALYZED",
+      color: "slate",
+      bg: "bg-slate-900/60 border-slate-800 text-slate-400",
+      description: "No security assessment performed yet for this pull request.",
     };
   }
 

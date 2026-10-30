@@ -98,9 +98,16 @@ public class WorkflowRunEventHandler {
             completedAt = null;
         }
 
+        String scope = repository.getScope() != null ? repository.getScope() :
+                (organizationId != null ? "ORGANIZATION" : "PERSONAL");
+        UUID effectiveOrgId = "PERSONAL".equalsIgnoreCase(scope) ? null : organizationId;
+        UUID effectiveWsId = repository.getWorkspaceId();
+
         WorkflowRunReceivedEvent event = WorkflowRunReceivedEvent.builder()
                 .repositoryId(repository.getId())
-                .organizationId(organizationId)
+                .organizationId(effectiveOrgId)
+                .workspaceId(effectiveWsId)
+                .scope(scope)
                 .workflowRunId(githubWorkflowRunId)
                 .workflowName(workflowName)
                 .runNumber(runNumber)

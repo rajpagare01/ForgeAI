@@ -664,3 +664,207 @@ async def test_push_triggered_commit_report_and_alert_email(test_setup):
     assert retrieved.secrets_detected == 1
     assert retrieved.alert_sent is True
     assert retrieved.system_design_doc_id == system_design_doc.id
+
+
+# ============================================================================
+# ROUTER TESTS: APPLY & REJECT DOCUMENT ENDPOINTS (BUG-ABC-01 & BUG-ABC-04)
+# ============================================================================
+def test_router_apply_document_returns_valid_dto_without_attribute_error():
+    """
+    BUG-ABC-01: Verifies POST /api/v1/ai/documents/{document_id}/apply
+    unwraps the dict returned by DocumentGenerationService.apply_document()
+    and returns a valid GeneratedDocumentDTO without throwing AttributeError.
+    """
+    from unittest.mock import patch, AsyncMock
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    doc_id = uuid4()
+    org_id = uuid4()
+    repo_id = uuid4()
+
+    mock_doc = GeneratedDocument(
+        id=doc_id,
+        organization_id=org_id,
+        repository_id=repo_id,
+        doc_type=DocumentType.OVERVIEW,
+        target_path="docs/generated/OVERVIEW.md",
+        commit_sha="a1b2c3d4e5f6",
+        content_hash="abc123hash",
+        content_md="# Project Overview\nClean documentation.",
+        citations=[],
+        provenance={"generator": "OverviewCollector"},
+        status=DocumentStatus.APPLIED,
+        approved_by="developer-1",
+        pr_url="https://github.com/forgeai/repo/pull/42",
+        branch_name="forgeai/docs/overview",
+    )
+
+    mock_apply_result = {
+        "status": "APPLIED",
+        "document": mock_doc,
+        "pull_request": {
+            "pr_url": "https://github.com/forgeai/repo/pull/42",
+            "branch_name": "forgeai/docs/overview",
+        },
+    }
+
+    with patch("app.presentation.router.db_pool.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch.object(DocumentGenerationService, "apply_document", new_callable=AsyncMock) as mock_apply:
+        mock_get_pool.return_value = AsyncMock()
+        mock_apply.return_value = mock_apply_result
+
+        response = client.post(
+            f"/api/v1/ai/documents/{doc_id}/apply",
+            json={"write_mode_override": "CONTROLLED_WRITE"},
+            headers={
+                "X-Org-Id": str(org_id),
+                "X-User-Id": "developer-1",
+                "X-ForgeAI-Internal": "attested",
+            },
+        )
+
+        assert response.status_code == 200, f"Unexpected status: {response.text}"
+        data = response.json()
+        assert data["id"] == str(doc_id)
+        assert data["status"] == "APPLIED"
+        assert data["pr_url"] == "https://github.com/forgeai/repo/pull/42"
+        assert data["branch_name"] == "forgeai/docs/overview"
+        assert data["doc_type"] == "OVERVIEW"
+
+
+def test_router_reject_document_with_json_body():
+    """
+    BUG-ABC-04: Verifies POST /api/v1/ai/documents/{document_id}/reject
+    accepts a JSON body { "reason": "..." } and passes effective_reason cleanly.
+    """
+    from unittest.mock import patch, AsyncMock
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    doc_id = uuid4()
+    org_id = uuid4()
+    repo_id = uuid4()
+
+    mock_doc = GeneratedDocument(
+        id=doc_id,
+        organization_id=org_id,
+        repository_id=repo_id,
+        doc_type=DocumentType.API,
+        target_path="docs/generated/API.md",
+        commit_sha="a1b2c3d4e5f6",
+        content_hash="abc123hash",
+        content_md="# API Documentation",
+        citations=[],
+        provenance={},
+        status=DocumentStatus.REJECTED,
+        approved_by=None,
+    )
+
+    with patch("app.presentation.router.db_pool.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch.object(DocumentGenerationService, "reject_document", new_callable=AsyncMock) as mock_reject:
+        mock_get_pool.return_value = AsyncMock()
+        mock_reject.return_value = mock_doc
+
+        response = client.post(
+            f"/api/v1/ai/documents/{doc_id}/reject",
+            json={"reason": "Contains inaccurate endpoint schema"},
+            headers={
+                "X-Org-Id": str(org_id),
+                "X-User-Id": "reviewer-1",
+                "X-ForgeAI-Internal": "attested",
+            },
+        )
+
+        assert response.status_code == 200, f"Unexpected status: {response.text}"
+        data = response.json()
+        assert data["id"] == str(doc_id)
+        assert data["status"] == "REJECTED"
+        mock_reject.assert_awaited_once_with(
+            org_id,
+            doc_id,
+            actor_id="reviewer-1",
+            reason="Contains inaccurate endpoint schema",
+        )
+
+
+def test_router_validate_post_pr_test_execution_with_empty_executed_tests():
+    """
+    CI-AI-BUG-02: Verifies POST /api/v1/ai/test-validation/validate
+    synthesizes executed tests from test_strategy recommendations when executed_tests is empty,
+    and saves updated analysis without throwing UniqueViolationError.
+    """
+    from unittest.mock import patch, AsyncMock
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.domain.models import Analysis
+
+    client = TestClient(app)
+    analysis_id = uuid4()
+    org_id = uuid4()
+    repo_id = uuid4()
+
+    mock_analysis = Analysis(
+        id=analysis_id,
+        organization_id=org_id,
+        entity_type="PR",
+        entity_id=f"{repo_id}#42",
+        model_version="gemini-1.5-flash",
+        prompt_version="v1.0",
+        summary="Test Analysis",
+        risk_level="MEDIUM",
+        test_strategy={
+            "must_run": [
+                {"test_name": "AuthServiceTest", "test_file": "AuthServiceTest.java", "tier": "MUST_RUN", "confidence": "HIGH", "relationship": "DIRECT"}
+            ],
+            "should_run": [],
+            "optional": [],
+        },
+        test_effectiveness=None,
+    )
+
+    with patch("app.presentation.router.db_pool.get_pool", new_callable=AsyncMock) as mock_get_pool, \
+         patch("app.presentation.router.AsyncpgAnalysisRepository") as mock_analysis_repo_cls, \
+         patch("app.presentation.router.AsyncpgTestValidationFeedbackRepository") as mock_feedback_repo_cls, \
+         patch("app.infrastructure.client.testing_service_client.TestingServiceClient.list_test_runs", new_callable=AsyncMock) as mock_list_runs:
+        
+        mock_get_pool.return_value = AsyncMock()
+        mock_repo_inst = AsyncMock()
+        mock_repo_inst.get_by_id.return_value = mock_analysis
+        mock_repo_inst.save_analysis.return_value = mock_analysis
+        mock_analysis_repo_cls.return_value = mock_repo_inst
+
+        mock_feedback_inst = AsyncMock()
+        mock_feedback_repo_cls.return_value = mock_feedback_inst
+
+        mock_list_runs.return_value = [{
+            "id": str(uuid4()),
+            "status": "COMPLETED",
+            "conclusion": "success",
+            "workflowRunId": 12345,
+        }]
+
+        response = client.post(
+            "/api/v1/ai/test-validation/validate",
+            json={
+                "repository_id": str(repo_id),
+                "analysis_id": str(analysis_id),
+                "commit_sha": "abc1234",
+                "executed_tests": [],
+            },
+            headers={
+                "X-Org-Id": str(org_id),
+                "X-ForgeAI-Internal": "attested",
+            },
+        )
+
+        assert response.status_code == 200, f"Unexpected response: {response.text}"
+        data = response.json()
+        assert data["status"] == "VALIDATED"
+        assert data["analysis_id"] == str(analysis_id)
+        assert data["metrics"]["recommended_count"] == 1
+        assert data["metrics"]["executed_count"] == 1
+        mock_repo_inst.save_analysis.assert_awaited_once()
+

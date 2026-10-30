@@ -59,6 +59,9 @@ public class RepositoryApplicationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.forgeai.sourcecontrol.infrastructure.identity.IdentityServiceClient identityServiceClient;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.sourcecontrol.infrastructure.messaging.WorkflowRunTestingServiceForwarder workflowRunTestingServiceForwarder;
+
     public void setWorkspaceRepository(com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository) {
         this.workspaceRepository = workspaceRepository;
     }
@@ -168,22 +171,30 @@ public class RepositoryApplicationService {
     public List<Repository> listRepositories(UUID organizationId, UUID workspaceId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
+        List<Repository> result;
         if (organizationId != null && !isPersonalWorkspace(effectiveWsId)) {
             List<Repository> orgRepos = repositoryRepository.findAllByOrganizationId(organizationId);
             if (!orgRepos.isEmpty()) {
-                return orgRepos;
+                result = orgRepos;
+            } else {
+                result = java.util.Collections.emptyList();
+            }
+        } else {
+            List<Repository> wsRepos = repositoryRepository.findAllByWorkspaceId(effectiveWsId);
+            if (!wsRepos.isEmpty()) {
+                result = wsRepos.stream()
+                        .filter(r -> r.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(r.getScope()))
+                        .toList();
+            } else if (organizationId != null) {
+                result = repositoryRepository.findAllByOrganizationId(organizationId);
+            } else {
+                result = java.util.Collections.emptyList();
             }
         }
-        List<Repository> wsRepos = repositoryRepository.findAllByWorkspaceId(effectiveWsId);
-        if (!wsRepos.isEmpty()) {
-            return wsRepos.stream()
-                    .filter(r -> r.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(r.getScope()))
-                    .toList();
-        }
-        if (organizationId != null) {
-            return repositoryRepository.findAllByOrganizationId(organizationId);
-        }
-        return java.util.Collections.emptyList();
+        return result.stream()
+                .sorted(java.util.Comparator.comparing((Repository r) -> r.getFullName() != null ? r.getFullName().toLowerCase() : "")
+                        .thenComparing(r -> r.getId() != null ? r.getId() : UUID.randomUUID()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -966,6 +977,40 @@ public class RepositoryApplicationService {
         }
 
         repositoryRepository.save(repo);
+
+        if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0 && workflowRunTestingServiceForwarder != null) {
+            try {
+                var runs = gitHubAppClient.listWorkflowRuns(repo.getInstallationId(), repo.getFullName(), 5);
+                for (var r : runs) {
+                    String scope = repo.getScope() != null ? repo.getScope() : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
+                    UUID effectiveOrgId = "PERSONAL".equalsIgnoreCase(scope) ? null : repo.getOrganizationId();
+                    var event = com.forgeai.sourcecontrol.domain.event.WorkflowRunReceivedEvent.builder()
+                            .repositoryId(repo.getId())
+                            .organizationId(effectiveOrgId)
+                            .workspaceId(repo.getWorkspaceId())
+                            .scope(scope)
+                            .workflowRunId(r.id())
+                            .workflowName(r.name())
+                            .runNumber(r.runNumber())
+                            .status(r.status())
+                            .conclusion(r.conclusion())
+                            .headBranch(r.headBranch())
+                            .headSha(r.headSha())
+                            .triggerEvent(r.event())
+                            .runStartedAt(r.runStartedAt())
+                            .completedAt(r.updatedAt())
+                            .htmlUrl(r.htmlUrl())
+                            .timestamp(Instant.now())
+                            .build();
+                    workflowRunTestingServiceForwarder.onEventEnvelope(
+                            com.forgeai.sourcecontrol.domain.event.EventEnvelope.from(event, "reconcile-" + r.id(), "WorkflowRun", String.valueOf(r.id()))
+                    );
+                }
+            } catch (Exception ex) {
+                log.debug("[Reconcile] Could not query/forward workflow runs for repo {}: {}", repo.getFullName(), ex.getMessage());
+            }
+        }
+
         return getSyncStatus(organizationId, workspaceId, repositoryId);
     }
 

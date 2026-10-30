@@ -13,6 +13,7 @@ import {
   Loader2,
   Info,
   GitBranch,
+  Shield,
   ShieldCheck,
   ShieldAlert,
   FileCode,
@@ -660,8 +661,27 @@ function AiInsightsContent() {
 
   // Authorized repositories
   const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [selectedRepoId, setSelectedRepoId] = useState<string>("");
+  const [selectedRepoId, setSelectedRepoId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const qRepo = urlParams.get("repoId");
+      if (qRepo) return qRepo;
+      return localStorage.getItem("forgeai_selected_repo_id") || "";
+    }
+    return "";
+  });
   const [isLoadingRepos, setIsLoadingRepos] = useState<boolean>(true);
+
+  // Authoritative Repository Selector Handler with Persistence
+  const handleSelectRepo = useCallback((repoId: string) => {
+    setSelectedRepoId(repoId);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("forgeai_selected_repo_id", repoId);
+      const url = new URL(window.location.href);
+      url.searchParams.set("repoId", repoId);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   // Repository Continuous Synchronization state
   const [syncStatus, setSyncStatus] = useState<RepositorySyncStatus | null>(null);
@@ -768,12 +788,20 @@ function AiInsightsContent() {
     const qPr = searchParams.get("pr") || searchParams.get("prNumber");
     const qSection = searchParams.get("section");
 
-    if (qRepoId && qRepoId !== selectedRepoId) {
-      setSelectedRepoId(qRepoId);
+    if (qRepoId) {
+      setSelectedRepoId((current) => {
+        if (current !== qRepoId) {
+          if (typeof window !== "undefined") {
+            localStorage.setItem("forgeai_selected_repo_id", qRepoId);
+          }
+          return qRepoId;
+        }
+        return current;
+      });
     }
     if (qPr) {
       const parsedPr = Number(qPr);
-      if (!isNaN(parsedPr) && parsedPr !== selectedPrNumber) {
+      if (!isNaN(parsedPr)) {
         setSelectedPrNumber(parsedPr);
       }
     }
@@ -783,7 +811,7 @@ function AiInsightsContent() {
         setActiveHealthSection(qSection as any);
       }
     }
-  }, [searchParams, selectedRepoId, selectedPrNumber]);
+  }, [searchParams]);
 
   // On-Demand Secret Scanning State
   const [isSecretScanning, setIsSecretScanning] = useState<boolean>(false);
@@ -814,6 +842,67 @@ function AiInsightsContent() {
   const [isExplainingFinding, setIsExplainingFinding] = useState<boolean>(false);
   const [aiExplanation, setAiExplanation] = useState<ExplainFindingResponseDTO | null>(null);
   const [explainError, setExplainError] = useState<string | null>(null);
+
+  // AI Service Unavailable & Last Analysis Persistence State
+  const [isUsingLastAnalysis, setIsUsingLastAnalysis] = useState<boolean>(false);
+  const [lastAnalysisTimestamp, setLastAnalysisTimestamp] = useState<string | null>(null);
+  const [aiApiErrorModal, setAiApiErrorModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    hasLastAnalysis: boolean;
+    timestamp?: string;
+    repoName?: string;
+    prNumber?: number | string;
+    errorMessage?: string;
+  }>({
+    isOpen: false,
+    message: "",
+    hasLastAnalysis: false,
+  });
+
+  const triggerAiApiUnavailablePopup = useCallback((customErr?: string) => {
+    let cached: any = null;
+    try {
+      if (selectedRepoId && selectedPrNumber) {
+        const specificRaw = localStorage.getItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`);
+        if (specificRaw) cached = JSON.parse(specificRaw);
+      }
+      if (!cached && selectedRepoId) {
+        const repoRaw = localStorage.getItem(`forgeai_last_analysis_${selectedRepoId}`);
+        if (repoRaw) cached = JSON.parse(repoRaw);
+      }
+      if (!cached) {
+        const globalRaw = localStorage.getItem(`forgeai_last_analysis_global`);
+        if (globalRaw) cached = JSON.parse(globalRaw);
+      }
+    } catch (e) {
+      console.warn("Could not read cached analysis from localStorage:", e);
+    }
+
+    if (cached && cached.data) {
+      setPrAnalysisResult(cached.data);
+      setIsUsingLastAnalysis(true);
+      const tsStr = cached.timestamp ? new Date(cached.timestamp).toLocaleString() : "Previous session";
+      setLastAnalysisTimestamp(tsStr);
+      setAiApiErrorModal({
+        isOpen: true,
+        message: "AI API is not working. This is the last analysis by AI service.",
+        hasLastAnalysis: true,
+        timestamp: tsStr,
+        repoName: cached.repoName,
+        prNumber: cached.prNumber || selectedPrNumber,
+        errorMessage: customErr || "The AI Service is currently unavailable or timed out.",
+      });
+    } else {
+      setIsUsingLastAnalysis(false);
+      setAiApiErrorModal({
+        isOpen: true,
+        message: "AI API is not working. No previous analysis is available.",
+        hasLastAnalysis: false,
+        errorMessage: customErr || "The AI Service is currently unavailable or timed out.",
+      });
+    }
+  }, [selectedRepoId, selectedPrNumber]);
 
   useEffect(() => {
     if (prAnalysisResult?.engineering_actions && prAnalysisResult.engineering_actions.length > 0) {
@@ -977,17 +1066,50 @@ function AiInsightsContent() {
           openPullRequestsCount: r.openPullRequestsCount ?? 0,
           lastSyncAt: r.lastSyncAt || r.updatedAt || new Date().toISOString(),
         }));
+        // Deterministic alphabetical sort so dropdown order never jumps
+        mapped.sort((a, b) => a.fullName.localeCompare(b.fullName));
         setRepositories(mapped);
-        if (mapped.length > 0 && !selectedRepoId) {
-          setSelectedRepoId(mapped[0].id);
-        }
+
+        // Deterministically preserve or select active repository
+        setSelectedRepoId((currentSelected) => {
+          // 1. If currently selected repository is valid in the loaded list, KEEP IT!
+          if (currentSelected && mapped.some((r) => r.id === currentSelected)) {
+            if (typeof window !== "undefined") {
+              localStorage.setItem("forgeai_selected_repo_id", currentSelected);
+            }
+            return currentSelected;
+          }
+          // 2. Check query param ?repoId=
+          if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search);
+            const qRepoId = urlParams.get("repoId");
+            if (qRepoId && mapped.some((r) => r.id === qRepoId)) {
+              localStorage.setItem("forgeai_selected_repo_id", qRepoId);
+              return qRepoId;
+            }
+            // 3. Check localStorage
+            const savedRepoId = localStorage.getItem("forgeai_selected_repo_id");
+            if (savedRepoId && mapped.some((r) => r.id === savedRepoId)) {
+              return savedRepoId;
+            }
+          }
+          // 4. Default to first repository in sorted list
+          if (mapped.length > 0) {
+            const defaultId = mapped[0].id;
+            if (typeof window !== "undefined") {
+              localStorage.setItem("forgeai_selected_repo_id", defaultId);
+            }
+            return defaultId;
+          }
+          return "";
+        });
       }
     } catch (err: any) {
       console.warn("Could not fetch authorized repositories:", err);
     } finally {
       setIsLoadingRepos(false);
     }
-  }, [selectedRepoId]);
+  }, []);
 
   useEffect(() => {
     fetchRepositories();
@@ -1125,14 +1247,25 @@ function AiInsightsContent() {
     setDocActionError(null);
     setDocActionSuccess(null);
     try {
+      const filesPayload = Array.isArray(prChangeSet?.files) && prChangeSet.files.length > 0
+        ? prChangeSet.files.map((f: any) => ({
+            file_path: f.filename || f.file_path,
+            status: f.status || "modified",
+            content: f.content || f.patch || "",
+          }))
+        : undefined;
       const resp = await apiClient.post<any>(
         `/api/v1/ai/repositories/${selectedRepoId}/documents/generate`,
-        { commit_sha: prChangeSet?.headSha || "HEAD" }
+        {
+          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
+          files: filesPayload,
+        }
       );
       setDocActionSuccess(`Generated ${resp?.documents?.length || 5} repository documents successfully.`);
       await fetchDocuments();
     } catch (err: any) {
       setDocActionError(err?.message || "Failed to generate repository documents.");
+      triggerAiApiUnavailablePopup(err?.message || "AI documentation generation failed.");
     } finally {
       setIsGeneratingDocs(false);
     }
@@ -1196,14 +1329,23 @@ function AiInsightsContent() {
     if (!selectedRepoId) return;
     setIsOnDemandAnalyzing(true);
     try {
+      const filesPayload = Array.isArray(prChangeSet?.files) && prChangeSet.files.length > 0
+        ? prChangeSet.files.map((f: any) => ({
+            file_path: f.filename || f.file_path,
+            status: f.status || "modified",
+            content: f.content || f.patch || "",
+          }))
+        : undefined;
+
       await apiClient.post(
         `/api/v1/ai/repositories/${selectedRepoId}/analyze-commit`,
         {
-          commit_sha: prChangeSet?.headSha || "HEAD",
+          commit_sha: prChangeSet?.headSha || syncStatus?.latestObservedSha || "HEAD",
           ref: prChangeSet?.sourceBranch || "main",
           author_name: prChangeSet?.author || "Developer",
           author_email: "developer@forgeai.local",
           commit_message: prChangeSet?.title || "Manual commit analysis",
+          files: filesPayload,
           generate_docs: true,
         }
       );
@@ -1388,11 +1530,36 @@ function AiInsightsContent() {
 
       const result = await apiClient.post<any>("/api/v1/ai/pr-analysis", payload);
       setPrAnalysisResult(result);
+      setIsUsingLastAnalysis(false);
       setLifecycleStep("complete");
+
+      // Cache successful analysis in localStorage for offline resiliency
+      try {
+        const repoObj = repositories.find((r) => r.id === selectedRepoId);
+        const cacheObj = {
+          timestamp: new Date().toISOString(),
+          repoId: selectedRepoId,
+          repoName: repoObj?.fullName || "Selected Repository",
+          prNumber: selectedPrNumber,
+          data: result,
+        };
+        if (selectedRepoId && selectedPrNumber) {
+          localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`, JSON.stringify(cacheObj));
+        }
+        if (selectedRepoId) {
+          localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}`, JSON.stringify(cacheObj));
+        }
+        localStorage.setItem(`forgeai_last_analysis_global`, JSON.stringify(cacheObj));
+      } catch (cacheErr) {
+        console.warn("Failed to cache analysis to localStorage:", cacheErr);
+      }
     } catch (err: any) {
       console.warn("PR analysis failed:", err);
-      setPrError(err?.message || "PR Analysis request failed on AI Service.");
+      const errMsg = err?.message || "PR Analysis request failed on AI Service.";
+      setPrError(errMsg);
       setLifecycleStep("idle");
+      // Trigger AI API Unavailable popup with fallback to last analysis
+      triggerAiApiUnavailablePopup(errMsg);
     } finally {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -1472,6 +1639,7 @@ function AiInsightsContent() {
     else if (res.status === "HIGH RISK") icon = AlertTriangle;
     else if (res.status === "PARTIAL EVIDENCE") icon = Info;
     else if (res.status === "WARNINGS") icon = AlertCircle;
+    else if (res.status === "NOT_ANALYZED") icon = Shield;
     return {
       ...res,
       icon,
@@ -1505,6 +1673,7 @@ function AiInsightsContent() {
       setSecretScanResult(res);
     } catch (err: any) {
       console.warn("Secret scan failed:", err);
+      triggerAiApiUnavailablePopup(err?.message || "Secret scan failed on AI Service.");
     } finally {
       setIsSecretScanning(false);
     }
@@ -1535,6 +1704,7 @@ function AiInsightsContent() {
       }
     } catch (err: any) {
       console.warn("Repository scan failed:", err);
+      triggerAiApiUnavailablePopup(err?.message || "Repository scan failed on AI Service.");
     } finally {
       setIsRepoScanning(false);
     }
@@ -1571,6 +1741,7 @@ function AiInsightsContent() {
       }
     } catch (err: any) {
       console.warn("Re-scan failed:", err);
+      triggerAiApiUnavailablePopup(err?.message || "Re-scan failed on AI Service.");
     } finally {
       setIsRescanning(false);
     }
@@ -1680,9 +1851,29 @@ function AiInsightsContent() {
             }
             return current;
           });
+          setIsUsingLastAnalysis(false);
+
+          // Cache in localStorage
+          try {
+            const repoObj = repositories.find((r) => r.id === selectedRepoId);
+            const cacheItem = {
+              timestamp: latest.created_at || new Date().toISOString(),
+              repoId: selectedRepoId,
+              repoName: repoObj?.fullName || "Selected Repository",
+              prNumber: selectedPrNumber,
+              data: latest,
+            };
+            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`, JSON.stringify(cacheItem));
+            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}`, JSON.stringify(cacheItem));
+            localStorage.setItem(`forgeai_last_analysis_global`, JSON.stringify(cacheItem));
+          } catch (cacheErr) {
+            console.warn("Failed to cache restored analysis:", cacheErr);
+          }
         }
       } catch (err: any) {
-        console.warn("Could not restore saved PR analysis:", err);
+        console.warn("Could not restore saved PR analysis from AI Service:", err);
+        // Fallback to cached analysis and notify user of AI API offline status
+        triggerAiApiUnavailablePopup(err?.message);
       }
     };
 
@@ -1720,13 +1911,13 @@ function AiInsightsContent() {
           <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 shadow-sm">
             <FolderGit2 className="h-4 w-4 text-purple-400" />
             <span className="text-xs text-slate-400">Repository:</span>
-            {isLoadingRepos ? (
+            {isLoadingRepos && repositories.length === 0 ? (
               <Loader2 className="h-3 w-3 animate-spin text-purple-400" />
             ) : (
               <select
                 aria-label="Authorized Repository Selection"
                 value={selectedRepoId}
-                onChange={(e) => setSelectedRepoId(e.target.value)}
+                onChange={(e) => handleSelectRepo(e.target.value)}
                 className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
               >
                 {repositories.length === 0 ? (
@@ -1843,8 +2034,9 @@ function AiInsightsContent() {
       {/* ========================================================================= */}
       {/* SECURITY STATUS BANNER (PHASE 4 - AUTHORITATIVE TRUTHFUL STATUS)          */}
       {/* ========================================================================= */}
-      {(() => {
+      {prAnalysisResult && (() => {
         const secStatus = getSecurityStatus();
+        if (secStatus.status === "NOT_ANALYZED") return null;
         const SecIcon = secStatus.icon;
         return (
           <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all shadow-lg ${secStatus.bg}`}>
@@ -1923,6 +2115,57 @@ function AiInsightsContent() {
       {/* PHASE 21: DEVELOPER DASHBOARD SUMMARY & ENGINEERING HEALTH CENTER         */}
       {/* ========================================================================= */}
       {(() => {
+        if (!prAnalysisResult) {
+          return (
+            <Card className="border-indigo-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/20 shadow-xl">
+              <CardHeader className="pb-3 border-b border-slate-800/80">
+                <div className="flex items-center gap-2.5">
+                  <Activity className="h-5 w-5 text-indigo-400" />
+                  <CardTitle className="text-base text-white tracking-wide">
+                    Engineering Health Center
+                  </CardTitle>
+                  <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                    Authoritative Code Quality, Security & Readiness
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="py-7 text-center space-y-3">
+                <div className="inline-flex p-3 rounded-full bg-slate-900 border border-slate-800 text-slate-400">
+                  <Sparkles className="h-6 w-6 text-indigo-400" />
+                </div>
+                <div className="text-sm font-semibold text-slate-200">
+                  Awaiting Pull Request Analysis
+                </div>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Deterministic metrics for Security, Reliability, Test Sufficiency, Dependency Vulnerabilities, and Merge Readiness will be calculated as soon as a pull request is analyzed.
+                </p>
+                {selectedPrNumber && (
+                  <div className="pt-2">
+                    <Button
+                      size="sm"
+                      onClick={handleAnalyzePr}
+                      disabled={isAnalyzingPr}
+                      className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
+                    >
+                      {isAnalyzingPr ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          Analyzing Pull Request...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5 text-indigo-200" />
+                          Analyze Pull Request #{selectedPrNumber}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        }
+
         const sec = prAnalysisResult?.security_assessment;
         const rel = prAnalysisResult?.reliability_assessment;
         const merge = prAnalysisResult?.merge_readiness;
@@ -2733,6 +2976,41 @@ function AiInsightsContent() {
           {/* Analysis Results */}
           {prAnalysisResult && (
             <div className="space-y-6">
+              {/* Fallback Banner when viewing last cached analysis */}
+              {isUsingLastAnalysis && (
+                <div className="p-4 rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-400 shrink-0">
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                        <span>Offline Mode: Viewing Last Analysis by AI Service</span>
+                        {lastAnalysisTimestamp && (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-950/60 text-amber-300 font-mono">
+                            Recorded: {lastAnalysisTimestamp}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-300 mt-1">
+                        The live AI API is currently not responding. Displaying the last analysis performed by ForgeAI. Live real-time derivation is paused.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleAnalyzePr}
+                      disabled={isAnalyzingPr}
+                      className="h-8 text-xs border-amber-500/40 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60"
+                    >
+                      {isAnalyzingPr ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5 text-amber-400" />}
+                      Retry AI API
+                    </Button>
+                  </div>
+                </div>
+              )}
               <Card className="border-purple-500/30 bg-purple-950/10 shadow-xl">
                 <CardHeader className="pb-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -7182,6 +7460,90 @@ function AiInsightsContent() {
                 className="text-xs px-4"
               >
                 Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: AI API UNAVAILABLE / LAST ANALYSIS NOTIFICATION MODAL             */}
+      {/* ========================================================================= */}
+      {aiApiErrorModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl border border-amber-500/40 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-400">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    AI Service Notification
+                  </h3>
+                  <div className="text-[11px] font-mono text-slate-400">
+                    AI Service Status: Unreachable / Offline
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiApiErrorModal((prev) => ({ ...prev, isOpen: false }))}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-950/30 text-amber-200">
+                <p className="text-sm font-semibold text-amber-200">
+                  {aiApiErrorModal.message}
+                </p>
+                {aiApiErrorModal.hasLastAnalysis && (
+                  <p className="text-xs text-amber-300/90 mt-2 font-mono">
+                    Showing last analysis recorded on: <span className="font-bold underline">{aiApiErrorModal.timestamp}</span>
+                    {aiApiErrorModal.repoName && <span> for <strong>{aiApiErrorModal.repoName}</strong></span>}
+                    {aiApiErrorModal.prNumber && <span> (PR #{aiApiErrorModal.prNumber})</span>}.
+                  </p>
+                )}
+              </div>
+
+              {aiApiErrorModal.errorMessage && (
+                <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-400">
+                  <span className="text-slate-500">Error trace:</span> {aiApiErrorModal.errorMessage}
+                </div>
+              )}
+
+              <p className="text-xs text-slate-400 leading-relaxed">
+                {aiApiErrorModal.hasLastAnalysis
+                  ? "ForgeAI automatically preserved your last successful analysis from cache so you can continue reviewing security assessments, AST graphs, and test recommendations without disruption."
+                  : "The AI engine is currently unreachable. Please verify that your AI Service Docker container is running and healthy."}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAiApiErrorModal((prev) => ({ ...prev, isOpen: false }))}
+                className="text-xs px-4 border-slate-700 hover:bg-slate-900 text-slate-300"
+              >
+                {aiApiErrorModal.hasLastAnalysis ? "Inspect Last Analysis" : "Close"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setAiApiErrorModal((prev) => ({ ...prev, isOpen: false }));
+                  handleAnalyzePr();
+                }}
+                disabled={isAnalyzingPr || !selectedRepoId || !selectedPrNumber}
+                className="text-xs px-4 bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5"
+              >
+                {isAnalyzingPr ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
+                Retry AI API
               </Button>
             </div>
           </div>

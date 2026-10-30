@@ -523,6 +523,87 @@ public class GitHubAppClient {
         }
     }
 
+    public record GitHubWorkflowRun(
+            Long id,
+            String name,
+            Integer runNumber,
+            String status,
+            String conclusion,
+            String headBranch,
+            String headSha,
+            String event,
+            Instant runStartedAt,
+            Instant updatedAt,
+            String htmlUrl
+    ) {}
+
+    public List<GitHubWorkflowRun> listWorkflowRuns(Long installationId, String fullName, int limit) {
+        config.requireConfigured();
+        String token = getInstallationToken(installationId);
+        int perPage = Math.max(1, Math.min(limit, 30));
+        String url = GITHUB_API + "/repos/" + fullName + "/actions/runs?per_page=" + perPage;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(20))
+                .build();
+
+        try {
+            HttpResponse<String> response = executeRaw(request, "list workflow runs " + fullName);
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return Collections.emptyList();
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode runsNode = root.path("workflow_runs");
+            if (!runsNode.isArray()) {
+                return Collections.emptyList();
+            }
+            List<GitHubWorkflowRun> runs = new ArrayList<>();
+            for (JsonNode node : runsNode) {
+                Long id = node.path("id").asLong(0L);
+                if (id == 0L) continue;
+                String name = node.path("name").asText("CI");
+                Integer runNumber = node.hasNonNull("run_number") ? node.path("run_number").asInt() : 1;
+                String status = node.path("status").asText("completed");
+                String conclusion = node.hasNonNull("conclusion") ? node.path("conclusion").asText(null) : null;
+                String headBranch = node.path("head_branch").asText("main");
+                String headSha = node.path("head_sha").asText(null);
+                String triggerEvent = node.path("event").asText("push");
+                String htmlUrl = node.path("html_url").asText(null);
+
+                Instant runStartedAt = null;
+                String startedAtStr = node.path("run_started_at").asText(null);
+                if (startedAtStr != null && !startedAtStr.isBlank()) {
+                    try {
+                        runStartedAt = Instant.parse(startedAtStr);
+                    } catch (Exception ignored) {}
+                }
+
+                Instant updatedAt = null;
+                String updatedAtStr = node.path("updated_at").asText(null);
+                if (updatedAtStr != null && !updatedAtStr.isBlank()) {
+                    try {
+                        updatedAt = Instant.parse(updatedAtStr);
+                    } catch (Exception ignored) {}
+                }
+
+                runs.add(new GitHubWorkflowRun(
+                        id, name, runNumber, status, conclusion,
+                        headBranch, headSha, triggerEvent, runStartedAt, updatedAt, htmlUrl
+                ));
+            }
+            return runs;
+        } catch (Exception e) {
+            log.warn("[GitHub] Failed to list workflow runs for {}: {}", fullName, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
     public List<GitHubBranchMetadata> listBranches(Long installationId, String fullName) {
         config.requireConfigured();
         String token = getInstallationToken(installationId);

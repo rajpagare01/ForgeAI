@@ -25,6 +25,9 @@ public class GitHubCommitPollingScheduler {
     private final GitHubAppClient gitHubAppClient;
     private final GitHubAppConfig gitHubAppConfig;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.sourcecontrol.infrastructure.messaging.WorkflowRunTestingServiceForwarder workflowRunTestingServiceForwarder;
+
     @Scheduled(
             fixedDelayString = "${forgeai.github.commit-poll-interval-ms:30000}",
             initialDelayString = "${forgeai.github.commit-poll-initial-delay-ms:15000}"
@@ -73,6 +76,45 @@ public class GitHubCommitPollingScheduler {
                 }
             } catch (Exception e) {
                 log.warn("[Poller] Error polling repository {}: {}", repo.getFullName(), e.getMessage());
+            }
+
+            try {
+                // Poll and ingest workflow runs into testing-service for localhost/dev
+                if (workflowRunTestingServiceForwarder != null) {
+                    List<GitHubAppClient.GitHubWorkflowRun> workflowRuns = gitHubAppClient.listWorkflowRuns(
+                            repo.getInstallationId(),
+                            repo.getFullName(),
+                            5
+                    );
+                    for (var r : workflowRuns) {
+                        String scope = repo.getScope() != null ? repo.getScope() :
+                                (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
+                        UUID effectiveOrgId = "PERSONAL".equalsIgnoreCase(scope) ? null : repo.getOrganizationId();
+                        var event = com.forgeai.sourcecontrol.domain.event.WorkflowRunReceivedEvent.builder()
+                                .repositoryId(repo.getId())
+                                .organizationId(effectiveOrgId)
+                                .workspaceId(repo.getWorkspaceId())
+                                .scope(scope)
+                                .workflowRunId(r.id())
+                                .workflowName(r.name())
+                                .runNumber(r.runNumber())
+                                .status(r.status())
+                                .conclusion(r.conclusion())
+                                .headBranch(r.headBranch())
+                                .headSha(r.headSha())
+                                .triggerEvent(r.event())
+                                .runStartedAt(r.runStartedAt())
+                                .completedAt(r.updatedAt())
+                                .htmlUrl(r.htmlUrl())
+                                .timestamp(java.time.Instant.now())
+                                .build();
+                        workflowRunTestingServiceForwarder.onEventEnvelope(
+                                com.forgeai.sourcecontrol.domain.event.EventEnvelope.from(event, "poll-" + r.id(), "WorkflowRun", String.valueOf(r.id()))
+                        );
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[Poller] Error polling workflow runs for repository {}: {}", repo.getFullName(), e.getMessage());
             }
         }
     }

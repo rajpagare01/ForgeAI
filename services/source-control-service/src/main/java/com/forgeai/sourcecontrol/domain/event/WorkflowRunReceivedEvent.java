@@ -27,6 +27,12 @@ public class WorkflowRunReceivedEvent implements DomainEvent {
     /** ForgeAI organization UUID — derived from the installation mapping, never from webhook JSON. */
     private UUID organizationId;
 
+    /** ForgeAI workspace UUID. */
+    private UUID workspaceId;
+
+    /** Scope: PERSONAL or ORGANIZATION. */
+    private String scope;
+
     /** Real GitHub workflow_run id (bigint from GitHub). */
     private Long workflowRunId;
 

@@ -74,6 +74,7 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
     public List<Repository> findAllByOrganizationId(UUID organizationId) {
         return jpaRepository.findAllByOrganizationId(organizationId).stream()
                 .map(mapper::toDomain)
+                .sorted(java.util.Comparator.comparing(r -> r.getFullName() != null ? r.getFullName().toLowerCase() : ""))
                 .toList();
     }
 
@@ -81,6 +82,7 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
     public List<Repository> findAllByWorkspaceId(UUID workspaceId) {
         return jpaRepository.findAllByWorkspaceId(workspaceId).stream()
                 .map(mapper::toDomain)
+                .sorted(java.util.Comparator.comparing(r -> r.getFullName() != null ? r.getFullName().toLowerCase() : ""))
                 .toList();
     }
 

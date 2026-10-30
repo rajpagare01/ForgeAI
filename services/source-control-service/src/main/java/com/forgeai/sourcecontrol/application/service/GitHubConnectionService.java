@@ -72,12 +72,18 @@ public class GitHubConnectionService {
 
         GitHubInstallation activeInst = instOpt.orElse(null);
 
-        // Fallback for personal workspace: If active installation exists in DB, recover it
+        // Fallback for personal workspace: If active installation exists in DB, recover it only if it matches caller
         if (activeInst == null && isPersonal) {
             for (GitHubInstallation inst : installationRepository.findAll()) {
-                if (inst.getStatus() == InstallationStatus.ACTIVE) {
-                    activeInst = inst;
-                    break;
+                if (inst.getStatus() == InstallationStatus.ACTIVE && inst.getOrganizationId() == null) {
+                    boolean matchesCaller = (callerUserId != null && callerUserId.equals(inst.getClaimedByUserId()))
+                            || (userGitHubId != null && userGitHubId.equals(inst.getAccountId()))
+                            || (userGitHubLogin != null && userGitHubLogin.equalsIgnoreCase(inst.getAccountLogin()))
+                            || (effectiveWsId != null && effectiveWsId.equals(inst.getWorkspaceId()));
+                    if (matchesCaller) {
+                        activeInst = inst;
+                        break;
+                    }
                 }
             }
         }

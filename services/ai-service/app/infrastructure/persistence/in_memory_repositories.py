@@ -159,6 +159,10 @@ class InMemoryAnalysisRepository(AnalysisRepository):
         self.analyses: List[Analysis] = []
 
     async def save_analysis(self, analysis: Analysis) -> Analysis:
+        for i, a in enumerate(self.analyses):
+            if a.id == analysis.id:
+                self.analyses[i] = analysis
+                return analysis
         self.analyses.append(analysis)
         return analysis
 
@@ -175,7 +179,7 @@ class InMemoryAnalysisRepository(AnalysisRepository):
                 a for a in self.analyses
                 if a.organization_id == org_id
                 and a.entity_type == entity_type
-                and (a.entity_id == entity_id or a.entity_id.endswith(f"#{entity_id}"))
+                and (a.entity_id == entity_id or a.entity_id.endswith(f"#{entity_id}") or a.entity_id.startswith(f"{entity_id}#"))
             ]
         return [
             a for a in self.analyses

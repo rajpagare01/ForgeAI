@@ -416,7 +416,23 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
                 test_strategy, test_effectiveness, merge_readiness, review_findings,
                 security_assessment, reliability_assessment, unified_risk,
                 engineering_actions, remediation_summary, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27);
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+            ON CONFLICT (id) DO UPDATE SET
+                summary = EXCLUDED.summary,
+                risk_level = EXCLUDED.risk_level,
+                risk_score = EXCLUDED.risk_score,
+                confidence = EXCLUDED.confidence,
+                risk_factors = EXCLUDED.risk_factors,
+                impact_metadata = EXCLUDED.impact_metadata,
+                test_strategy = EXCLUDED.test_strategy,
+                test_effectiveness = EXCLUDED.test_effectiveness,
+                merge_readiness = EXCLUDED.merge_readiness,
+                review_findings = EXCLUDED.review_findings,
+                security_assessment = EXCLUDED.security_assessment,
+                reliability_assessment = EXCLUDED.reliability_assessment,
+                unified_risk = EXCLUDED.unified_risk,
+                engineering_actions = EXCLUDED.engineering_actions,
+                remediation_summary = EXCLUDED.remediation_summary;
         """
         async with self.pool.acquire() as conn:
             await conn.execute(
@@ -458,7 +474,7 @@ class AsyncpgAnalysisRepository(AnalysisRepository):
             where_clause = "WHERE organization_id = $1 AND entity_type = $2"
             params = [org_id, entity_type]
         elif entity_type == "PR" and "#" not in entity_id:
-            where_clause = "WHERE organization_id = $1 AND entity_type = $2 AND (entity_id = $3 OR entity_id LIKE '%#' || $3)"
+            where_clause = "WHERE organization_id = $1 AND entity_type = $2 AND (entity_id = $3 OR entity_id LIKE '%#' || $3 OR entity_id LIKE $3 || '#%')"
             params = [org_id, entity_type, entity_id]
         else:
             where_clause = "WHERE organization_id = $1 AND entity_type = $2 AND entity_id = $3"
