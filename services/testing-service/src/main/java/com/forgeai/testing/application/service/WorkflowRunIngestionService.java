@@ -48,8 +48,7 @@ import java.util.UUID;
 public class WorkflowRunIngestionService {
 
     /** Ordered lifecycle states. Higher index = newer state. */
-    private static final java.util.List<String> STATUS_ORDER =
-            java.util.List.of("queued", "in_progress", "completed");
+    private static final java.util.List<String> STATUS_ORDER = java.util.List.of("queued", "in_progress", "completed");
 
     private final TestRunRepository testRunRepository;
     private final TestingMetrics testingMetrics;
@@ -61,8 +60,8 @@ public class WorkflowRunIngestionService {
 
     @Autowired
     public WorkflowRunIngestionService(TestRunRepository testRunRepository,
-                                       @Autowired(required = false) TestingMetrics testingMetrics,
-                                       @Autowired(required = false) StructuredLogger structuredLogger) {
+            @Autowired(required = false) TestingMetrics testingMetrics,
+            @Autowired(required = false) StructuredLogger structuredLogger) {
         this.testRunRepository = testRunRepository;
         this.testingMetrics = testingMetrics;
         this.structuredLogger = structuredLogger;
@@ -71,7 +70,8 @@ public class WorkflowRunIngestionService {
     /**
      * Upsert a TestRun from a {@code workflow_run} delivery.
      *
-     * @param request the ingestion request (org ID is trusted / installation-derived)
+     * @param request the ingestion request (org ID is trusted /
+     *                installation-derived)
      * @return the created or reconciled {@link TestRun}
      */
     @Transactional
@@ -80,15 +80,16 @@ public class WorkflowRunIngestionService {
             throw new IllegalArgumentException("repositoryId is required");
         }
         if (request.getOrganizationId() == null && request.getWorkspaceId() == null) {
-            throw new IllegalArgumentException("workspaceId or organizationId is required (must be installation-derived)");
+            throw new IllegalArgumentException(
+                    "workspaceId or organizationId is required (must be installation-derived)");
         }
         if (request.getWorkflowRunId() == null || request.getWorkflowRunId() == 0L) {
             throw new IllegalArgumentException("workflowRunId must be a non-zero GitHub workflow_run id");
         }
 
         UUID effectiveWsId = request.getWorkspaceId() != null ? request.getWorkspaceId() : request.getOrganizationId();
-        String effectiveScope = request.getScope() != null ? request.getScope() :
-                (request.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
+        String effectiveScope = request.getScope() != null ? request.getScope()
+                : (request.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
 
         if (testingMetrics != null) {
             testingMetrics.recordWorkflowRunReceived();
@@ -111,7 +112,8 @@ public class WorkflowRunIngestionService {
 
             long computedDurationMs = 0L;
             if (request.getRunStartedAt() != null && request.getCompletedAt() != null) {
-                computedDurationMs = Math.max(0L, java.time.Duration.between(request.getRunStartedAt(), request.getCompletedAt()).toMillis());
+                computedDurationMs = Math.max(0L,
+                        java.time.Duration.between(request.getRunStartedAt(), request.getCompletedAt()).toMillis());
             }
 
             int totalTests = 0;
@@ -152,28 +154,29 @@ public class WorkflowRunIngestionService {
                     .build();
 
             TestRun saved = testRunRepository.save(run);
-            log.info("Created TestRun for workflow_run: id={}, orgId={}, repoId={}, workflowRunId={}, status={}, conclusion={}",
+            log.info(
+                    "Created TestRun for workflow_run: id={}, orgId={}, repoId={}, workflowRunId={}, status={}, conclusion={}",
                     saved.getId(), request.getOrganizationId(), request.getRepositoryId(),
                     request.getWorkflowRunId(), request.getStatus(), request.getConclusion());
 
             if (domainStatus == TestRunStatus.PASSED) {
-                if (testingMetrics != null) testingMetrics.recordWorkflowRunCompleted();
+                if (testingMetrics != null)
+                    testingMetrics.recordWorkflowRunCompleted();
                 if (structuredLogger != null) {
                     structuredLogger.info("testing.workflow.completed", Map.of(
                             "workflowRunId", request.getWorkflowRunId(),
                             "repositoryId", String.valueOf(request.getRepositoryId()),
-                            "conclusion", String.valueOf(request.getConclusion())
-                    ));
+                            "conclusion", String.valueOf(request.getConclusion())));
                 }
             } else if (domainStatus == TestRunStatus.FAILED) {
-                if (testingMetrics != null) testingMetrics.recordWorkflowRunFailed();
+                if (testingMetrics != null)
+                    testingMetrics.recordWorkflowRunFailed();
                 if (structuredLogger != null) {
                     structuredLogger.logEvent("WARN", "testing.workflow.failed", "workflow_run", "FAILURE", null, null,
                             "Workflow run failed: " + request.getWorkflowRunId(), Map.of(
                                     "workflowRunId", request.getWorkflowRunId(),
                                     "repositoryId", String.valueOf(request.getRepositoryId()),
-                                    "conclusion", String.valueOf(request.getConclusion())
-                            ));
+                                    "conclusion", String.valueOf(request.getConclusion())));
                 }
             }
 
@@ -195,10 +198,10 @@ public class WorkflowRunIngestionService {
                             "workflowRunId", request.getWorkflowRunId(),
                             "currentStatus", String.valueOf(currentGithubStatus),
                             "incomingStatus", String.valueOf(incomingStatus),
-                            "repositoryId", String.valueOf(request.getRepositoryId())
-                    ));
+                            "repositoryId", String.valueOf(request.getRepositoryId())));
                 }
-                log.info("Skipping stale workflow_run event: workflowRunId={}, currentStatus={}, incomingStatus={} (stale, would regress state)",
+                log.info(
+                        "Skipping stale workflow_run event: workflowRunId={}, currentStatus={}, incomingStatus={} (stale, would regress state)",
                         request.getWorkflowRunId(), currentGithubStatus, incomingStatus);
                 return existing;
             }
@@ -218,7 +221,8 @@ public class WorkflowRunIngestionService {
                 existing.setHtmlUrl(request.getHtmlUrl());
             }
             // Sync domain status
-            String effectiveConclusion = request.getConclusion() != null ? request.getConclusion() : existing.getConclusion();
+            String effectiveConclusion = request.getConclusion() != null ? request.getConclusion()
+                    : existing.getConclusion();
             TestRunStatus domainStatus = mapGithubStatusToDomain(incomingStatus, effectiveConclusion);
             existing.setStatus(domainStatus);
 
@@ -244,28 +248,29 @@ public class WorkflowRunIngestionService {
             existing.setUpdatedAt(now);
 
             TestRun updated = testRunRepository.save(existing);
-            log.info("Reconciled TestRun for workflow_run: id={}, orgId={}, workflowRunId={}, previousStatus={}, newStatus={}, conclusion={}",
+            log.info(
+                    "Reconciled TestRun for workflow_run: id={}, orgId={}, workflowRunId={}, previousStatus={}, newStatus={}, conclusion={}",
                     updated.getId(), request.getOrganizationId(), request.getWorkflowRunId(),
                     currentGithubStatus, incomingStatus, updated.getConclusion());
 
             if (domainStatus == TestRunStatus.PASSED) {
-                if (testingMetrics != null) testingMetrics.recordWorkflowRunCompleted();
+                if (testingMetrics != null)
+                    testingMetrics.recordWorkflowRunCompleted();
                 if (structuredLogger != null) {
                     structuredLogger.info("testing.workflow.completed", Map.of(
                             "workflowRunId", request.getWorkflowRunId(),
                             "repositoryId", String.valueOf(request.getRepositoryId()),
-                            "conclusion", String.valueOf(request.getConclusion())
-                    ));
+                            "conclusion", String.valueOf(request.getConclusion())));
                 }
             } else if (domainStatus == TestRunStatus.FAILED) {
-                if (testingMetrics != null) testingMetrics.recordWorkflowRunFailed();
+                if (testingMetrics != null)
+                    testingMetrics.recordWorkflowRunFailed();
                 if (structuredLogger != null) {
                     structuredLogger.logEvent("WARN", "testing.workflow.failed", "workflow_run", "FAILURE", null, null,
                             "Workflow run failed: " + request.getWorkflowRunId(), Map.of(
                                     "workflowRunId", request.getWorkflowRunId(),
                                     "repositoryId", String.valueOf(request.getRepositoryId()),
-                                    "conclusion", String.valueOf(request.getConclusion())
-                            ));
+                                    "conclusion", String.valueOf(request.getConclusion())));
                 }
             }
 
@@ -284,15 +289,18 @@ public class WorkflowRunIngestionService {
     }
 
     /**
-     * Maps a GitHub workflow_run status string and conclusion to the ForgeAI {@link TestRunStatus}.
+     * Maps a GitHub workflow_run status string and conclusion to the ForgeAI
+     * {@link TestRunStatus}.
      */
     private TestRunStatus mapGithubStatusToDomain(String githubStatus, String conclusion) {
-        if (githubStatus == null) return TestRunStatus.RUNNING;
+        if (githubStatus == null)
+            return TestRunStatus.RUNNING;
         return switch (githubStatus.toLowerCase()) {
             case "queued" -> TestRunStatus.QUEUED;
             case "in_progress" -> TestRunStatus.RUNNING;
             case "completed" -> {
-                if (conclusion == null) yield TestRunStatus.PASSED;
+                if (conclusion == null)
+                    yield TestRunStatus.PASSED;
                 yield switch (conclusion.toLowerCase()) {
                     case "failure", "timed_out" -> TestRunStatus.FAILED;
                     case "cancelled" -> TestRunStatus.CANCELLED;
