@@ -41,8 +41,12 @@ management:
   endpoint:
     health:
       show-details: always
-
+ 
 forgeai:
+  outbox:
+    poll-interval-ms: 2000
+    batch-size: 50
+    max-attempts: 5
   security:
     enforce-internal-marker: ${ENFORCE_INTERNAL_MARKER:true}
   github:

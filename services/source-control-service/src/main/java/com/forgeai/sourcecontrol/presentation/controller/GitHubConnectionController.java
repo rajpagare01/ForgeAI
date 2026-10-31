@@ -87,6 +87,20 @@ public class GitHubConnectionController {
             throw new IllegalStateException("Workspace or Organization context is required to start GitHub App installation.");
         }
 
+        // If installation is already completed on GitHub, auto-claim and return directly
+        // instead of getting stuck on GitHub's /settings/installations/{id} page!
+        try {
+            GitHubConnectionResponse connected = connectionService.connectGitHub(userId, effectiveWsId, orgId, null);
+            if (connected != null && "ACTIVE".equalsIgnoreCase(connected.installationStatus()) && connected.installationId() != null) {
+                String localRedirect = "/repositories?installed=true&installation_id=" + connected.installationId();
+                log.info("[GitHub] Existing installation {} auto-onboarded for user={}, workspace={}",
+                        connected.installationId(), userId, effectiveWsId);
+                return ResponseEntity.ok(new InstallationStartResponse("auto-onboarded", localRedirect));
+            }
+        } catch (Exception e) {
+            log.debug("[GitHub] No existing installation auto-onboarded during startInstallation ({}); proceeding to GitHub install URL", e.getMessage());
+        }
+
         String scope = (orgId == null) ? "PERSONAL" : "ORGANIZATION";
         String stateToken = stateService.createInstallationState(userId, effectiveWsId, orgId, scope);
 

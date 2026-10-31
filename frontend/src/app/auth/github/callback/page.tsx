@@ -71,18 +71,26 @@ function GitHubCallbackContent() {
         let targetRoute = "/";
         const exchangePromise = (async () => {
           if (hasExistingSession) {
-            // Account linking flow for logged-in user
-            setStepMessage("Linking GitHub identity to ForgeAI workspace...");
-            await linkGitHubAccount(code, state, callbackUri);
-            setStepMessage("GitHub account successfully linked! Redirecting to repositories...");
-            targetRoute = "/repositories";
-          } else {
-            // Sign in / Registration flow
-            setStepMessage("Establishing secure ForgeAI session & personal workspace...");
-            await loginWithGitHub(code, state, callbackUri);
-            setStepMessage("Identity verified! Redirecting to workspace...");
-            targetRoute = "/";
+            try {
+              // Account linking flow for logged-in user
+              setStepMessage("Linking GitHub identity to ForgeAI workspace...");
+              await linkGitHubAccount(code, state, callbackUri);
+              setStepMessage("GitHub account successfully linked! Redirecting to repositories...");
+              targetRoute = "/repositories";
+              return;
+            } catch (linkErr: any) {
+              console.warn("Account link failed (possibly expired session or login flow); falling back to sign-in:", linkErr);
+              // Clean up potentially stale access token
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("forgeai_access_token");
+              }
+            }
           }
+          // Sign in / Registration flow
+          setStepMessage("Establishing secure ForgeAI session & personal workspace...");
+          await loginWithGitHub(code, state, callbackUri);
+          setStepMessage("Identity verified! Redirecting to workspace...");
+          targetRoute = "/";
         })();
 
         const timeoutPromise = new Promise((_, reject) =>

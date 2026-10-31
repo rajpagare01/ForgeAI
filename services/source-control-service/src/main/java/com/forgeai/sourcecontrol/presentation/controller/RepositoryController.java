@@ -355,7 +355,9 @@ public class RepositoryController {
                 if (inst != null) {
                     effectiveWsId = inst.getWorkspaceId();
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ex) {
+                log.debug("Optional lookup skipped: {}", ex.getMessage());
+            }
         }
         Repository repo = repositoryApplicationService.connectRepository(
                 organizationId, effectiveWsId, request.fullName().trim(), TenantContext.getUserId());

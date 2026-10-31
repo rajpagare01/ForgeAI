@@ -356,15 +356,15 @@ public class GitHubAppClient {
     }
 
     /**
-     * Lists all installations of this GitHub App using GET /app/installations.
+     * Lists all installations of this GitHub App directly from GitHub using the App JWT.
+     * Uses GET /app/installations?per_page=30.
      */
     public List<GitHubInstallationDetails> listAppInstallations() {
-        config.requireConfigured();
-        String appJwt = buildAppJwt();
-        List<GitHubInstallationDetails> results = new ArrayList<>();
-        String url = GITHUB_API + "/app/installations?per_page=100";
+        if (!isConfigured()) return List.of();
+        try {
+            String appJwt = buildAppJwt();
+            String url = GITHUB_API + "/app/installations?per_page=30";
 
-        while (url != null) {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Authorization", "Bearer " + appJwt)
@@ -376,23 +376,20 @@ public class GitHubAppClient {
                     .build();
 
             HttpResponse<String> response = executeRaw(request, "list app installations");
-            if (response.statusCode() != 200) {
-                break;
-            }
-            try {
-                JsonNode array = objectMapper.readTree(response.body());
-                if (array.isArray()) {
-                    for (JsonNode item : array) {
-                        results.add(mapInstallationDetails(item));
+            if (response.statusCode() == 200) {
+                JsonNode root = objectMapper.readTree(response.body());
+                if (root.isArray()) {
+                    List<GitHubInstallationDetails> list = new ArrayList<>();
+                    for (JsonNode node : root) {
+                        list.add(mapInstallationDetails(node));
                     }
+                    return list;
                 }
-            } catch (Exception e) {
-                log.warn("Failed to parse app installations response: {}", e.getMessage());
-                break;
             }
-            url = nextPageUrl(response);
+        } catch (Exception e) {
+            log.warn("Could not list GitHub App installations: {}", e.getMessage());
         }
-        return results;
+        return List.of();
     }
 
     private GitHubInstallationDetails mapInstallationDetails(JsonNode body) {

@@ -65,7 +65,9 @@ export default function OverviewDashboardPage() {
                   });
                 }
               }
-            } catch (ignored) { }
+            } catch (prErr) {
+              console.debug("Could not load PRs for repository:", r.id, prErr);
+            }
 
             try {
               const reportRes = await apiClient.get<any>(`/api/v1/ai/repositories/${r.id}/commit-reports?limit=5`);
@@ -83,7 +85,9 @@ export default function OverviewDashboardPage() {
                   });
                 }
               }
-            } catch (ignored) { }
+            } catch (reportErr) {
+              console.debug("Could not load commit reports for repository:", r.id, reportErr);
+            }
           }
           setPrCount(totalOpenPrs);
           setRecentInsights(insightsList.slice(0, 5));

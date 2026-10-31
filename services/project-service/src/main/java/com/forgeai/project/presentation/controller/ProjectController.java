@@ -151,7 +151,9 @@ public class ProjectController {
                         reqKeyMap.put(r.getId(), r.getIdentifier());
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ex) {
+                log.debug("Optional lookup skipped: {}", ex.getMessage());
+            }
         }
 
         List<TaskResponse> list = tasks.stream()
@@ -282,7 +284,9 @@ public class ProjectController {
                 if (links != null && !links.isEmpty()) {
                     repoName = links.get(0).getRepositoryName();
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ex) {
+                log.debug("Optional lookup skipped: {}", ex.getMessage());
+            }
         }
 
         List<Requirement> projectReqs = List.of();
@@ -292,7 +296,9 @@ public class ProjectController {
                         ? requirementRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
                         : requirementRepository.findAllByProjectId(project.getId());
                 if (fetchedReqs != null) projectReqs = fetchedReqs;
-            } catch (Exception ignored) {}
+            } catch (Exception ex) {
+                log.debug("Optional lookup skipped: {}", ex.getMessage());
+            }
         }
         int reqCount = projectReqs.size();
 
@@ -303,7 +309,9 @@ public class ProjectController {
                         ? taskRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
                         : taskRepository.findAllByProjectId(project.getId());
                 if (fetchedTasks != null) projectTasks = fetchedTasks;
-            } catch (Exception ignored) {}
+            } catch (Exception ex) {
+                log.debug("Optional lookup skipped: {}", ex.getMessage());
+            }
         }
         int tCount = projectTasks.size();
 

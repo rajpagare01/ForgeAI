@@ -46,8 +46,24 @@ public class RequirementApplicationService {
             verifyPersonalProjectOwnership(project, userId);
         }
 
-        if (requirementRepository.existsByProjectIdAndIdentifier(projectId, command.identifier())) {
-            throw new DuplicateResourceException("Requirement with identifier '" + command.identifier() + "' already exists in project " + projectId);
+        String effectiveIdentifier = command.identifier().trim().toUpperCase();
+        if (requirementRepository.existsByProjectIdAndIdentifier(projectId, effectiveIdentifier)) {
+            var existingList = organizationId != null
+                    ? requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId)
+                    : requirementRepository.findAllByProjectId(projectId);
+            for (Requirement r : existingList) {
+                if (effectiveIdentifier.equalsIgnoreCase(r.getIdentifier())) {
+                    if (r.getTitle() != null && r.getTitle().equalsIgnoreCase(command.title())) {
+                        log.info("Requirement {} already exists with matching title; returning existing requirement idempotently", effectiveIdentifier);
+                        return r;
+                    }
+                }
+            }
+            int suffix = 1;
+            while (requirementRepository.existsByProjectIdAndIdentifier(projectId, effectiveIdentifier + "-" + suffix)) {
+                suffix++;
+            }
+            effectiveIdentifier = effectiveIdentifier + "-" + suffix;
         }
 
         Instant now = Instant.now();
@@ -55,7 +71,7 @@ public class RequirementApplicationService {
                 .projectId(project.getId())
                 .workspaceId(project.getWorkspaceId())
                 .organizationId(project.getOrganizationId())
-                .identifier(command.identifier().toUpperCase())
+                .identifier(effectiveIdentifier)
                 .title(command.title())
                 .description(command.description())
                 .status(RequirementStatus.DRAFT)

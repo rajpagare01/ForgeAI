@@ -62,6 +62,13 @@ public class RepositoryApplicationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.forgeai.sourcecontrol.infrastructure.messaging.WorkflowRunTestingServiceForwarder workflowRunTestingServiceForwarder;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private GitHubInstallationDiscoveryService discoveryService;
+
+    public void setDiscoveryService(GitHubInstallationDiscoveryService discoveryService) {
+        this.discoveryService = discoveryService;
+    }
+
     public void setWorkspaceRepository(com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository) {
         this.workspaceRepository = workspaceRepository;
     }
@@ -702,7 +709,9 @@ public class RepositoryApplicationService {
         if (existing.isPresent()) {
             Repository existingRepo = existing.get();
             boolean isOwner = false;
-            if ("ORGANIZATION".equalsIgnoreCase(existingRepo.getScope())) {
+            if (existingRepo.getInstallationId() != null && existingRepo.getInstallationId().equals(installation.getInstallationId())) {
+                isOwner = true;
+            } else if ("ORGANIZATION".equalsIgnoreCase(existingRepo.getScope())) {
                 isOwner = organizationId != null && organizationId.equals(existingRepo.getOrganizationId());
             } else if ("PERSONAL".equalsIgnoreCase(existingRepo.getScope())) {
                 isOwner = organizationId == null && (existingRepo.getWorkspaceId() == null || (targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId())));
@@ -787,6 +796,26 @@ public class RepositoryApplicationService {
                     .filter(i -> i.getOrganizationId() == null && "PERSONAL".equalsIgnoreCase(i.getScope()));
             if (opt.isEmpty() && callerUserId != null) {
                 opt = findAndBindPersonalInstallation(callerUserId, effectiveWsId);
+            }
+        }
+
+        if (opt.isEmpty()) {
+            opt = installationRepository.findAll().stream()
+                    .filter(i -> InstallationStatus.ACTIVE.equals(i.getStatus()))
+                    .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
+                    .filter(i -> callerUserId != null && callerUserId.equals(i.getClaimedByUserId()))
+                    .findFirst();
+            if (opt.isEmpty() && gitHubAppConfig.isConfigured()) {
+                try {
+                    List<GitHubInstallationDetails> appInstalls = gitHubAppClient.listAppInstallations();
+                    if (!appInstalls.isEmpty() && discoveryService != null) {
+                        GitHubInstallationDetails first = appInstalls.get(0);
+                        GitHubInstallation claimed = discoveryService.validateAndAssociate(callerUserId, effectiveWsId, organizationId, first.id());
+                        opt = Optional.of(claimed);
+                    }
+                } catch (Exception e) {
+                    log.debug("Auto-claim during getClaimedInstallation skipped: {}", e.getMessage());
+                }
             }
         }
 

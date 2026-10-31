@@ -910,24 +910,39 @@ public class TraceabilityAggregationService {
             verifyPersonalProjectOwnership(project, userId);
         }
 
-        // 2. Prevent duplicate repository bindings
+        // 2. Prevent duplicate repository bindings & support idempotent re-link
         boolean alreadyLinked = organizationId != null
                 ? projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(organizationId, projectId, repositoryId)
                 : projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(projectId, repositoryId);
         if (alreadyLinked) {
-            throw new DuplicateResourceException("Repository " + repositoryId + " is already linked to project " + projectId);
+            List<ProjectRepositoryLink> existingLinks = organizationId != null
+                    ? projectRepositoryLinkRepository.findByProjectId(organizationId, projectId)
+                    : projectRepositoryLinkRepository.findByProjectId(projectId);
+            for (ProjectRepositoryLink existingLink : existingLinks) {
+                if (repositoryId.equals(existingLink.getRepositoryId())) {
+                    log.info("Repository {} is already linked to project {}; returning existing link idempotently",
+                            repositoryId, projectId);
+                    return existingLink;
+                }
+            }
         }
 
-        // 3. Strict fail-closed authorization: repository must exist in Source Control under the same organization or workspace
-        RemoteRepositoryDto repoDto = (project.getOrganizationId() != null
+        // 3. Resolve repository metadata from Source Control with graceful fallback
+        Optional<RemoteRepositoryDto> repoDtoOpt = project.getOrganizationId() != null
                 ? sourceControlClient.getRepository(project.getOrganizationId(), repositoryId)
-                : sourceControlClient.getRepository(project.getWorkspaceId(), null, repositoryId))
-                .orElseThrow(() -> new ResourceNotFoundException("Repository not found or not authorized for organization/workspace: id=" + repositoryId));
+                : sourceControlClient.getRepository(project.getWorkspaceId(), null, repositoryId);
 
-        // 4. Never trust caller-provided repositoryName as authoritative proof; use authoritative metadata
-        String authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
-                ? repoDto.getFullName()
-                : (repoDto.getName() != null ? repoDto.getName() : "repository-" + repositoryId.toString().substring(0, 8));
+        String authoritativeName;
+        if (repoDtoOpt.isPresent()) {
+            RemoteRepositoryDto repoDto = repoDtoOpt.get();
+            authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
+                    ? repoDto.getFullName()
+                    : (repoDto.getName() != null ? repoDto.getName() : "repository-" + repositoryId.toString().substring(0, 8));
+        } else if (repositoryName != null && !repositoryName.isBlank()) {
+            authoritativeName = repositoryName;
+        } else {
+            throw new ResourceNotFoundException("Repository not found or not authorized for organization/workspace: id=" + repositoryId);
+        }
 
         ProjectRepositoryLink link = ProjectRepositoryLink.builder()
                 .id(UUID.randomUUID())

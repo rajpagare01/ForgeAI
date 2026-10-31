@@ -157,9 +157,25 @@ public class GitHubInstallationDiscoveryService {
                         inst.getStatus()
                 ));
             }
+        } else if (!isPersonal && organizationId != null) {
+            // Organization workspace candidate check
+            installationRepository.findByOrganizationId(organizationId).ifPresent(inst -> {
+                candidates.add(new InstallationCandidateDto(
+                        inst.getInstallationId(),
+                        inst.getAccountId(),
+                        inst.getAccountLogin(),
+                        inst.getAccountType(),
+                        inst.getRepositorySelection(),
+                        true,
+                        inst.getWorkspaceId(),
+                        inst.getStatus()
+                ));
+            });
+        }
 
-            // If none in DB, query GitHub App API directly for user's installation
-            if (candidates.isEmpty() && gitHubAppConfig.isConfigured()) {
+        // Regardless of personal or organization workspace, if candidates is empty, query GitHub App API directly
+        if (candidates.isEmpty() && gitHubAppConfig.isConfigured()) {
+            if (userGitHubLogin != null) {
                 try {
                     Optional<GitHubInstallationDetails> ghDetails = gitHubAppClient.findUserInstallation(userGitHubLogin);
                     if (ghDetails.isPresent()) {
@@ -179,20 +195,38 @@ public class GitHubInstallationDiscoveryService {
                     log.debug("GitHub App API discovery for user {} returned: {}", userGitHubLogin, e.getMessage());
                 }
             }
-        } else if (!isPersonal && organizationId != null) {
-            // Organization workspace candidate check
-            installationRepository.findByOrganizationId(organizationId).ifPresent(inst -> {
-                candidates.add(new InstallationCandidateDto(
-                        inst.getInstallationId(),
-                        inst.getAccountId(),
-                        inst.getAccountLogin(),
-                        inst.getAccountType(),
-                        inst.getRepositorySelection(),
-                        true,
-                        inst.getWorkspaceId(),
-                        inst.getStatus()
-                ));
-            });
+
+            if (candidates.isEmpty()) {
+                try {
+                    List<GitHubInstallationDetails> appInstalls = gitHubAppClient.listAppInstallations();
+                    GitHubInstallationDetails matched = null;
+                    if (userGitHubLogin != null) {
+                        for (GitHubInstallationDetails d : appInstalls) {
+                            if (userGitHubLogin.equalsIgnoreCase(d.accountLogin())) {
+                                matched = d;
+                                break;
+                            }
+                        }
+                    }
+                    if (matched == null && !appInstalls.isEmpty()) {
+                        matched = appInstalls.get(0);
+                    }
+                    if (matched != null) {
+                        candidates.add(new InstallationCandidateDto(
+                                matched.id(),
+                                matched.accountId(),
+                                matched.accountLogin(),
+                                matched.accountType(),
+                                matched.repositorySelection(),
+                                false,
+                                null,
+                                InstallationStatus.CLAIMABLE
+                        ));
+                    }
+                } catch (Exception e) {
+                    log.debug("GitHub App listAppInstallations returned: {}", e.getMessage());
+                }
+            }
         }
 
         String appInstallUrl = gitHubAppConfig.getAppInstallUrl();
@@ -294,29 +328,27 @@ public class GitHubInstallationDiscoveryService {
         if (callerUserId != null) {
             if (isPersonal || "User".equalsIgnoreCase(details.accountType())) {
                 Optional<IdentityServiceClient.UserGitHubProfile> profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
-                if (profileOpt.isEmpty() || !profileOpt.get().connected()) {
-                    log.warn("[Security] Caller {} has not linked a GitHub account", callerUserId);
-                    if (metrics != null) {
-                        metrics.recordInstallationOwnershipRejection();
-                        metrics.recordInstallationFailure();
-                    }
-                    throw new GitHubAccessDeniedException("User must connect GitHub account before claiming a GitHub App installation.");
-                }
+                if (profileOpt.isPresent() && profileOpt.get().connected()) {
+                    IdentityServiceClient.UserGitHubProfile profile = profileOpt.get();
+                    boolean idMatches = profile.githubUserId() != null && profile.githubUserId().equals(details.accountId());
+                    boolean loginMatches = profile.githubLogin() != null && profile.githubLogin().equalsIgnoreCase(details.accountLogin());
 
-                IdentityServiceClient.UserGitHubProfile profile = profileOpt.get();
-                boolean idMatches = profile.githubUserId() != null && profile.githubUserId().equals(details.accountId());
-                boolean loginMatches = profile.githubLogin() != null && profile.githubLogin().equalsIgnoreCase(details.accountLogin());
-
-                if (!idMatches && !loginMatches) {
-                    log.warn("[Security] Installation ownership verification failed! Caller GitHub account '{}/{}' != Installation account '{}/{}'",
-                            profile.githubLogin(), profile.githubUserId(), details.accountLogin(), details.accountId());
-                    if (metrics != null) {
-                        metrics.recordInstallationOwnershipRejection();
-                        metrics.recordInstallationFailure();
+                    if (!idMatches && !loginMatches) {
+                        // Check if another user claimed this in DB
+                        Optional<GitHubInstallation> existingClaim = installationRepository.findByInstallationId(installationId);
+                        if (existingClaim.isPresent() && existingClaim.get().getClaimedByUserId() != null
+                                && !callerUserId.equals(existingClaim.get().getClaimedByUserId())) {
+                            log.warn("[Security] Installation ownership verification failed! Caller GitHub account '{}/{}' != Installation account '{}/{}'",
+                                    profile.githubLogin(), profile.githubUserId(), details.accountLogin(), details.accountId());
+                            if (metrics != null) {
+                                metrics.recordInstallationOwnershipRejection();
+                                metrics.recordInstallationFailure();
+                            }
+                            throw new GitHubAccessDeniedException(
+                                    "Installation " + installationId + " belongs to GitHub account '" + details.accountLogin() +
+                                            "', which does not match your authenticated GitHub account.");
+                        }
                     }
-                    throw new GitHubAccessDeniedException(
-                            "Installation " + installationId + " belongs to GitHub account '" + details.accountLogin() +
-                                    "', which does not match your authenticated GitHub account.");
                 }
             }
         }
@@ -344,39 +376,17 @@ public class GitHubInstallationDiscoveryService {
                             "Installation " + installationId + " is already claimed by another user.");
                 }
 
-                if (organizationId != null && organizationId.equals(existing.getOrganizationId())) {
-                    if (metrics != null) metrics.recordInstallationSuccess();
-                    return existing;
-                }
-                if (effectiveWsId != null && effectiveWsId.equals(existing.getWorkspaceId())) {
-                    if (metrics != null) metrics.recordInstallationSuccess();
-                    return existing;
-                }
-                if (isPersonal) {
-                    if (existing.getOrganizationId() != null) {
-                        if (metrics != null) {
-                            metrics.recordInstallationOwnershipRejection();
-                            metrics.recordInstallationFailure();
-                        }
-                        throw new GitHubAccessDeniedException(
-                                "Installation " + installationId + " is already claimed by an organization.");
-                    }
-                    if (existing.getWorkspaceId() != null && !existing.getWorkspaceId().equals(effectiveWsId)
-                            && existing.getClaimedByUserId() != null && !existing.getClaimedByUserId().equals(callerUserId)) {
-                        if (metrics != null) {
-                            metrics.recordInstallationOwnershipRejection();
-                            metrics.recordInstallationFailure();
-                        }
-                        throw new GitHubAccessDeniedException(
-                                "Installation " + installationId + " is already claimed by another user.");
-                    }
-                    log.info("[GitHub] Associating personal installation {} to personal workspace {}",
-                            installationId, effectiveWsId);
+                // If claimed by same user OR unclaimed OR caller is null (e.g. system), allow workspace migration
+                if (existing.getClaimedByUserId() == null || callerUserId == null || callerUserId.equals(existing.getClaimedByUserId())) {
+                    log.info("[GitHub] Associating/migrating installation {} to workspace {}, org {}, scope {}",
+                            installationId, effectiveWsId, organizationId, scope);
                     existing.setWorkspaceId(effectiveWsId);
-                    existing.setOrganizationId(null);
-                    existing.setScope("PERSONAL");
+                    existing.setOrganizationId(organizationId);
+                    existing.setScope(scope);
                     existing.setStatus(InstallationStatus.ACTIVE);
-                    existing.setClaimedByUserId(callerUserId);
+                    if (callerUserId != null) {
+                        existing.setClaimedByUserId(callerUserId);
+                    }
                     existing.setUpdatedAt(Instant.now());
                     existing.setLastSyncedAt(Instant.now());
                     GitHubInstallation saved = installationRepository.save(existing);
@@ -388,11 +398,21 @@ public class GitHubInstallationDiscoveryService {
                         }
                         if (metrics != null) metrics.recordRepositoryDiscoverySuccess();
                     } catch (Exception e) {
-                        log.warn("[GitHub] Could not sync repos during personal association: {}", e.getMessage());
+                        log.warn("[GitHub] Could not sync repos during association: {}", e.getMessage());
                         if (metrics != null) metrics.recordRepositoryDiscoveryFailure();
                     }
                     return saved;
                 }
+
+                if (organizationId != null && organizationId.equals(existing.getOrganizationId())) {
+                    if (metrics != null) metrics.recordInstallationSuccess();
+                    return existing;
+                }
+                if (effectiveWsId != null && effectiveWsId.equals(existing.getWorkspaceId())) {
+                    if (metrics != null) metrics.recordInstallationSuccess();
+                    return existing;
+                }
+
                 if (metrics != null) {
                     metrics.recordInstallationOwnershipRejection();
                     metrics.recordInstallationFailure();

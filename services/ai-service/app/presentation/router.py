@@ -740,8 +740,8 @@ async def validate_post_pr_test_execution(
                 r_dict["test_file"] = f"{r_dict.get('test_name', 'UnknownTest')}.java"
             try:
                 all_recs.append(TestRecommendation(**r_dict))
-            except Exception:
-                pass
+            except Exception as rec_err:
+                logger.debug("Skipped malformed test recommendation entry: %s", rec_err)
         elif isinstance(r_data, TestRecommendation):
             all_recs.append(r_data)
 
