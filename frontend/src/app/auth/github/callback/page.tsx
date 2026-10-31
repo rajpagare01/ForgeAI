@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Cpu, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
+import { Cpu, AlertCircle, CheckCircle2, ArrowRight, RotateCcw } from "lucide-react";
 import Link from "next/link";
 
 function GitHubCallbackContent() {
@@ -14,7 +14,16 @@ function GitHubCallbackContent() {
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [stepMessage, setStepMessage] = useState<string>("Verifying GitHub authorization...");
+  const [retryTrigger, setRetryTrigger] = useState(0);
   const hasExecuted = useRef(false);
+
+  const handleRetry = () => {
+    hasExecuted.current = false;
+    setStatus("processing");
+    setErrorMessage(null);
+    setStepMessage("Re-attempting GitHub authorization exchange...");
+    setRetryTrigger((prev) => prev + 1);
+  };
 
   useEffect(() => {
     // Wait until AuthProvider completes initial session hydration to avoid race condition
@@ -77,7 +86,15 @@ function GitHubCallbackContent() {
         })();
 
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("GitHub OAuth exchange timed out after 45 seconds. Network latency was high. Please try signing in again.")), 45000)
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "GitHub OAuth exchange timed out after 75 seconds. Network latency was high. Please click 'Try Again' or return to Sign In."
+                )
+              ),
+            75000
+          )
         );
 
         await Promise.race([exchangePromise, timeoutPromise]);
@@ -96,7 +113,7 @@ function GitHubCallbackContent() {
     };
 
     exchange();
-  }, [searchParams, router, loginWithGitHub, linkGitHubAccount, isAuthenticated, isLoading]);
+  }, [searchParams, router, loginWithGitHub, linkGitHubAccount, isAuthenticated, isLoading, retryTrigger]);
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 bg-[#090d16] overflow-hidden">
@@ -170,13 +187,21 @@ function GitHubCallbackContent() {
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 px-4 py-2.5 text-xs font-semibold text-white transition-all shadow-lg shadow-indigo-500/25 active:scale-95 cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Try Again
+              </button>
               <Link
                 href="/login"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
               >
                 Return to Sign In
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
           </div>

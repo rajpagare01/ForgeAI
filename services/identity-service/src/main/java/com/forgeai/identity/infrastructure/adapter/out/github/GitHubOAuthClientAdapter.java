@@ -36,7 +36,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(Duration.ofSeconds(30))
+                .connectTimeout(Duration.ofSeconds(15))
                 .build();
     }
 
@@ -67,7 +67,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://github.com/login/oauth/access_token"))
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(20))
                     .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
                     .header("User-Agent", "ForgeAI-Identity-Service")
@@ -116,7 +116,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/user"))
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(20))
                     .header("Authorization", "Bearer " + accessToken)
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
@@ -158,7 +158,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/user/emails"))
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(20))
                     .header("Authorization", "Bearer " + accessToken)
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")

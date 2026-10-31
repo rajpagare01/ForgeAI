@@ -176,8 +176,8 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
 
     @Override
     public LoginResponse handleCallback(String code, String state, String redirectUri) {
-        // Phase 1 (Short Transaction #1): Validate and consume state atomically
-        OAuthState oauthState = executeInTransaction(() -> validateAndConsumeState(state, null));
+        // Phase 1 (Short Transaction #1): Validate state (without premature consumption)
+        OAuthState oauthState = executeInTransaction(() -> validateState(state, null));
 
         String effectiveRedirect = (redirectUri != null && !redirectUri.isBlank())
                 ? redirectUri
@@ -190,9 +190,11 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
         String email = resolveVerifiedEmail(profile, token.accessToken());
         String encryptedAccessToken = tokenEncryptor.encrypt(token.accessToken());
 
-        // Phase 3 (Short Transaction #2): User/identity resolution & session creation
-        CallbackProvisioningResult result = executeInTransaction(() ->
-                processUserAndIdentity(profile, email, encryptedAccessToken, token));
+        // Phase 3 (Short Transaction #2): Atomically consume state & provision user/identity/tokens
+        CallbackProvisioningResult result = executeInTransaction(() -> {
+            markStateUsed(oauthState);
+            return processUserAndIdentity(profile, email, encryptedAccessToken, token);
+        });
 
         // Phase 4 (Separate Transaction / Isolated Try-Catch): Workspace provisioning
         if (result.isNewUser() && workspaceService != null) {
@@ -325,8 +327,8 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
             throw new IllegalArgumentException("User ID is required to link GitHub account");
         }
 
-        // Phase 1 (Short Transaction #1): Validate and consume state
-        OAuthState oauthState = executeInTransaction(() -> validateAndConsumeState(state, userId));
+        // Phase 1 (Short Transaction #1): Validate state (without premature consumption)
+        OAuthState oauthState = executeInTransaction(() -> validateState(state, userId));
 
         String effectiveRedirect = (redirectUri != null && !redirectUri.isBlank())
                 ? redirectUri
@@ -339,8 +341,9 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
         String email = resolveVerifiedEmail(profile, token.accessToken());
         String encryptedAccessToken = tokenEncryptor.encrypt(token.accessToken());
 
-        // Phase 3 (Short Transaction #2): Link identity in DB
+        // Phase 3 (Short Transaction #2): Atomically consume state & link identity in DB
         return executeInTransaction(() -> {
+            markStateUsed(oauthState);
             Optional<GitHubIdentity> existingOpt = gitHubIdentityRepository.findByGithubUserId(profile.id());
             if (existingOpt.isPresent() && !existingOpt.get().getUserId().equals(userId)) {
                 throw new IllegalStateException("This GitHub account is already linked to another ForgeAI user.");
@@ -424,7 +427,7 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
                 .orElseGet(() -> new GitHubStatusResponse(false, null));
     }
 
-    private OAuthState validateAndConsumeState(String state, UUID expectedUserId) {
+    private OAuthState validateState(String state, UUID expectedUserId) {
         if (state == null || state.isBlank()) {
             throw new InvalidCredentialsException("OAuth state is required");
         }
@@ -444,8 +447,20 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
             throw new InvalidCredentialsException("OAuth state does not match authenticated user session.");
         }
 
-        oauthState.setUsed(true);
-        return oauthStateRepository.save(oauthState);
+        return oauthState;
+    }
+
+    private void markStateUsed(OAuthState oauthState) {
+        if (oauthState != null) {
+            oauthState.setUsed(true);
+            oauthStateRepository.save(oauthState);
+        }
+    }
+
+    private OAuthState validateAndConsumeState(String state, UUID expectedUserId) {
+        OAuthState oauthState = validateState(state, expectedUserId);
+        markStateUsed(oauthState);
+        return oauthState;
     }
 
     private String resolveVerifiedEmail(GitHubOAuthClient.UserProfile profile, String accessToken) {
