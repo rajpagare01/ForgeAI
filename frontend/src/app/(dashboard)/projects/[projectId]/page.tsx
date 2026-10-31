@@ -50,6 +50,12 @@ function ProjectDetailContent() {
   const [repositories, setRepositories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
+
+  const showNotification = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   // Create Task modal state
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -227,7 +233,12 @@ function ProjectDetailContent() {
         description: reqDescription.trim() || "Engineering requirement specification.",
       };
 
-      const created = await apiClient.post<any>(`/api/v1/projects/${rawProjectId}/requirements`, payload);
+      const reqPromise = apiClient.post<any>(`/api/v1/projects/${rawProjectId}/requirements`, payload);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Requirement creation timed out after 15 seconds. Please try again.")), 15000)
+      );
+
+      const created: any = await Promise.race([reqPromise, timeoutPromise]);
       setRequirements((prev) => [...prev, created]);
       setShowReqModal(false);
       setReqIdentifier("");
@@ -235,6 +246,7 @@ function ProjectDetailContent() {
       setReqDescription("");
       // Update count on project
       setProject((prev) => prev ? { ...prev, requirementCount: (prev.requirementCount || 0) + 1 } : prev);
+      showNotification(`✓ Engineering requirement ${created?.identifier || generatedId} created successfully!`);
     } catch (err: any) {
       console.error("Failed to create requirement on backend:", err);
       setError(err?.message || "Failed to create requirement.");
@@ -267,14 +279,31 @@ function ProjectDetailContent() {
     try {
       const selected = availableRepos.find((r) => r.id === selectedRepoToLink);
       const repoName = selected?.fullName || selectedRepoToLink;
-      const link = await apiClient.linkProjectRepository<any>(rawProjectId, selectedRepoToLink, repoName);
+      
+      const linkPromise = apiClient.linkProjectRepository<any>(rawProjectId, selectedRepoToLink, repoName);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Linking repository timed out after 15 seconds. Please check connection.")), 15000)
+      );
+
+      const link: any = await Promise.race([linkPromise, timeoutPromise]);
       setRepositories([link]);
       setProject((prev) => prev ? { ...prev, repositoryName: repoName } : prev);
       setShowRepoModal(false);
       setSelectedRepoToLink("");
+      showNotification(`✓ Repository "${repoName}" linked to project successfully!`);
     } catch (err: any) {
       console.error("Failed to link repository:", err);
-      setError(err?.message || "Failed to link repository.");
+      const msg = err?.message || "";
+      if (msg.includes("already linked") || err?.status === 409) {
+        const selected = availableRepos.find((r) => r.id === selectedRepoToLink);
+        const repoName = selected?.fullName || selectedRepoToLink;
+        setProject((prev) => prev ? { ...prev, repositoryName: repoName } : prev);
+        setShowRepoModal(false);
+        setSelectedRepoToLink("");
+        showNotification(`✓ Repository "${repoName}" is already linked to this project!`);
+      } else {
+        setError(msg || "Failed to link repository.");
+      }
     } finally {
       setIsSubmittingRepo(false);
     }
@@ -393,6 +422,14 @@ function ProjectDetailContent() {
           </Link>
         </div>
       </div>
+
+      {/* Global Success Notification banner */}
+      {notification && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-3 text-xs text-emerald-300 animate-in fade-in slide-in-from-top duration-200">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+          <span>{notification}</span>
+        </div>
+      )}
 
       {/* Global error banner if action failed */}
       {error && (
@@ -746,11 +783,17 @@ function ProjectDetailContent() {
                 required
               >
                 <option value="">Select a repository to link...</option>
-                {availableRepos.map((repo) => (
-                  <option key={repo.id} value={repo.id}>
-                    {repo.fullName || repo.name}
-                  </option>
-                ))}
+                {availableRepos.map((repo) => {
+                  const isCurrentlyLinked = repositories.some(
+                    (r) => r.repositoryId === repo.id || r.id === repo.id || r.repositoryName === (repo.fullName || repo.name)
+                  );
+                  return (
+                    <option key={repo.id} value={repo.id}>
+                      {repo.fullName || repo.name}
+                      {isCurrentlyLinked ? " (Currently Linked)" : ""}
+                    </option>
+                  );
+                })}
               </select>
             ) : (
               <div className="p-3 rounded-lg border border-dashed border-slate-800 text-xs text-slate-500 text-center">
