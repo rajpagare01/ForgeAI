@@ -34,7 +34,7 @@ class FailoverLLMOrchestrator(LLMProvider):
         self.fallback_provider = fallback_provider or GroqProvider()
 
     async def generate_text(
-        self, prompt: str, system_instruction: Optional[str] = None
+        self, prompt: str, system_instruction: Optional[str] = None, **kwargs
     ) -> ProviderResponse:
         is_production = settings.ENVIRONMENT == "production"
         is_test_mode = (

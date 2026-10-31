@@ -41,6 +41,7 @@ public class ProjectController {
     private ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
     private RequirementRepository requirementRepository;
     private TaskRepository taskRepository;
+    private com.forgeai.project.domain.repository.CodeLinkRepository codeLinkRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ProjectController(ProjectApplicationService projectApplicationService,
@@ -48,19 +49,21 @@ public class ProjectController {
                              TaskApplicationService taskApplicationService,
                              ProjectRepositoryLinkRepository projectRepositoryLinkRepository,
                              RequirementRepository requirementRepository,
-                             TaskRepository taskRepository) {
+                             TaskRepository taskRepository,
+                             com.forgeai.project.domain.repository.CodeLinkRepository codeLinkRepository) {
         this.projectApplicationService = projectApplicationService;
         this.requirementApplicationService = requirementApplicationService;
         this.taskApplicationService = taskApplicationService;
         this.projectRepositoryLinkRepository = projectRepositoryLinkRepository;
         this.requirementRepository = requirementRepository;
         this.taskRepository = taskRepository;
+        this.codeLinkRepository = codeLinkRepository;
     }
 
     public ProjectController(ProjectApplicationService projectApplicationService,
                              RequirementApplicationService requirementApplicationService,
                              TaskApplicationService taskApplicationService) {
-        this(projectApplicationService, requirementApplicationService, taskApplicationService, null, null, null);
+        this(projectApplicationService, requirementApplicationService, taskApplicationService, null, null, null, null);
     }
 
     @PostMapping
@@ -121,7 +124,10 @@ public class ProjectController {
             @PathVariable UUID projectId,
             @Valid @RequestBody CreateTaskCommand command) {
         UUID orgId = TenantContext.getOrganizationId();
-        UUID reporterId = getRequiredUserId();
+        UUID reporterId = TenantContext.getUserId();
+        if (reporterId == null) {
+            reporterId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        }
         Task task = taskApplicationService.createTask(orgId, projectId, reporterId, command);
         return ResponseEntity.status(HttpStatus.CREATED).body(TaskResponse.from(task));
     }
@@ -157,6 +163,112 @@ public class ProjectController {
         return ResponseEntity.ok(list);
     }
 
+    public record GitActivityItem(
+            String sha,
+            String message,
+            String branch,
+            Integer prNumber,
+            UUID repositoryId
+    ) {}
+
+    public record SyncGitActivityRequest(
+            List<GitActivityItem> activities
+    ) {}
+
+    @PostMapping("/{projectId}/sync-git-activity")
+    public ResponseEntity<Map<String, Object>> syncGitActivity(
+            @PathVariable UUID projectId,
+            @RequestBody(required = false) SyncGitActivityRequest request) {
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID userId = TenantContext.getUserId();
+        Project project = projectApplicationService.getProject(projectId, orgId, userId);
+        if (project == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        List<Task> tasks = taskApplicationService.listTasks(orgId, projectId, userId, null);
+        int linkedCount = 0;
+        int statusProgressedCount = 0;
+
+        java.util.regex.Pattern fixPattern = java.util.regex.Pattern.compile(
+                "(?i)\\b(fix|fixes|fixed|close|closes|closed|complete|completed|done)\\b");
+
+        List<GitActivityItem> items = (request != null && request.activities() != null)
+                ? request.activities()
+                : List.of();
+
+        for (Task task : tasks) {
+            String key = task.getTaskKey();
+            if (key == null) continue;
+
+            for (GitActivityItem act : items) {
+                boolean matched = false;
+                if (act.message() != null && act.message().toUpperCase().contains(key.toUpperCase())) {
+                    matched = true;
+                } else if (act.branch() != null && act.branch().toUpperCase().contains(key.toUpperCase())) {
+                    matched = true;
+                }
+
+                if (matched) {
+                    if (act.sha() != null && !act.sha().isBlank() && codeLinkRepository != null) {
+                        if (!codeLinkRepository.existsByTaskIdAndLinkTypeAndExternalRef(task.getId(), com.forgeai.project.domain.model.CodeLinkType.COMMIT, act.sha())) {
+                            codeLinkRepository.save(com.forgeai.project.domain.model.CodeLink.builder()
+                                    .organizationId(task.getOrganizationId())
+                                    .taskId(task.getId())
+                                    .linkType(com.forgeai.project.domain.model.CodeLinkType.COMMIT)
+                                    .externalRef(act.sha())
+                                    .repositoryId(act.repositoryId())
+                                    .createdBy("GIT_SYNC_MANUAL")
+                                    .createdAt(java.time.Instant.now())
+                                    .build());
+                            linkedCount++;
+                        }
+                    }
+                    if (act.prNumber() != null && codeLinkRepository != null) {
+                        String prRef = "PR-#" + act.prNumber();
+                        if (!codeLinkRepository.existsByTaskIdAndLinkTypeAndExternalRef(task.getId(), com.forgeai.project.domain.model.CodeLinkType.PULL_REQUEST, prRef)) {
+                            codeLinkRepository.save(com.forgeai.project.domain.model.CodeLink.builder()
+                                    .organizationId(task.getOrganizationId())
+                                    .taskId(task.getId())
+                                    .linkType(com.forgeai.project.domain.model.CodeLinkType.PULL_REQUEST)
+                                    .externalRef(prRef)
+                                    .repositoryId(act.repositoryId())
+                                    .createdBy("GIT_SYNC_MANUAL")
+                                    .createdAt(java.time.Instant.now())
+                                    .build());
+                            linkedCount++;
+                        }
+                    }
+
+                    boolean hasFix = act.message() != null && fixPattern.matcher(act.message()).find();
+                    boolean changed = false;
+                    if (hasFix && task.getStatus() != TaskStatus.DONE) {
+                        task.setStatus(TaskStatus.DONE);
+                        changed = true;
+                    } else if (act.prNumber() != null && (task.getStatus() == TaskStatus.TODO || task.getStatus() == TaskStatus.IN_PROGRESS)) {
+                        task.setStatus(TaskStatus.IN_REVIEW);
+                        changed = true;
+                    } else if (task.getStatus() == TaskStatus.TODO) {
+                        task.setStatus(TaskStatus.IN_PROGRESS);
+                        changed = true;
+                    }
+                    if (changed && taskRepository != null) {
+                        task.setUpdatedAt(java.time.Instant.now());
+                        taskRepository.save(task);
+                        statusProgressedCount++;
+                    }
+                }
+            }
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "projectId", projectId,
+                "linkedCount", linkedCount,
+                "statusProgressedCount", statusProgressedCount,
+                "status", "SYNCED"
+        ));
+    }
+
     private ProjectResponse enrichProjectResponse(Project project, UUID orgId) {
         if (project == null) return null;
         String repoName = null;
@@ -171,27 +283,57 @@ public class ProjectController {
             } catch (Exception ignored) {}
         }
 
-        int reqCount = 0;
+        List<Requirement> projectReqs = List.of();
         if (requirementRepository != null) {
             try {
-                List<Requirement> reqs = orgId != null
+                List<Requirement> fetchedReqs = orgId != null
                         ? requirementRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
                         : requirementRepository.findAllByProjectId(project.getId());
-                if (reqs != null) reqCount = reqs.size();
+                if (fetchedReqs != null) projectReqs = fetchedReqs;
             } catch (Exception ignored) {}
         }
+        int reqCount = projectReqs.size();
 
-        int tCount = 0;
+        List<Task> projectTasks = List.of();
         if (taskRepository != null) {
             try {
-                List<Task> tasks = orgId != null
+                List<Task> fetchedTasks = orgId != null
                         ? taskRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
                         : taskRepository.findAllByProjectId(project.getId());
-                if (tasks != null) tCount = tasks.size();
+                if (fetchedTasks != null) projectTasks = fetchedTasks;
             } catch (Exception ignored) {}
         }
+        int tCount = projectTasks.size();
 
-        Double health = 95.0;
+        double health;
+        if (reqCount == 0 && tCount == 0) {
+            health = (repoName != null && !repoName.isBlank()) ? 80.0 : 60.0;
+        } else {
+            double taskScore = 1.0;
+            if (tCount > 0) {
+                double weightedSum = 0.0;
+                for (Task t : projectTasks) {
+                    if (t.getStatus() == TaskStatus.DONE) weightedSum += 1.0;
+                    else if (t.getStatus() == TaskStatus.IN_REVIEW) weightedSum += 0.8;
+                    else if (t.getStatus() == TaskStatus.IN_PROGRESS) weightedSum += 0.5;
+                    else if (t.getStatus() == TaskStatus.TODO) weightedSum += 0.25;
+                    else weightedSum += 0.0; // BLOCKED
+                }
+                taskScore = weightedSum / tCount;
+            }
+            double reqCoverage = 1.0;
+            if (reqCount > 0 && tCount > 0) {
+                java.util.Set<UUID> coveredReqIds = projectTasks.stream()
+                        .map(Task::getRequirementId)
+                        .filter(java.util.Objects::nonNull)
+                        .collect(Collectors.toSet());
+                reqCoverage = (double) coveredReqIds.size() / reqCount;
+            } else if (reqCount > 0) {
+                reqCoverage = 0.3;
+            }
+            double repoBonus = (repoName != null && !repoName.isBlank()) ? 20.0 : 5.0;
+            health = Math.min(100.0, Math.round((45.0 * taskScore + 35.0 * reqCoverage + repoBonus) * 10.0) / 10.0);
+        }
         return ProjectResponse.from(project, repoName, reqCount, tCount, health);
     }
 

@@ -30,7 +30,7 @@ class GeminiProvider(LLMProvider):
                 logger.warning("Failed to configure Gemini SDK: %s", type(e).__name__)
 
     async def generate_text(
-        self, prompt: str, system_instruction: Optional[str] = None
+        self, prompt: str, system_instruction: Optional[str] = None, **kwargs
     ) -> ProviderResponse:
         if not self._configured or not self.api_key:
             raise ProviderUnavailableException("Gemini provider is unconfigured or missing API key.")

@@ -1200,4 +1200,92 @@ public class GitHubAppClient {
             "Fallback compare URL generated"
         );
     }
+
+    public record GitHubWorkflowRunSummary(
+        Long id,
+        String name,
+        Integer runNumber,
+        String status,
+        String conclusion,
+        String headBranch,
+        String headSha,
+        String event,
+        Instant runStartedAt,
+        Instant completedAt,
+        String htmlUrl
+    ) {}
+
+    public List<GitHubWorkflowRunSummary> getWorkflowRuns(
+        Long installationId,
+        String fullName,
+        String branch,
+        int limit
+    ) {
+        String cleanFullName = fullName != null ? fullName.trim().replaceAll("^/+|/+$", "") : "";
+        if (!config.isConfigured() || installationId == null || installationId <= 0 || cleanFullName.isBlank()) {
+            return List.of();
+        }
+        try {
+            String token = getInstallationToken(installationId);
+            int effectiveLimit = Math.max(1, Math.min(limit, 30));
+            StringBuilder urlBuilder = new StringBuilder(GITHUB_API)
+                .append("/repos/")
+                .append(cleanFullName)
+                .append("/actions/runs?per_page=")
+                .append(effectiveLimit);
+            if (branch != null && !branch.isBlank()) {
+                urlBuilder.append("&branch=").append(java.net.URLEncoder.encode(branch.trim(), StandardCharsets.UTF_8));
+            }
+
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(urlBuilder.toString()))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .GET()
+                .timeout(Duration.ofSeconds(15))
+                .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                log.warn("GitHub Actions workflow runs fetch returned HTTP {} for {}", resp.statusCode(), cleanFullName);
+                return List.of();
+            }
+
+            JsonNode root = objectMapper.readTree(resp.body());
+            JsonNode runsNode = root.path("workflow_runs");
+            if (!runsNode.isArray()) {
+                return List.of();
+            }
+
+            List<GitHubWorkflowRunSummary> result = new ArrayList<>();
+            for (JsonNode r : runsNode) {
+                Long id = r.hasNonNull("id") ? r.get("id").asLong() : null;
+                if (id == null) continue;
+                String name = r.hasNonNull("name") ? r.get("name").asText() : "CI Workflow";
+                Integer runNumber = r.hasNonNull("run_number") ? r.get("run_number").asInt() : 1;
+                String status = r.hasNonNull("status") ? r.get("status").asText() : "completed";
+                String conclusion = r.hasNonNull("conclusion") ? r.get("conclusion").asText() : null;
+                String headBranch = r.hasNonNull("head_branch") ? r.get("head_branch").asText() : "main";
+                String headSha = r.hasNonNull("head_sha") ? r.get("head_sha").asText() : "0000000";
+                String event = r.hasNonNull("event") ? r.get("event").asText() : "push";
+                Instant startedAt = r.hasNonNull("run_started_at")
+                    ? Instant.parse(r.get("run_started_at").asText())
+                    : Instant.now();
+                Instant updatedAt = r.hasNonNull("updated_at")
+                    ? Instant.parse(r.get("updated_at").asText())
+                    : startedAt;
+                String htmlUrl = r.hasNonNull("html_url") ? r.get("html_url").asText() : "";
+
+                result.add(new GitHubWorkflowRunSummary(
+                    id, name, runNumber, status, conclusion, headBranch, headSha, event, startedAt, updatedAt, htmlUrl
+                ));
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("Failed to fetch GitHub Actions workflow runs for {}: {}", cleanFullName, e.getMessage());
+            return List.of();
+        }
+    }
 }

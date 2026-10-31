@@ -41,6 +41,20 @@ public class WorkflowRunTestingServiceForwarder {
                 .findAndRegisterModules();
     }
 
+    public void forward(WorkflowRunReceivedEvent event) {
+        if (event == null) return;
+        try {
+            onEventEnvelope(EventEnvelope.from(
+                    event,
+                    java.util.UUID.randomUUID().toString(),
+                    "Repository",
+                    event.getRepositoryId() != null ? event.getRepositoryId().toString() : java.util.UUID.randomUUID().toString()
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to directly forward workflow run {} to testing-service: {}", event.getWorkflowRunId(), e.getMessage());
+        }
+    }
+
     @EventListener
     public void onEventEnvelope(EventEnvelope<?> envelope) throws Exception {
         if (envelope == null || !(envelope.getPayload() instanceof WorkflowRunReceivedEvent event)) {

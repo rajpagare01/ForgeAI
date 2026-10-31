@@ -26,7 +26,7 @@ class GroqProvider(LLMProvider):
         self.timeout = settings.PROVIDER_TIMEOUT_SECONDS
 
     async def generate_text(
-        self, prompt: str, system_instruction: Optional[str] = None
+        self, prompt: str, system_instruction: Optional[str] = None, **kwargs
     ) -> ProviderResponse:
         if not self.api_key or self.api_key in ("mock-groq-key-for-dev", "test-groq-key", ""):
             raise ProviderUnavailableException("Groq fallback provider is unconfigured or missing API key.")

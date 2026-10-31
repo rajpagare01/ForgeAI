@@ -102,7 +102,7 @@ export interface Organization {
 }
 
 
-export type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
+export type TaskStatus = "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "BLOCKED";
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export interface Requirement {

@@ -30,7 +30,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class SourceControlEventConsumer {
 
-    private static final Pattern TASK_KEY_PATTERN = Pattern.compile("TASK-\\d+", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TASK_KEY_PATTERN = Pattern.compile("\\b([A-Z][A-Z0-9]{1,9}-\\d+)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern FIX_KEYWORD_PATTERN = Pattern.compile("(?i)\\b(fix|fixes|fixed|close|closes|closed|complete|completed|done)\\b");
 
     private final TaskRepository taskRepository;
     private final CodeLinkRepository codeLinkRepository;
@@ -73,11 +74,30 @@ public class SourceControlEventConsumer {
         }
 
         Set<String> matchedTaskKeys = extractTaskKeys(event.getMessage());
+        boolean hasFixKeyword = FIX_KEYWORD_PATTERN.matcher(event.getMessage()).find();
+
         for (String taskKey : matchedTaskKeys) {
             Optional<Task> taskOpt = taskRepository.findByOrganizationIdAndTaskKey(event.getOrganizationId(), taskKey);
             if (taskOpt.isPresent()) {
                 Task task = taskOpt.get();
                 linkArtifact(task, CodeLinkType.COMMIT, event.getSha(), event.getRepositoryId(), "GIT_COMMIT_AUTO_LINK");
+
+                boolean changed = false;
+                if (hasFixKeyword) {
+                    if (task.getStatus() != com.forgeai.project.domain.model.TaskStatus.DONE) {
+                        task.setStatus(com.forgeai.project.domain.model.TaskStatus.DONE);
+                        task.setUpdatedAt(Instant.now());
+                        changed = true;
+                    }
+                } else if (task.getStatus() == com.forgeai.project.domain.model.TaskStatus.TODO) {
+                    task.setStatus(com.forgeai.project.domain.model.TaskStatus.IN_PROGRESS);
+                    task.setUpdatedAt(Instant.now());
+                    changed = true;
+                }
+                if (changed) {
+                    taskRepository.save(task);
+                    log.info("Auto-progressed task {} to status {}", taskKey, task.getStatus());
+                }
             } else {
                 log.debug("No matching task found for key {} in org {}", taskKey, event.getOrganizationId());
             }
@@ -96,12 +116,32 @@ public class SourceControlEventConsumer {
                 (event.getSourceBranch() != null ? event.getSourceBranch() : "");
 
         Set<String> matchedTaskKeys = extractTaskKeys(combinedText);
+        boolean hasFixKeyword = FIX_KEYWORD_PATTERN.matcher(combinedText).find();
         String externalRef = "PR-#" + event.getNumber();
+
         for (String taskKey : matchedTaskKeys) {
             Optional<Task> taskOpt = taskRepository.findByOrganizationIdAndTaskKey(event.getOrganizationId(), taskKey);
             if (taskOpt.isPresent()) {
                 Task task = taskOpt.get();
                 linkArtifact(task, CodeLinkType.PULL_REQUEST, externalRef, event.getRepositoryId(), "GIT_PR_AUTO_LINK");
+
+                boolean changed = false;
+                if (hasFixKeyword) {
+                    if (task.getStatus() != com.forgeai.project.domain.model.TaskStatus.DONE) {
+                        task.setStatus(com.forgeai.project.domain.model.TaskStatus.DONE);
+                        task.setUpdatedAt(Instant.now());
+                        changed = true;
+                    }
+                } else if (task.getStatus() == com.forgeai.project.domain.model.TaskStatus.TODO ||
+                           task.getStatus() == com.forgeai.project.domain.model.TaskStatus.IN_PROGRESS) {
+                    task.setStatus(com.forgeai.project.domain.model.TaskStatus.IN_REVIEW);
+                    task.setUpdatedAt(Instant.now());
+                    changed = true;
+                }
+                if (changed) {
+                    taskRepository.save(task);
+                    log.info("Auto-progressed task {} to status {}", taskKey, task.getStatus());
+                }
             }
         }
     }
@@ -119,6 +159,12 @@ public class SourceControlEventConsumer {
             if (taskOpt.isPresent()) {
                 Task task = taskOpt.get();
                 linkArtifact(task, CodeLinkType.BRANCH, event.getBranchName(), event.getRepositoryId(), "GIT_BRANCH_AUTO_LINK");
+                if (task.getStatus() == com.forgeai.project.domain.model.TaskStatus.TODO) {
+                    task.setStatus(com.forgeai.project.domain.model.TaskStatus.IN_PROGRESS);
+                    task.setUpdatedAt(Instant.now());
+                    taskRepository.save(task);
+                    log.info("Auto-progressed task {} to status IN_PROGRESS from branch creation", taskKey);
+                }
             }
         }
     }
