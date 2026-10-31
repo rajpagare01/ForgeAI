@@ -113,14 +113,23 @@ public class InstallationReconciliationService {
         int removedCount = 0;
 
         // 4. Reconcile newly accessible or modified repositories
+        UUID targetOrg = installation.getOrganizationId();
+        UUID targetWs = installation.getWorkspaceId();
+        String targetScope = (targetOrg != null) ? "ORGANIZATION" : "PERSONAL";
+        if ("ORGANIZATION".equals(targetScope)) {
+            targetWs = targetOrg;
+        } else {
+            targetOrg = null;
+        }
+
         for (GitHubRepositoryMetadata ghRepo : accessibleRepos) {
             Repository repo = existingRepoMap.get(ghRepo.id());
             if (repo == null) {
                 // New repository granted access
                 repo = Repository.builder()
-                        .organizationId(installation.getOrganizationId())
-                        .workspaceId(installation.getWorkspaceId())
-                        .scope(installation.getScope())
+                        .organizationId(targetOrg)
+                        .workspaceId(targetWs)
+                        .scope(targetScope)
                         .installationId(installation.getInstallationId())
                         .githubRepoId(ghRepo.id())
                         .name(ghRepo.name())
@@ -138,9 +147,9 @@ public class InstallationReconciliationService {
                 UUID repoId = repo.getId() != null ? repo.getId() : UUID.randomUUID();
                 RepositoryConnectedEvent event = RepositoryConnectedEvent.builder()
                         .repositoryId(repoId)
-                        .organizationId(repo.getOrganizationId())
-                        .workspaceId(repo.getWorkspaceId())
-                        .scope(repo.getScope() != null ? repo.getScope() : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL"))
+                        .organizationId(targetOrg)
+                        .workspaceId(targetWs)
+                        .scope(targetScope)
                         .githubRepoId(repo.getGithubRepoId())
                         .fullName(repo.getFullName())
                         .defaultBranch(repo.getDefaultBranch())
@@ -153,6 +162,9 @@ public class InstallationReconciliationService {
                 repo.setFullName(ghRepo.fullName());
                 repo.setDefaultBranch(ghRepo.defaultBranch());
                 repo.setIsPrivate(ghRepo.isPrivate());
+                repo.setOrganizationId(targetOrg);
+                repo.setWorkspaceId(targetWs);
+                repo.setScope(targetScope);
                 if (repo.getSyncStatus() == RepositorySyncStatus.INACCESSIBLE || repo.getSyncStatus() == RepositorySyncStatus.DISCONNECTED) {
                     repo.setSyncStatus(RepositorySyncStatus.SYNCED);
                 }

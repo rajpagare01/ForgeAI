@@ -3,6 +3,7 @@
 import React, { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { apiClient } from "@/lib/api-client";
 import { Cpu, AlertCircle, CheckCircle2, ArrowRight, RotateCcw } from "lucide-react";
 import Link from "next/link";
 
@@ -17,12 +18,28 @@ function GitHubCallbackContent() {
   const [retryTrigger, setRetryTrigger] = useState(0);
   const hasExecuted = useRef(false);
 
-  const handleRetry = () => {
-    hasExecuted.current = false;
+  const handleRetry = async () => {
     setStatus("processing");
     setErrorMessage(null);
-    setStepMessage("Re-attempting GitHub authorization exchange...");
-    setRetryTrigger((prev) => prev + 1);
+    setStepMessage("Re-initiating GitHub authorization...");
+    try {
+      const callbackUri = `${window.location.origin}/auth/github/callback`;
+      const res = await apiClient.get<{ authorizationUrl: string }>(
+        `/api/v1/auth/github/start?redirectUri=${encodeURIComponent(callbackUri)}`,
+        { skipAuth: true }
+      );
+      if (res?.authorizationUrl) {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("forgeai_github_oauth_action", "login");
+          localStorage.removeItem("forgeai_access_token");
+        }
+        window.location.href = res.authorizationUrl;
+        return;
+      }
+    } catch (e) {
+      console.error("Retry start failed:", e);
+    }
+    router.push("/login");
   };
 
   useEffect(() => {
@@ -68,24 +85,20 @@ function GitHubCallbackContent() {
         setStepMessage("Exchanging GitHub authorization credentials...");
         const callbackUri = `${window.location.origin}/auth/github/callback`;
 
+        const oauthAction = typeof window !== "undefined" ? sessionStorage.getItem("forgeai_github_oauth_action") : null;
+        const isExplicitLink = oauthAction === "link";
+
         let targetRoute = "/";
         const exchangePromise = (async () => {
-          if (hasExistingSession) {
-            try {
-              // Account linking flow for logged-in user
-              setStepMessage("Linking GitHub identity to ForgeAI workspace...");
-              await linkGitHubAccount(code, state, callbackUri);
-              setStepMessage("GitHub account successfully linked! Redirecting to repositories...");
-              targetRoute = "/repositories";
-              return;
-            } catch (linkErr: any) {
-              console.warn("Account link failed (possibly expired session or login flow); falling back to sign-in:", linkErr);
-              // Clean up potentially stale access token
-              if (typeof window !== "undefined") {
-                localStorage.removeItem("forgeai_access_token");
-              }
-            }
+          if (isExplicitLink && hasExistingSession) {
+            // Account linking flow for logged-in user
+            setStepMessage("Linking GitHub identity to ForgeAI workspace...");
+            await linkGitHubAccount(code, state, callbackUri);
+            setStepMessage("GitHub account successfully linked! Redirecting to repositories...");
+            targetRoute = "/repositories";
+            return;
           }
+
           // Sign in / Registration flow
           setStepMessage("Establishing secure ForgeAI session & personal workspace...");
           await loginWithGitHub(code, state, callbackUri);
@@ -98,10 +111,10 @@ function GitHubCallbackContent() {
             () =>
               reject(
                 new Error(
-                  "GitHub OAuth exchange timed out after 75 seconds. Network latency was high. Please click 'Try Again' or return to Sign In."
+                  "GitHub OAuth exchange timed out after 90 seconds. Network latency was high. Please click 'Try Again' or return to Sign In."
                 )
               ),
-            75000
+            90000
           )
         );
 

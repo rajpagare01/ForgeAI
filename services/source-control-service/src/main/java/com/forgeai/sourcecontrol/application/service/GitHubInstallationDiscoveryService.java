@@ -321,12 +321,27 @@ public class GitHubInstallationDiscoveryService {
             throw new GitHubAccessDeniedException("Installation " + installationId + " could not be resolved on GitHub.");
         }
 
-        boolean isPersonal = organizationId == null;
-        String scope = isPersonal ? "PERSONAL" : "ORGANIZATION";
+        UUID targetOrg = organizationId;
+        UUID targetWs = effectiveWsId;
+        if (targetOrg == null && targetWs != null && workspaceRepository != null) {
+            var wsOpt = workspaceRepository.findById(targetWs);
+            if (wsOpt.isPresent() && "ORGANIZATION".equalsIgnoreCase(wsOpt.get().getType()) && wsOpt.get().getOrganizationId() != null) {
+                targetOrg = wsOpt.get().getOrganizationId();
+            }
+        }
+
+        String scope;
+        if (targetOrg != null) {
+            scope = "ORGANIZATION";
+            targetWs = targetOrg;
+        } else {
+            scope = "PERSONAL";
+            targetOrg = null;
+        }
 
         // 2. Strict Ownership Validation (Anti-Spoofing)
         if (callerUserId != null) {
-            if (isPersonal || "User".equalsIgnoreCase(details.accountType())) {
+            if ("PERSONAL".equalsIgnoreCase(scope) || "User".equalsIgnoreCase(details.accountType())) {
                 Optional<IdentityServiceClient.UserGitHubProfile> profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
                 if (profileOpt.isPresent() && profileOpt.get().connected()) {
                     IdentityServiceClient.UserGitHubProfile profile = profileOpt.get();
@@ -379,9 +394,9 @@ public class GitHubInstallationDiscoveryService {
                 // If claimed by same user OR unclaimed OR caller is null (e.g. system), allow workspace migration
                 if (existing.getClaimedByUserId() == null || callerUserId == null || callerUserId.equals(existing.getClaimedByUserId())) {
                     log.info("[GitHub] Associating/migrating installation {} to workspace {}, org {}, scope {}",
-                            installationId, effectiveWsId, organizationId, scope);
-                    existing.setWorkspaceId(effectiveWsId);
-                    existing.setOrganizationId(organizationId);
+                            installationId, targetWs, targetOrg, scope);
+                    existing.setWorkspaceId(targetWs);
+                    existing.setOrganizationId(targetOrg);
                     existing.setScope(scope);
                     existing.setStatus(InstallationStatus.ACTIVE);
                     if (callerUserId != null) {
@@ -404,11 +419,11 @@ public class GitHubInstallationDiscoveryService {
                     return saved;
                 }
 
-                if (organizationId != null && organizationId.equals(existing.getOrganizationId())) {
+                if (targetOrg != null && targetOrg.equals(existing.getOrganizationId())) {
                     if (metrics != null) metrics.recordInstallationSuccess();
                     return existing;
                 }
-                if (effectiveWsId != null && effectiveWsId.equals(existing.getWorkspaceId())) {
+                if (targetWs != null && targetWs.equals(existing.getWorkspaceId())) {
                     if (metrics != null) metrics.recordInstallationSuccess();
                     return existing;
                 }
@@ -426,8 +441,8 @@ public class GitHubInstallationDiscoveryService {
         GitHubInstallation installation;
         if (existingClaimOpt.isPresent()) {
             installation = existingClaimOpt.get();
-            installation.setOrganizationId(organizationId);
-            installation.setWorkspaceId(effectiveWsId);
+            installation.setOrganizationId(targetOrg);
+            installation.setWorkspaceId(targetWs);
             installation.setScope(scope);
             installation.setGithubAppId(details.appId());
             installation.setAccountId(details.accountId());
@@ -440,8 +455,8 @@ public class GitHubInstallationDiscoveryService {
             installation.setLastSyncedAt(Instant.now());
         } else {
             installation = GitHubInstallation.builder()
-                    .organizationId(organizationId)
-                    .workspaceId(effectiveWsId)
+                    .organizationId(targetOrg)
+                    .workspaceId(targetWs)
                     .scope(scope)
                     .installationId(installationId)
                     .githubAppId(details.appId())
@@ -488,6 +503,15 @@ public class GitHubInstallationDiscoveryService {
     }
 
     private void syncRepositoryRecord(GitHubRepositoryMetadata ghRepo, GitHubInstallation installation) {
+        UUID targetOrg = installation.getOrganizationId();
+        UUID targetWs = installation.getWorkspaceId();
+        String targetScope = (targetOrg != null) ? "ORGANIZATION" : "PERSONAL";
+        if ("ORGANIZATION".equals(targetScope)) {
+            targetWs = targetOrg;
+        } else {
+            targetOrg = null;
+        }
+
         Optional<Repository> existing = repositoryRepository.findByGithubRepoId(ghRepo.id());
         Repository repo;
         if (existing.isPresent()) {
@@ -497,18 +521,18 @@ public class GitHubInstallationDiscoveryService {
             repo.setDefaultBranch(ghRepo.defaultBranch());
             repo.setIsPrivate(ghRepo.isPrivate());
             repo.setInstallationId(installation.getInstallationId());
-            repo.setWorkspaceId(installation.getWorkspaceId());
-            repo.setOrganizationId(installation.getOrganizationId());
-            repo.setScope(installation.getScope());
+            repo.setWorkspaceId(targetWs);
+            repo.setOrganizationId(targetOrg);
+            repo.setScope(targetScope);
             repo.setSyncStatus(RepositorySyncStatus.SYNCED);
             repo.setLastSyncedAt(Instant.now());
             repo.setUpdatedAt(Instant.now());
             repositoryRepository.save(repo);
         } else {
             repo = Repository.builder()
-                    .organizationId(installation.getOrganizationId())
-                    .workspaceId(installation.getWorkspaceId())
-                    .scope(installation.getScope())
+                    .organizationId(targetOrg)
+                    .workspaceId(targetWs)
+                    .scope(targetScope)
                     .installationId(installation.getInstallationId())
                     .githubRepoId(ghRepo.id())
                     .name(ghRepo.name())

@@ -46,6 +46,10 @@ export default function LoginPage() {
         { skipAuth: true }
       );
       if (res?.authorizationUrl) {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("forgeai_github_oauth_action", "login");
+          localStorage.removeItem("forgeai_access_token");
+        }
         window.location.href = res.authorizationUrl;
       } else {
         setError("Unable to initialize GitHub authorization session.");

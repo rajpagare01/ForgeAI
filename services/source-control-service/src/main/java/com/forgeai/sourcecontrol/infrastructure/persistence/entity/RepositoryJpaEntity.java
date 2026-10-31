@@ -83,17 +83,22 @@ public class RepositoryJpaEntity {
         Instant now = Instant.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
-        if (scope == null) {
-            scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
-        }
-        if (workspaceId == null && organizationId != null) {
-            workspaceId = organizationId;
-        }
+        enforceScopeIntegrity();
     }
-
 
     @PreUpdate
     public void preUpdate() {
         updatedAt = Instant.now();
+        enforceScopeIntegrity();
+    }
+
+    private void enforceScopeIntegrity() {
+        if (organizationId != null) {
+            scope = "ORGANIZATION";
+            workspaceId = organizationId;
+        } else {
+            scope = "PERSONAL";
+            organizationId = null;
+        }
     }
 }

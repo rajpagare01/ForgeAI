@@ -75,19 +75,34 @@ public class GitHubInstallationJpaEntity {
         Instant now = Instant.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
-        if (scope == null) {
-            scope = organizationId != null ? "ORGANIZATION" : (workspaceId != null ? "PERSONAL" : "ORGANIZATION");
-        }
-        if (workspaceId == null && organizationId != null) {
-            workspaceId = organizationId;
-        }
         if (repositorySelection == null) {
             repositorySelection = "ALL";
         }
+        enforceScopeIntegrity();
     }
 
     @PreUpdate
     public void preUpdate() {
         updatedAt = Instant.now();
+        enforceScopeIntegrity();
+    }
+
+    private void enforceScopeIntegrity() {
+        boolean isUnclaimedStatus = "DISCOVERED".equalsIgnoreCase(status)
+                || "VALIDATING".equalsIgnoreCase(status)
+                || "CLAIMABLE".equalsIgnoreCase(status)
+                || "QUARANTINED".equalsIgnoreCase(status);
+
+        if (isUnclaimedStatus && workspaceId == null) {
+            return;
+        }
+
+        if (organizationId != null) {
+            scope = "ORGANIZATION";
+            workspaceId = organizationId;
+        } else {
+            scope = "PERSONAL";
+            organizationId = null;
+        }
     }
 }

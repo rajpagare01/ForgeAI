@@ -32,8 +32,19 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
                 RepositoryJpaEntity entity = existingOpt.get();
                 entity.setName(repository.getName());
                 entity.setFullName(repository.getFullName());
-                entity.setWorkspaceId(repository.getWorkspaceId());
-                entity.setScope(repository.getScope());
+
+                UUID orgId = repository.getOrganizationId();
+                UUID wsId = repository.getWorkspaceId();
+                String scope = (orgId != null) ? "ORGANIZATION" : "PERSONAL";
+                if ("ORGANIZATION".equals(scope)) {
+                    wsId = orgId;
+                } else {
+                    orgId = null;
+                }
+                entity.setOrganizationId(orgId);
+                entity.setWorkspaceId(wsId);
+                entity.setScope(scope);
+
                 entity.setDefaultBranch(repository.getDefaultBranch());
                 entity.setIsPrivate(repository.getIsPrivate());
                 entity.setLatestObservedSha(repository.getLatestObservedSha());
@@ -47,6 +58,17 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
             }
         }
         RepositoryJpaEntity entity = mapper.toEntity(repository);
+        UUID orgId = entity.getOrganizationId();
+        UUID wsId = entity.getWorkspaceId();
+        String scope = (orgId != null) ? "ORGANIZATION" : "PERSONAL";
+        if ("ORGANIZATION".equals(scope)) {
+            wsId = orgId;
+        } else {
+            orgId = null;
+        }
+        entity.setOrganizationId(orgId);
+        entity.setWorkspaceId(wsId);
+        entity.setScope(scope);
         return mapper.toDomain(jpaRepository.save(entity));
     }
 

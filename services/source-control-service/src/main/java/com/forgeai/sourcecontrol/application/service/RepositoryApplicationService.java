@@ -556,7 +556,14 @@ public class RepositoryApplicationService {
         validateWorkspaceAccess(targetWorkspaceId, organizationId, callerUserId);
         gitHubAppConfig.requireConfigured();
 
-        String scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
+        UUID targetOrg = organizationId;
+        UUID targetWs = targetWorkspaceId;
+        String scope = (targetOrg != null) ? "ORGANIZATION" : "PERSONAL";
+        if ("ORGANIZATION".equals(scope)) {
+            targetWs = targetOrg;
+        } else {
+            targetOrg = null;
+        }
 
         // Must not be already claimed by this or another real org / workspace
         Optional<GitHubInstallation> alreadyClaimed = installationRepository.findByInstallationId(installationId);
@@ -611,21 +618,21 @@ public class RepositoryApplicationService {
         if (alreadyClaimed.isPresent()) {
             // Promote quarantined record
             GitHubInstallation inst = alreadyClaimed.get();
-            inst.setOrganizationId(organizationId);
-            inst.setWorkspaceId(targetWorkspaceId);
+            inst.setOrganizationId(targetOrg);
+            inst.setWorkspaceId(targetWs);
             inst.setScope(scope);
             inst.setClaimedByUserId(callerUserId);
             inst.setStatus(InstallationStatus.ACTIVE);
             inst.setUpdatedAt(Instant.now());
             GitHubInstallation saved = installationRepository.save(inst);
             if (telemetryReconciler != null) telemetryReconciler.reconcile();
-            log.info("[GitHub] Installation {} claimed by orgId={}, wsId={}", installationId, organizationId, targetWorkspaceId);
+            log.info("[GitHub] Installation {} claimed by orgId={}, wsId={}", installationId, targetOrg, targetWs);
             return saved;
         } else {
             // Installation exists on GitHub but not yet in our DB (e.g. webhook not yet received)
             GitHubInstallation inst = GitHubInstallation.builder()
-                    .organizationId(organizationId)
-                    .workspaceId(targetWorkspaceId)
+                    .organizationId(targetOrg)
+                    .workspaceId(targetWs)
                     .scope(scope)
                     .installationId(installationId)
                     .accountLogin(accountLogin)
@@ -637,7 +644,7 @@ public class RepositoryApplicationService {
                     .build();
             GitHubInstallation saved = installationRepository.save(inst);
             if (telemetryReconciler != null) telemetryReconciler.reconcile();
-            log.info("[GitHub] New installation {} registered and claimed by orgId={}, wsId={}", installationId, organizationId, targetWorkspaceId);
+            log.info("[GitHub] New installation {} registered and claimed by orgId={}, wsId={}", installationId, targetOrg, targetWs);
             return saved;
         }
     }
@@ -696,7 +703,14 @@ public class RepositoryApplicationService {
                     "fullName must be in 'owner/repo' format, e.g. 'acme/my-service'");
         }
 
-        String scope = organizationId != null ? "ORGANIZATION" : "PERSONAL";
+        UUID targetOrg = organizationId;
+        UUID targetWs = targetWorkspaceId;
+        String scope = (targetOrg != null) ? "ORGANIZATION" : "PERSONAL";
+        if ("ORGANIZATION".equals(scope)) {
+            targetWs = targetOrg;
+        } else {
+            targetOrg = null;
+        }
 
         GitHubInstallation installation = getClaimedInstallation(organizationId, workspaceId, callerUserId);
 
@@ -717,8 +731,8 @@ public class RepositoryApplicationService {
                 isOwner = organizationId == null && (existingRepo.getWorkspaceId() == null || (targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId())));
             }
             if (isOwner) {
-                existingRepo.setOrganizationId(organizationId);
-                existingRepo.setWorkspaceId(targetWorkspaceId);
+                existingRepo.setOrganizationId(targetOrg);
+                existingRepo.setWorkspaceId(targetWs);
                 existingRepo.setScope(scope);
                 existingRepo.setName(ghRepo.name());
                 existingRepo.setFullName(ghRepo.fullName());
@@ -731,7 +745,7 @@ public class RepositoryApplicationService {
                     updated = existingRepo;
                 }
                 log.info("[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
-                        updated.getId(), updated.getFullName(), updated.getGithubRepoId(), organizationId, targetWorkspaceId);
+                        updated.getId(), updated.getFullName(), updated.getGithubRepoId(), targetOrg, targetWs);
                 return updated;
             }
             throw new DuplicateResourceException(
@@ -739,8 +753,8 @@ public class RepositoryApplicationService {
         }
 
         Repository repo = Repository.builder()
-                .organizationId(organizationId)
-                .workspaceId(targetWorkspaceId)
+                .organizationId(targetOrg)
+                .workspaceId(targetWs)
                 .scope(scope)
                 .installationId(installation.getInstallationId())
                 .githubRepoId(ghRepo.id())

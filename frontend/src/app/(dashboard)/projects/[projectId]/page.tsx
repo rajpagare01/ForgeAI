@@ -235,7 +235,7 @@ function ProjectDetailContent() {
 
       const reqPromise = apiClient.post<any>(`/api/v1/projects/${rawProjectId}/requirements`, payload);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Requirement creation timed out after 15 seconds. Please try again.")), 15000)
+        setTimeout(() => reject(new Error("Requirement creation timed out after 30 seconds. Please try again.")), 30000)
       );
 
       const created: any = await Promise.race([reqPromise, timeoutPromise]);
@@ -279,10 +279,22 @@ function ProjectDetailContent() {
     try {
       const selected = availableRepos.find((r) => r.id === selectedRepoToLink);
       const repoName = selected?.fullName || selectedRepoToLink;
-      
+
+      const alreadyLinked = repositories.some(
+        (r) => r.repositoryId === selectedRepoToLink || r.id === selectedRepoToLink || r.repositoryName === repoName
+      );
+      if (alreadyLinked) {
+        setProject((prev) => prev ? { ...prev, repositoryName: repoName } : prev);
+        setShowRepoModal(false);
+        setSelectedRepoToLink("");
+        showNotification(`✓ Repository "${repoName}" is already linked to this project!`);
+        setIsSubmittingRepo(false);
+        return;
+      }
+
       const linkPromise = apiClient.linkProjectRepository<any>(rawProjectId, selectedRepoToLink, repoName);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Linking repository timed out after 15 seconds. Please check connection.")), 15000)
+        setTimeout(() => reject(new Error("Linking repository timed out after 30 seconds. Please check connection.")), 30000)
       );
 
       const link: any = await Promise.race([linkPromise, timeoutPromise]);
@@ -730,6 +742,13 @@ function ProjectDetailContent() {
             />
           </div>
 
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2.5 text-xs text-rose-300">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <DialogFooter>
             <Button
               type="button"
@@ -801,6 +820,13 @@ function ProjectDetailContent() {
               </div>
             )}
           </div>
+
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2.5 text-xs text-rose-300">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              <span>{error}</span>
+            </div>
+          )}
 
           <DialogFooter>
             <Button

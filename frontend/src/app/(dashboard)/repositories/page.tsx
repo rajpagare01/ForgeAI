@@ -264,6 +264,9 @@ export default function RepositoriesPage() {
           `/api/v1/auth/github/start?redirectUri=${encodeURIComponent(callbackUri)}`
         );
         if (res?.authorizationUrl) {
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("forgeai_github_oauth_action", "link");
+          }
           window.location.href = res.authorizationUrl;
         } else {
           setConnectionState("AUTHENTICATION_FAILED");

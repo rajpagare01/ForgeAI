@@ -927,21 +927,23 @@ public class TraceabilityAggregationService {
             }
         }
 
-        // 3. Resolve repository metadata from Source Control with graceful fallback
-        Optional<RemoteRepositoryDto> repoDtoOpt = project.getOrganizationId() != null
-                ? sourceControlClient.getRepository(project.getOrganizationId(), repositoryId)
-                : sourceControlClient.getRepository(project.getWorkspaceId(), null, repositoryId);
-
+        // 3. Resolve repository metadata with fast-path fallback
         String authoritativeName;
-        if (repoDtoOpt.isPresent()) {
-            RemoteRepositoryDto repoDto = repoDtoOpt.get();
-            authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
-                    ? repoDto.getFullName()
-                    : (repoDto.getName() != null ? repoDto.getName() : "repository-" + repositoryId.toString().substring(0, 8));
-        } else if (repositoryName != null && !repositoryName.isBlank()) {
-            authoritativeName = repositoryName;
+        if (repositoryName != null && !repositoryName.isBlank()) {
+            authoritativeName = repositoryName.trim();
         } else {
-            throw new ResourceNotFoundException("Repository not found or not authorized for organization/workspace: id=" + repositoryId);
+            Optional<RemoteRepositoryDto> repoDtoOpt = project.getOrganizationId() != null
+                    ? sourceControlClient.getRepository(project.getOrganizationId(), repositoryId)
+                    : sourceControlClient.getRepository(project.getWorkspaceId(), null, repositoryId);
+
+            if (repoDtoOpt.isPresent()) {
+                RemoteRepositoryDto repoDto = repoDtoOpt.get();
+                authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
+                        ? repoDto.getFullName()
+                        : (repoDto.getName() != null ? repoDto.getName() : "repository-" + repositoryId.toString().substring(0, 8));
+            } else {
+                authoritativeName = "repository-" + repositoryId.toString().substring(0, 8);
+            }
         }
 
         ProjectRepositoryLink link = ProjectRepositoryLink.builder()

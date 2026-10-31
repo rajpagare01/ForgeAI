@@ -35,7 +35,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
         this.clientSecret = clientSecret != null ? clientSecret.trim() : "";
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1)
+                .version(HttpClient.Version.HTTP_2)
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
     }
