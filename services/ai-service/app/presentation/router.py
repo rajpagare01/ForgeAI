@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from fastapi.responses import StreamingResponse
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from app.core.config import settings
 from app.infrastructure.llm.provider import AIUnavailableException
 from app.presentation.dependencies import (
     get_tenant_org_id,

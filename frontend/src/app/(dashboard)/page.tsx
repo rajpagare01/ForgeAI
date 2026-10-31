@@ -68,15 +68,18 @@ export default function OverviewDashboardPage() {
             } catch (ignored) { }
 
             try {
-              const reports = await apiClient.get<any[]>(`/api/v1/ai/repositories/${r.id}/commit-reports?limit=5`);
-              if (Array.isArray(reports)) {
-                for (const cr of reports) {
+              const reportRes = await apiClient.get<any>(`/api/v1/ai/repositories/${r.id}/commit-reports?limit=5`);
+              const reportList = Array.isArray(reportRes) ? reportRes : (reportRes?.reports || []);
+              if (Array.isArray(reportList)) {
+                for (const cr of reportList) {
+                  const totalIssues = (cr.security_issues || 0) + (cr.reliability_issues || 0);
+                  const findingsCount = Array.isArray(cr.findings) ? cr.findings.length : 0;
                   insightsList.push({
                     pr: `Commit ${cr.commit_sha?.substring(0, 7) || "HEAD"}`,
                     title: cr.commit_message || `Push on ${cr.ref || "branch"}`,
-                    risk: cr.secrets_detected > 0 ? "CRITICAL" : (cr.bugs_detected > 0 ? "HIGH" : "LOW"),
-                    score: cr.secrets_detected > 0 ? 95 : (cr.bugs_detected > 0 ? 65 : 10),
-                    symbols: cr.files_changed_count || 1,
+                    risk: (cr.secrets_detected || 0) > 0 ? "CRITICAL" : (totalIssues > 0 ? "HIGH" : "LOW"),
+                    score: cr.risk_score ? Math.round(cr.risk_score) : ((cr.secrets_detected || 0) > 0 ? 95 : (totalIssues > 0 ? 65 : 10)),
+                    symbols: findingsCount || 1,
                   });
                 }
               }

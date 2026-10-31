@@ -214,6 +214,7 @@ public class ProjectController {
                         if (!codeLinkRepository.existsByTaskIdAndLinkTypeAndExternalRef(task.getId(), com.forgeai.project.domain.model.CodeLinkType.COMMIT, act.sha())) {
                             codeLinkRepository.save(com.forgeai.project.domain.model.CodeLink.builder()
                                     .organizationId(task.getOrganizationId())
+                                    .workspaceId(task.getWorkspaceId() != null ? task.getWorkspaceId() : task.getOrganizationId())
                                     .taskId(task.getId())
                                     .linkType(com.forgeai.project.domain.model.CodeLinkType.COMMIT)
                                     .externalRef(act.sha())
@@ -229,6 +230,7 @@ public class ProjectController {
                         if (!codeLinkRepository.existsByTaskIdAndLinkTypeAndExternalRef(task.getId(), com.forgeai.project.domain.model.CodeLinkType.PULL_REQUEST, prRef)) {
                             codeLinkRepository.save(com.forgeai.project.domain.model.CodeLink.builder()
                                     .organizationId(task.getOrganizationId())
+                                    .workspaceId(task.getWorkspaceId() != null ? task.getWorkspaceId() : task.getOrganizationId())
                                     .taskId(task.getId())
                                     .linkType(com.forgeai.project.domain.model.CodeLinkType.PULL_REQUEST)
                                     .externalRef(prRef)

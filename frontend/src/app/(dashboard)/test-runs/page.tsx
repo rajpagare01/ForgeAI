@@ -57,6 +57,7 @@ interface TestCaseResult {
   testCaseName?: string;
   name?: string;
   className?: string;
+  classname?: string;
   status: "PASSED" | "FAILED" | "SKIPPED";
   durationMs?: number;
   errorMessage?: string;
@@ -393,7 +394,7 @@ export default function TestRunsPage() {
         run_id: selectedRun.id,
         commit_sha: selectedRun.commitSha,
         test_name: testCase.name || testCase.testCaseName || "testTenantBoundaryIsolation",
-        class_name: testCase.className || "com.forgeai.security.AuthenticationServiceTest",
+        class_name: testCase.className || testCase.classname || "com.forgeai.security.AuthenticationServiceTest",
         error_message: testCase.errorMessage || testCase.failureMessage || "Assertion error in verification suite",
         stack_trace: testCase.stackTrace || "java.lang.AssertionError: Assertion failed",
       });
@@ -421,7 +422,7 @@ export default function TestRunsPage() {
           [diagnosisResult.suspected_file]: diagnosisResult.patched_content,
         },
       });
-      const prUrl = res?.prUrl || `https://github.com/${selectedRun.repositoryFullName}/pulls`;
+      const prUrl = res?.prUrl || res?.pr_url || `https://github.com/${selectedRun.repositoryFullName}/pulls`;
       setOpenedPrUrl(prUrl);
       showNotification("✓ Automated Remediation Pull Request proposed successfully!");
     } catch (err: any) {
@@ -446,7 +447,11 @@ export default function TestRunsPage() {
       // 1. Create Test Run
       const runRes = await apiClient.post<any>("/api/v1/test-runs", {
         repositoryId: recordRepoId,
-        commitSha: recordCommitSha.trim() || "0000000000000000000000000000000000000000",
+        commitSha: (() => {
+          const clean = recordCommitSha.trim();
+          if (!clean) return "0000000000000000000000000000000000000000";
+          return clean.length >= 7 ? clean.slice(0, 40) : (clean + "0000000").slice(0, 7);
+        })(),
         branch: recordBranch.trim() || "main",
       });
 
@@ -595,7 +600,7 @@ export default function TestRunsPage() {
           [diag.suspected_file]: diag.patched_content,
         },
       });
-      const prUrl = res?.prUrl || `https://github.com/${repoName}/pulls`;
+      const prUrl = res?.prUrl || res?.pr_url || `https://github.com/${repoName}/pulls`;
       setFixPrUrlMap((prev) => ({ ...prev, [diag.test_name]: prUrl }));
       showNotification(`✓ Fix PR proposed: ${diag.proposed_fix_title}`);
     } catch (err: any) {
@@ -656,7 +661,7 @@ export default function TestRunsPage() {
           [generatedSuite.test_file_path]: generatedSuite.test_code,
         },
       });
-      const prUrl = res?.prUrl || `https://github.com/${repoName}/pulls`;
+      const prUrl = res?.prUrl || res?.pr_url || `https://github.com/${repoName}/pulls`;
       setCommittedPrUrl(prUrl);
       showNotification("✓ Pull Request proposed with generated tests!");
     } catch (err: any) {
@@ -1013,8 +1018,8 @@ export default function TestRunsPage() {
                           <div className="font-mono text-white font-medium">
                             {t.testCaseName || t.name || `Test Case ${idx + 1}`}
                           </div>
-                          {t.className && (
-                            <div className="text-[11px] text-slate-500 font-mono">{t.className}</div>
+                          {(t.className || t.classname) && (
+                            <div className="text-[11px] text-slate-500 font-mono">{t.className || t.classname}</div>
                           )}
                         </div>
                       </div>

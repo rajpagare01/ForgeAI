@@ -178,6 +178,7 @@ public class SourceControlEventConsumer {
         Instant now = Instant.now();
         CodeLink codeLink = CodeLink.builder()
                 .organizationId(task.getOrganizationId())
+                .workspaceId(task.getWorkspaceId() != null ? task.getWorkspaceId() : task.getOrganizationId())
                 .taskId(task.getId())
                 .linkType(linkType)
                 .externalRef(externalRef)

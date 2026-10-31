@@ -498,42 +498,73 @@ export default function ProjectsPage() {
     }
   };
 
-  // Import Generated Backlog into Project
   const handleImportBacklog = async () => {
     if (!selectedProjectId || !generatedBacklog) return;
 
     setIsImportingBacklog(true);
     try {
-      // 1. Create requirements and save ID mapping
       const reqIdMap: Record<string, string> = {};
+      const existingReqIdentifiers = new Set(
+        requirements.map((er) => er.identifier.toUpperCase())
+      );
+      requirements.forEach((er) => {
+        reqIdMap[er.identifier.toUpperCase()] = er.id;
+      });
+
+      let nextReqNum = requirements.length + 1;
       for (const r of generatedBacklog.requirements) {
+        let targetId = r.identifier.trim().toUpperCase();
+        if (existingReqIdentifiers.has(targetId)) {
+          while (existingReqIdentifiers.has(`REQ-${String(nextReqNum).padStart(3, "0")}`)) {
+            nextReqNum++;
+          }
+          targetId = `REQ-${String(nextReqNum).padStart(3, "0")}`;
+        }
         try {
           const createdReq = await apiClient.post<any>(`/api/v1/projects/${selectedProjectId}/requirements`, {
-            identifier: r.identifier,
+            identifier: targetId,
             title: r.title,
             description: r.description,
           });
           if (createdReq?.id) {
-            reqIdMap[r.identifier] = createdReq.id;
+            reqIdMap[r.identifier.trim().toUpperCase()] = createdReq.id;
+            reqIdMap[targetId] = createdReq.id;
+            existingReqIdentifiers.add(targetId);
           }
         } catch (e) {
-          console.warn("Requirement might already exist:", r.identifier, e);
+          console.warn("Requirement creation skipped:", targetId, e);
         }
       }
 
-      // 2. Create tasks with mapped requirement IDs
+      const existingTaskKeys = new Set(
+        tasks.map((et) => et.taskKey.toUpperCase())
+      );
+      const projPrefix = (selectedProject?.key || generatedBacklog.project_key || "TASK").toUpperCase();
+      let nextTaskNum = 101 + tasks.length;
+
       for (const t of generatedBacklog.tasks) {
+        let finalTaskKey = t.task_key.trim().toUpperCase();
+        if (existingTaskKeys.has(finalTaskKey)) {
+          while (existingTaskKeys.has(`${projPrefix}-${nextTaskNum}`)) {
+            nextTaskNum++;
+          }
+          finalTaskKey = `${projPrefix}-${nextTaskNum}`;
+        }
         try {
-          const matchedReqId = reqIdMap[t.requirement_identifier] || Object.values(reqIdMap)[0] || undefined;
+          const matchedReqId =
+            reqIdMap[t.requirement_identifier.trim().toUpperCase()] ||
+            Object.values(reqIdMap)[0] ||
+            undefined;
           await apiClient.post(`/api/v1/projects/${selectedProjectId}/tasks`, {
-            taskKey: t.task_key,
+            taskKey: finalTaskKey,
             title: t.title,
             description: t.description,
             requirementId: matchedReqId,
             priority: t.priority as TaskPriority,
           });
+          existingTaskKeys.add(finalTaskKey);
         } catch (e) {
-          console.warn("Task might already exist:", t.task_key, e);
+          console.warn("Task creation skipped:", finalTaskKey, e);
         }
       }
 

@@ -184,7 +184,7 @@ public final class EntityDomainMapper {
         if (domain == null) return null;
         return CodeLinkJpaEntity.builder()
                 .id(domain.getId())
-                .workspaceId(domain.getWorkspaceId())
+                .workspaceId(domain.getWorkspaceId() != null ? domain.getWorkspaceId() : domain.getOrganizationId())
                 .organizationId(domain.getOrganizationId())
                 .taskId(domain.getTaskId())
                 .linkType(domain.getLinkType())

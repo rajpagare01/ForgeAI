@@ -76,9 +76,12 @@ public class TestIngestionService {
             );
 
             // 2. Get or create TestCase
-            String caseKey = suite.getId() + "#" + item.testName() + "#" + (item.classname() != null ? item.classname() : "");
+            String effectiveTestName = (item.testName() != null && !item.testName().isBlank())
+                    ? item.testName()
+                    : "VerificationTestCase";
+            String caseKey = suite.getId() + "#" + effectiveTestName + "#" + (item.classname() != null ? item.classname() : "");
             TestCase testCase = caseCache.computeIfAbsent(caseKey, k ->
-                    testCaseRepository.findBySuiteIdAndNameAndClassname(suite.getId(), item.testName(), item.classname())
+                    testCaseRepository.findBySuiteIdAndNameAndClassname(suite.getId(), effectiveTestName, item.classname())
                             .map(existing -> {
                                 if (item.requirementKey() != null && !item.requirementKey().equals(existing.getRequirementKey())) {
                                     existing.setRequirementKey(item.requirementKey());
@@ -91,7 +94,7 @@ public class TestIngestionService {
                                     .workspaceId(effectiveWsId)
                                     .scope(effectiveScope)
                                     .suiteId(suite.getId())
-                                    .name(item.testName())
+                                    .name(effectiveTestName)
                                     .classname(item.classname())
                                     .requirementKey(item.requirementKey())
                                     .createdAt(now)
