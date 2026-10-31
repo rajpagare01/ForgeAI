@@ -220,10 +220,10 @@ System Design Doc ID: {str(system_design_doc_id) if system_design_doc_id else 'G
 </html>
 """
 
-        # 2. Check if SMTP_HOST is configured
-        if not self.smtp_host:
+        # 2. Check if email alerting is enabled and SMTP_HOST is configured
+        if not getattr(settings, "ENABLE_EMAIL_ALERTS", False) or not self.smtp_host:
             logger.info(
-                "[EmailNotificationService:DRY_RUN] SMTP_HOST unconfigured. Audit logged for recipient=%s, repo=%s, commit=%s, status=%s, secrets=%d",
+                "[EmailNotificationService:DRY_RUN] Email service temporarily stopped/disabled. Audit logged for recipient=%s, repo=%s, commit=%s, status=%s, secrets=%d",
                 recipient,
                 repo_name,
                 commit_sha[:8] if commit_sha else "HEAD",

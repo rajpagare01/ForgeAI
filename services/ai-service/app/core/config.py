@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     MAX_CROSS_REPO_DEPTH: int = 2
 
     # SMTP & Alert Notification Settings
+    ENABLE_EMAIL_ALERTS: bool = False
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

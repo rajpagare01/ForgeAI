@@ -238,6 +238,7 @@ services:
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
       ALLOW_TEST_FALLBACK: ${ALLOW_TEST_FALLBACK:-false}
       ENFORCE_INTERNAL_MARKER: "true"
+      ENABLE_EMAIL_ALERTS: ${ENABLE_EMAIL_ALERTS:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
