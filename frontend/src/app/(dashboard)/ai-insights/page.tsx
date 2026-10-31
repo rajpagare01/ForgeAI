@@ -71,6 +71,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { evaluateSecurityStatus, extractSafeCodeContext } from "@/lib/security-helpers";
+import { MarkdownMermaidViewer } from "@/components/ai/MarkdownMermaidViewer";
+import { SmtpTestBanner } from "@/components/ai/SmtpTestBanner";
+import { AutoDocsGridSkeleton, CommitReportsListSkeleton } from "@/components/ai/SkeletonLoaders";
 
 type LifecycleStep = "idle" | "fetching" | "deriving" | "indexing" | "graph" | "reasoning" | "complete";
 
@@ -679,6 +682,24 @@ function AiInsightsContent() {
   const [branches, setBranches] = useState<Array<{ name: string; commitSha: string; isProtected?: boolean }>>([]);
   const [selectedBranch, setSelectedBranch] = useState<string>("");
   const [isLoadingBranches, setIsLoadingBranches] = useState<boolean>(false);
+
+  // Real-Time Activity & SSE Status Indicator State
+  const [sseConnected, setSseConnected] = useState<boolean>(false);
+  const [toasts, setToasts] = useState<Array<{
+    id: string;
+    type: "success" | "error" | "info";
+    title: string;
+    message: string;
+    timestamp: Date;
+  }>>([]);
+
+  const addToast = useCallback((type: "success" | "error" | "info", title: string, message: string) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    setToasts((prev) => [...prev, { id, type, title, message, timestamp: new Date() }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  }, []);
 
   // Authoritative Repository Selector Handler with Persistence
   const handleSelectRepo = useCallback((repoId: string) => {
@@ -1502,7 +1523,11 @@ function AiInsightsContent() {
             signal: controller.signal,
           }
         );
-        if (!res.ok || !res.body) return;
+        if (!res.ok || !res.body) {
+          setSseConnected(false);
+          return;
+        }
+        setSseConnected(true);
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -1518,28 +1543,46 @@ function AiInsightsContent() {
             if (!dataLine) continue;
             try {
               const evt = JSON.parse(dataLine.slice(6));
-              if (
+              if (evt.event_type === "CONNECTED") {
+                setSseConnected(true);
+              } else if (
                 evt.event_type === "PUSH_ANALYZED" ||
-                evt.event_type === "COMMIT_ANALYZED" ||
-                evt.event_type === "DOCUMENT_GENERATED"
+                evt.event_type === "COMMIT_ANALYZED"
               ) {
                 fetchCommitReports();
                 fetchDocuments();
+                const shortSha = evt.commit_sha ? evt.commit_sha.slice(0, 7) : "HEAD";
+                addToast(
+                  "info",
+                  "Live Commit Scanned",
+                  `Push Guard analyzed commit ${shortSha} on ${evt.ref || "branch"}`
+                );
+              } else if (evt.event_type === "DOCUMENT_GENERATED") {
+                fetchCommitReports();
+                fetchDocuments();
+                const shortSha = evt.commit_sha ? evt.commit_sha.slice(0, 7) : "latest";
+                addToast(
+                  "success",
+                  "Auto-Docs Live Update",
+                  `5 architecture documents regenerated for commit ${shortSha}`
+                );
               }
             } catch {}
           }
         }
       } catch {
         // Fallback 15s polling remains active
+        setSseConnected(false);
       }
     };
 
     connectStream();
     return () => {
       isActive = false;
+      setSseConnected(false);
       controller.abort();
     };
-  }, [selectedRepoId, selectedBranch]);
+  }, [selectedRepoId, selectedBranch, addToast, fetchCommitReports, fetchDocuments]);
 
   // 2. Fetch real pull requests when selected repository changes
   useEffect(() => {
@@ -2116,6 +2159,24 @@ function AiInsightsContent() {
               )}
             </div>
           )}
+
+          {/* Live Push Guard Status Pill */}
+          <div
+            className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono shadow-sm transition-all ${
+              sseConnected
+                ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-300"
+                : "border-amber-500/40 bg-amber-950/30 text-amber-300"
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                sseConnected ? "bg-emerald-400 animate-ping" : "bg-amber-400"
+              }`}
+            />
+            <span className="font-semibold">
+              {sseConnected ? "● Live Push Guard Active" : "● Push Guard Active (15s Poll)"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -6450,10 +6511,7 @@ function AiInsightsContent() {
 
           {/* Document Cards Grid */}
           {isLoadingDocs ? (
-            <div className="flex flex-col items-center justify-center p-16 rounded-2xl border border-slate-800 bg-slate-900/30 space-y-3">
-              <RefreshCw className="h-8 w-8 text-sky-400 animate-spin" />
-              <p className="text-xs text-slate-400">Loading generated repository documents...</p>
-            </div>
+            <AutoDocsGridSkeleton />
           ) : documents.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-16 rounded-2xl border border-dashed border-slate-800 bg-slate-900/20 text-center space-y-4">
               <BookOpen className="h-12 w-12 text-slate-600" />
@@ -6623,6 +6681,10 @@ function AiInsightsContent() {
               </p>
             </div>
             <div className="flex items-center gap-2.5 flex-wrap">
+              <SmtpTestBanner
+                repoName={selectedRepo?.fullName || selectedRepo?.name || "ForgeAI"}
+                onNotification={addToast}
+              />
               <Button
                 variant="outline"
                 size="sm"
@@ -6734,9 +6796,8 @@ function AiInsightsContent() {
             </CardHeader>
             <CardContent className="p-0">
               {isLoadingCommitReports ? (
-                <div className="flex flex-col items-center justify-center p-12 space-y-2">
-                  <RefreshCw className="h-6 w-6 text-sky-400 animate-spin" />
-                  <p className="text-xs text-slate-400">Fetching commit analysis reports...</p>
+                <div className="p-4">
+                  <CommitReportsListSkeleton />
                 </div>
               ) : commitReports.length === 0 ? (
                 <div className="p-12 text-center space-y-3">
@@ -6883,10 +6944,11 @@ function AiInsightsContent() {
 
             {/* Document Content */}
             <div className="space-y-1.5">
-              <div className="text-xs font-semibold text-slate-300">Markdown Content:</div>
-              <div className="max-h-96 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/90 p-4 font-mono text-xs text-slate-200 whitespace-pre-wrap select-text leading-relaxed">
-                {selectedDocPreview.content_md}
-              </div>
+              <MarkdownMermaidViewer
+                content={selectedDocPreview.content_md}
+                title={selectedDocPreview.doc_type}
+                citations={selectedDocPreview.citations}
+              />
             </div>
 
             {/* Footer Actions */}
@@ -7045,10 +7107,10 @@ function AiInsightsContent() {
 
             {/* Full Markdown Report */}
             <div className="space-y-1.5">
-              <div className="text-xs font-semibold text-slate-300">Audit & Intelligence Report:</div>
-              <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/90 p-4 font-mono text-xs text-slate-200 whitespace-pre-wrap select-text leading-relaxed">
-                {selectedCommitReport.report_markdown}
-              </div>
+              <MarkdownMermaidViewer
+                content={selectedCommitReport.report_markdown}
+                title={`Commit-${selectedCommitReport.commit_sha ? selectedCommitReport.commit_sha.slice(0, 7) : "Report"}`}
+              />
             </div>
 
             {/* Footer */}
@@ -7771,6 +7833,46 @@ function AiInsightsContent() {
           </div>
         </div>
       )}
+
+      {/* Floating Toast Notification Stack */}
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto p-3.5 rounded-xl border shadow-2xl backdrop-blur-md flex items-start gap-2.5 animate-in slide-in-from-bottom-3 duration-200 ${
+              toast.type === "success"
+                ? "border-emerald-500/50 bg-slate-950/95 text-emerald-300"
+                : toast.type === "error"
+                ? "border-rose-500/50 bg-slate-950/95 text-rose-300"
+                : "border-sky-500/50 bg-slate-950/95 text-sky-300"
+            }`}
+          >
+            <div className="shrink-0 mt-0.5">
+              {toast.type === "success" ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              ) : toast.type === "error" ? (
+                <AlertCircle className="h-4 w-4 text-rose-400" />
+              ) : (
+                <Sparkles className="h-4 w-4 text-sky-400" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h5 className="text-xs font-bold text-white leading-tight">{toast.title}</h5>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">{toast.message}</p>
+              <span className="text-[9px] text-slate-500 font-mono mt-1 block">
+                {toast.timestamp.toLocaleTimeString()}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              className="text-slate-400 hover:text-white shrink-0 p-0.5"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Activity,
   ShieldCheck,
+  Radio,
 } from "lucide-react";
 
 const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
@@ -129,39 +130,36 @@ export const TopNav: React.FC = () => {
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 text-xs">
           <span className="relative flex h-2 w-2">
             <span
-              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                gatewayOnline === true
-                  ? "bg-emerald-400"
-                  : gatewayOnline === false
+              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${gatewayOnline === true
+                ? "bg-emerald-400"
+                : gatewayOnline === false
                   ? "bg-rose-400"
                   : "bg-amber-400"
-              }`}
+                }`}
             />
             <span
-              className={`relative inline-flex rounded-full h-2 w-2 ${
-                gatewayOnline === true
-                  ? "bg-emerald-500"
-                  : gatewayOnline === false
+              className={`relative inline-flex rounded-full h-2 w-2 ${gatewayOnline === true
+                ? "bg-emerald-500"
+                : gatewayOnline === false
                   ? "bg-rose-500"
                   : "bg-amber-500"
-              }`}
+                }`}
             />
           </span>
           <span className="text-slate-400 text-[11px] font-mono">Gateway:</span>
           <span
-            className={`font-semibold text-[11px] ${
-              gatewayOnline === true
-                ? "text-emerald-400"
-                : gatewayOnline === false
+            className={`font-semibold text-[11px] ${gatewayOnline === true
+              ? "text-emerald-400"
+              : gatewayOnline === false
                 ? "text-rose-400"
                 : "text-amber-400"
-            }`}
+              }`}
           >
             {gatewayOnline === true
               ? "ONLINE"
               : gatewayOnline === false
-              ? "OFFLINE"
-              : "CONNECTING"}
+                ? "OFFLINE"
+                : "CONNECTING"}
           </span>
         </div>
 
@@ -256,6 +254,19 @@ export const TopNav: React.FC = () => {
                       <div className="font-medium text-slate-200">AI Intelligence Ready</div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
                         Real-time PR analysis, AST blast radius & auto-docs are enabled.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-emerald-500/30">
+                    <Radio className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5 animate-pulse" />
+                    <div>
+                      <div className="font-medium text-slate-200 flex items-center gap-1.5">
+                        Live Push Guard & Telemetry
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        Real-time SSE event pipeline active. Automatic commit scanning, audit alerts, and auto-docs regeneration.
                       </div>
                     </div>
                   </div>
