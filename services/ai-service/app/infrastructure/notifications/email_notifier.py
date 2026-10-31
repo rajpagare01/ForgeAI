@@ -42,6 +42,23 @@ class EmailNotificationService:
         self.from_email = from_email if from_email is not None else settings.SMTP_FROM_EMAIL
         self.use_tls = use_tls if use_tls is not None else settings.SMTP_USE_TLS
 
+    def _resolve_deliverable_recipient(self, to_email: Optional[str]) -> str:
+        candidate = (to_email or "").strip()
+        is_non_routable = (
+            not candidate
+            or candidate.endswith("@forgeai.local")
+            or candidate.endswith("@users.noreply.github.com")
+            or candidate.endswith(".local")
+        )
+        if not is_non_routable:
+            return candidate
+        fallback = (settings.ALERT_FALLBACK_EMAIL or "").strip()
+        if fallback and not fallback.endswith("@forgeai.local") and not fallback.endswith(".local"):
+            return fallback
+        if self.smtp_user and "@" in self.smtp_user:
+            return self.smtp_user.strip()
+        return candidate or fallback or "developer@forgeai.local"
+
     async def send_commit_alert_email(
         self,
         to_email: str,
@@ -62,7 +79,7 @@ class EmailNotificationService:
         Builds and dispatches the commit security alert email.
         Returns (alert_sent: bool, alert_status: str, recipient: str).
         """
-        recipient = (to_email or settings.ALERT_FALLBACK_EMAIL or "developer@forgeai.local").strip()
+        recipient = self._resolve_deliverable_recipient(to_email)
         findings_list = findings or []
 
         # 1. Strictly sanitize and redact all text and evidence
@@ -218,18 +235,31 @@ System Design Doc ID: {str(system_design_doc_id) if system_design_doc_id else 'G
         # 3. Synchronous send dispatched via asyncio.to_thread
         def _send_sync():
             msg = email.message.EmailMessage()
+            effective_from = (
+                self.smtp_user
+                if (self.smtp_user and "@" in self.smtp_user and self.from_email == "alerts@forgeai.dev")
+                else self.from_email
+            )
             msg["Subject"] = subject
-            msg["From"] = self.from_email
+            msg["From"] = effective_from
             msg["To"] = recipient
             msg.set_content(text_content)
             msg.add_alternative(html_content, subtype="html")
 
-            with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10) as server:
-                if self.use_tls:
-                    server.starttls()
-                if self.smtp_user and self.smtp_password:
-                    server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+            if int(self.smtp_port) == 465:
+                with smtplib.SMTP_SSL(self.smtp_host, int(self.smtp_port), timeout=10) as server:
+                    if self.smtp_user and self.smtp_password:
+                        server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(self.smtp_host, int(self.smtp_port), timeout=10) as server:
+                    server.ehlo()
+                    if self.use_tls:
+                        server.starttls()
+                        server.ehlo()
+                    if self.smtp_user and self.smtp_password:
+                        server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
 
         try:
             await asyncio.wait_for(asyncio.to_thread(_send_sync), timeout=10.0)

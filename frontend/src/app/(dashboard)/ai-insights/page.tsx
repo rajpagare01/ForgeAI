@@ -1397,13 +1397,22 @@ function AiInsightsContent() {
           }))
         : undefined;
 
+      let currentUserEmail = "";
+      try {
+        const rawUser = localStorage.getItem("forgeai_user");
+        if (rawUser) {
+          const parsedUser = JSON.parse(rawUser);
+          currentUserEmail = parsedUser?.email || "";
+        }
+      } catch {}
+
       await apiClient.post(
         `/api/v1/ai/repositories/${selectedRepoId}/analyze-commit`,
         {
           commit_sha: activeBranchSha,
           ref: selectedBranch || prChangeSet?.sourceBranch || "main",
           author_name: prChangeSet?.author || "Developer",
-          author_email: "developer@forgeai.local",
+          author_email: currentUserEmail || undefined,
           commit_message: prChangeSet?.title || "Manual commit analysis",
           files: filesPayload,
           generate_docs: true,
@@ -1468,6 +1477,69 @@ function AiInsightsContent() {
 
     return () => clearInterval(intervalId);
   }, [selectedRepoId]);
+
+  // Server-Sent Events (SSE) live telemetry stream
+  useEffect(() => {
+    if (!selectedRepoId || typeof window === "undefined") return;
+    const controller = new AbortController();
+    let isActive = true;
+
+    const connectStream = async () => {
+      try {
+        const token = localStorage.getItem("forgeai_token");
+        const orgId = localStorage.getItem("forgeai_org_id") || localStorage.getItem("forgeai_workspace_id") || "00000000-0000-0000-0000-000000000001";
+        const baseUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        const res = await fetch(
+          `${baseUrl}/api/v1/ai/events/stream?repository_id=${encodeURIComponent(selectedRepoId)}`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "text/event-stream",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              "X-Org-Id": orgId,
+              "X-Workspace-Id": orgId,
+            },
+            signal: controller.signal,
+          }
+        );
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (isActive) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+          for (const part of parts) {
+            const dataLine = part.split("\n").find((line) => line.startsWith("data: "));
+            if (!dataLine) continue;
+            try {
+              const evt = JSON.parse(dataLine.slice(6));
+              if (
+                evt.event_type === "PUSH_ANALYZED" ||
+                evt.event_type === "COMMIT_ANALYZED" ||
+                evt.event_type === "DOCUMENT_GENERATED"
+              ) {
+                fetchCommitReports();
+                fetchDocuments();
+              }
+            } catch {}
+          }
+        }
+      } catch {
+        // Fallback 15s polling remains active
+      }
+    };
+
+    connectStream();
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [selectedRepoId, selectedBranch]);
 
   // 2. Fetch real pull requests when selected repository changes
   useEffect(() => {

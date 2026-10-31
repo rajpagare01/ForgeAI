@@ -19,7 +19,6 @@ import com.forgeai.project.presentation.dto.ProjectResponse;
 import com.forgeai.project.presentation.dto.RequirementResponse;
 import com.forgeai.project.presentation.dto.TaskResponse;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,15 +33,35 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/projects")
-@RequiredArgsConstructor
 public class ProjectController {
 
-    private final ProjectApplicationService projectApplicationService;
-    private final RequirementApplicationService requirementApplicationService;
-    private final TaskApplicationService taskApplicationService;
-    private final ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
-    private final RequirementRepository requirementRepository;
-    private final TaskRepository taskRepository;
+    private ProjectApplicationService projectApplicationService;
+    private RequirementApplicationService requirementApplicationService;
+    private TaskApplicationService taskApplicationService;
+    private ProjectRepositoryLinkRepository projectRepositoryLinkRepository;
+    private RequirementRepository requirementRepository;
+    private TaskRepository taskRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ProjectController(ProjectApplicationService projectApplicationService,
+                             RequirementApplicationService requirementApplicationService,
+                             TaskApplicationService taskApplicationService,
+                             ProjectRepositoryLinkRepository projectRepositoryLinkRepository,
+                             RequirementRepository requirementRepository,
+                             TaskRepository taskRepository) {
+        this.projectApplicationService = projectApplicationService;
+        this.requirementApplicationService = requirementApplicationService;
+        this.taskApplicationService = taskApplicationService;
+        this.projectRepositoryLinkRepository = projectRepositoryLinkRepository;
+        this.requirementRepository = requirementRepository;
+        this.taskRepository = taskRepository;
+    }
+
+    public ProjectController(ProjectApplicationService projectApplicationService,
+                             RequirementApplicationService requirementApplicationService,
+                             TaskApplicationService taskApplicationService) {
+        this(projectApplicationService, requirementApplicationService, taskApplicationService, null, null, null);
+    }
 
     @PostMapping
     public ResponseEntity<ProjectResponse> createProject(@Valid @RequestBody CreateProjectCommand command) {
@@ -116,16 +135,18 @@ public class ProjectController {
         List<Task> tasks = taskApplicationService.listTasks(orgId, projectId, userId, status);
 
         Map<UUID, String> reqKeyMap = new HashMap<>();
-        try {
-            List<Requirement> reqs = orgId != null
-                    ? requirementRepository.findAllByOrganizationIdAndProjectId(orgId, projectId)
-                    : requirementRepository.findAllByProjectId(projectId);
-            if (reqs != null) {
-                for (Requirement r : reqs) {
-                    reqKeyMap.put(r.getId(), r.getIdentifier());
+        if (requirementRepository != null) {
+            try {
+                List<Requirement> reqs = orgId != null
+                        ? requirementRepository.findAllByOrganizationIdAndProjectId(orgId, projectId)
+                        : requirementRepository.findAllByProjectId(projectId);
+                if (reqs != null) {
+                    for (Requirement r : reqs) {
+                        reqKeyMap.put(r.getId(), r.getIdentifier());
+                    }
                 }
-            }
-        } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
+        }
 
         List<TaskResponse> list = tasks.stream()
                 .map(t -> {
@@ -139,30 +160,36 @@ public class ProjectController {
     private ProjectResponse enrichProjectResponse(Project project, UUID orgId) {
         if (project == null) return null;
         String repoName = null;
-        try {
-            List<ProjectRepositoryLink> links = orgId != null
-                    ? projectRepositoryLinkRepository.findByProjectId(orgId, project.getId())
-                    : projectRepositoryLinkRepository.findByProjectId(project.getId());
-            if (links != null && !links.isEmpty()) {
-                repoName = links.get(0).getRepositoryName();
-            }
-        } catch (Exception ignored) {}
+        if (projectRepositoryLinkRepository != null) {
+            try {
+                List<ProjectRepositoryLink> links = orgId != null
+                        ? projectRepositoryLinkRepository.findByProjectId(orgId, project.getId())
+                        : projectRepositoryLinkRepository.findByProjectId(project.getId());
+                if (links != null && !links.isEmpty()) {
+                    repoName = links.get(0).getRepositoryName();
+                }
+            } catch (Exception ignored) {}
+        }
 
         int reqCount = 0;
-        try {
-            List<Requirement> reqs = orgId != null
-                    ? requirementRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
-                    : requirementRepository.findAllByProjectId(project.getId());
-            if (reqs != null) reqCount = reqs.size();
-        } catch (Exception ignored) {}
+        if (requirementRepository != null) {
+            try {
+                List<Requirement> reqs = orgId != null
+                        ? requirementRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
+                        : requirementRepository.findAllByProjectId(project.getId());
+                if (reqs != null) reqCount = reqs.size();
+            } catch (Exception ignored) {}
+        }
 
         int tCount = 0;
-        try {
-            List<Task> tasks = orgId != null
-                    ? taskRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
-                    : taskRepository.findAllByProjectId(project.getId());
-            if (tasks != null) tCount = tasks.size();
-        } catch (Exception ignored) {}
+        if (taskRepository != null) {
+            try {
+                List<Task> tasks = orgId != null
+                        ? taskRepository.findAllByOrganizationIdAndProjectId(orgId, project.getId())
+                        : taskRepository.findAllByProjectId(project.getId());
+                if (tasks != null) tCount = tasks.size();
+            } catch (Exception ignored) {}
+        }
 
         Double health = 95.0;
         return ProjectResponse.from(project, repoName, reqCount, tCount, health);

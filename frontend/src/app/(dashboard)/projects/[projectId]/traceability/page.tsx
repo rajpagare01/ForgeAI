@@ -606,7 +606,7 @@ function TraceabilityMatrixContent() {
                     <div className="flex items-center gap-2">
                       <GitBranch className="h-4 w-4 text-sky-400" />
                       <span className="font-semibold text-sm text-white">
-                        {repo.repositoryName || repo.name || "rajpagare01/ForgeAI"}
+                        {repo.repositoryName || repo.name || "Connected Repository"}
                       </span>
                     </div>
                     <Badge variant="success">SYNCED</Badge>

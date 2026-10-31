@@ -1021,4 +1021,183 @@ public class GitHubAppClient {
 
     /** Value object for cached installation tokens. */
     record InstallationToken(String token, Instant expiresAt) {}
+
+    public record GitHubPullRequestResult(
+        boolean createdViaApi,
+        Integer prNumber,
+        String prUrl,
+        String branchName,
+        String baseBranch,
+        String message
+    ) {}
+
+    public GitHubPullRequestResult createBranchAndPullRequest(
+        Long installationId,
+        String fullName,
+        String baseBranch,
+        String branchName,
+        String title,
+        String body,
+        java.util.Map<String, String> fileContents
+    ) {
+        String cleanFullName = fullName != null ? fullName.trim().replaceAll("^/+|/+$", "") : "";
+        String effectiveBase = (baseBranch != null && !baseBranch.isBlank()) ? baseBranch.trim() : "main";
+        String effectiveBranch = (branchName != null && !branchName.isBlank())
+            ? branchName.trim()
+            : "forgeai/automated-fix-" + System.currentTimeMillis();
+        String fallbackCompareUrl = "https://github.com/" + cleanFullName + "/compare/"
+            + effectiveBase + "..." + effectiveBranch + "?expand=1";
+
+        if (!config.isConfigured() || installationId == null || installationId <= 0 || cleanFullName.isBlank()) {
+            return new GitHubPullRequestResult(
+                false, null, fallbackCompareUrl, effectiveBranch, effectiveBase,
+                "GitHub App not configured for direct write; compare URL generated"
+            );
+        }
+
+        try {
+            String token = getInstallationToken(installationId);
+            String baseSha = null;
+            try {
+                List<GitHubBranchMetadata> branches = listBranches(installationId, cleanFullName);
+                for (GitHubBranchMetadata b : branches) {
+                    if (effectiveBase.equalsIgnoreCase(b.name())) {
+                        baseSha = b.commitSha();
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            if (baseSha == null || baseSha.isBlank()) {
+                try {
+                    List<GitHubCommitMetadata> commits = listCommits(installationId, cleanFullName, effectiveBase, 1);
+                    if (commits != null && !commits.isEmpty()) {
+                        baseSha = commits.get(0).sha();
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (baseSha == null || baseSha.isBlank()) {
+                return new GitHubPullRequestResult(
+                    false, null, fallbackCompareUrl, effectiveBranch, effectiveBase,
+                    "Could not resolve base branch SHA; compare URL generated"
+                );
+            }
+
+            // 1. Create branch ref (POST /repos/{owner}/{repo}/git/refs)
+            try {
+                String refPayload = objectMapper.writeValueAsString(Map.of(
+                    "ref", "refs/heads/" + effectiveBranch,
+                    "sha", baseSha
+                ));
+                HttpRequest refReq = HttpRequest.newBuilder()
+                    .uri(URI.create(GITHUB_API + "/repos/" + cleanFullName + "/git/refs"))
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", USER_AGENT)
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(refPayload, StandardCharsets.UTF_8))
+                    .timeout(Duration.ofSeconds(15))
+                    .build();
+                httpClient.send(refReq, HttpResponse.BodyHandlers.ofString());
+            } catch (Exception refEx) {
+                log.debug("Branch ref creation notice for {}: {}", cleanFullName, refEx.getMessage());
+            }
+
+            // 2. Commit file contents (PUT /repos/{owner}/{repo}/contents/{path})
+            if (fileContents != null && !fileContents.isEmpty()) {
+                for (var entry : fileContents.entrySet()) {
+                    String filePath = entry.getKey();
+                    String content = entry.getValue();
+                    if (filePath == null || filePath.isBlank() || content == null) continue;
+
+                    String encodedPath = java.net.URLEncoder.encode(filePath, StandardCharsets.UTF_8).replace("+", "%20").replace("%2F", "/");
+                    String encodedContent = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+
+                    String existingSha = null;
+                    try {
+                        HttpRequest getFileReq = HttpRequest.newBuilder()
+                            .uri(URI.create(GITHUB_API + "/repos/" + cleanFullName + "/contents/" + encodedPath + "?ref=" + effectiveBranch))
+                            .header("Authorization", "Bearer " + token)
+                            .header("Accept", "application/vnd.github+json")
+                            .header("User-Agent", USER_AGENT)
+                            .header("X-GitHub-Api-Version", "2022-11-28")
+                            .GET()
+                            .timeout(Duration.ofSeconds(15))
+                            .build();
+                        HttpResponse<String> fileResp = httpClient.send(getFileReq, HttpResponse.BodyHandlers.ofString());
+                        if (fileResp.statusCode() == 200) {
+                            JsonNode fileNode = objectMapper.readTree(fileResp.body());
+                            if (fileNode.hasNonNull("sha")) {
+                                existingSha = fileNode.get("sha").asText();
+                            }
+                        }
+                    } catch (Exception ignored) {}
+
+                    Map<String, Object> putBodyMap = new HashMap<>();
+                    putBodyMap.put("message", title != null ? title : "chore(forgeai): automated update");
+                    putBodyMap.put("content", encodedContent);
+                    putBodyMap.put("branch", effectiveBranch);
+                    if (existingSha != null && !existingSha.isBlank()) {
+                        putBodyMap.put("sha", existingSha);
+                    }
+
+                    HttpRequest putFileReq = HttpRequest.newBuilder()
+                        .uri(URI.create(GITHUB_API + "/repos/" + cleanFullName + "/contents/" + encodedPath))
+                        .header("Authorization", "Bearer " + token)
+                        .header("Accept", "application/vnd.github+json")
+                        .header("User-Agent", USER_AGENT)
+                        .header("X-GitHub-Api-Version", "2022-11-28")
+                        .header("Content-Type", "application/json")
+                        .PUT(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(putBodyMap), StandardCharsets.UTF_8))
+                        .timeout(Duration.ofSeconds(15))
+                        .build();
+                    httpClient.send(putFileReq, HttpResponse.BodyHandlers.ofString());
+                }
+            }
+
+            // 3. Create pull request (POST /repos/{owner}/{repo}/pulls)
+            Map<String, Object> prBodyMap = Map.of(
+                "title", title != null ? title : "ForgeAI Automated Pull Request",
+                "head", effectiveBranch,
+                "base", effectiveBase,
+                "body", body != null ? body : "Automated Pull Request generated by ForgeAI."
+            );
+            HttpRequest prReq = HttpRequest.newBuilder()
+                .uri(URI.create(GITHUB_API + "/repos/" + cleanFullName + "/pulls"))
+                .header("Authorization", "Bearer " + token)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", USER_AGENT)
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(prBodyMap), StandardCharsets.UTF_8))
+                .timeout(Duration.ofSeconds(15))
+                .build();
+            HttpResponse<String> prResp = httpClient.send(prReq, HttpResponse.BodyHandlers.ofString());
+            if (prResp.statusCode() == 200 || prResp.statusCode() == 201) {
+                JsonNode prNode = objectMapper.readTree(prResp.body());
+                if (prNode.hasNonNull("html_url")) {
+                    Integer number = prNode.hasNonNull("number") ? prNode.get("number").asInt() : null;
+                    return new GitHubPullRequestResult(
+                        true,
+                        number,
+                        prNode.get("html_url").asText(),
+                        effectiveBranch,
+                        effectiveBase,
+                        "Pull Request created via GitHub API"
+                    );
+                }
+            } else {
+                log.warn("GitHub PR creation responded with HTTP {}: {}", prResp.statusCode(), prResp.body());
+            }
+        } catch (Exception e) {
+            log.warn("Direct GitHub PR creation fell back to compare URL for {}: {}", cleanFullName, e.getMessage());
+        }
+
+        return new GitHubPullRequestResult(
+            false, null, fallbackCompareUrl, effectiveBranch, effectiveBase,
+            "Fallback compare URL generated"
+        );
+    }
 }

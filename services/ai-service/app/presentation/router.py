@@ -1,5 +1,9 @@
+import asyncio
+import json
 import logging
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
+from fastapi.responses import StreamingResponse
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from app.infrastructure.llm.provider import AIUnavailableException
@@ -111,6 +115,82 @@ router = APIRouter(
     tags=["AI Core"],
     dependencies=[Depends(verify_internal_attestation)],
 )
+
+# SSE in-memory pub/sub event bus
+_sse_subscribers: List[asyncio.Queue] = []
+
+
+def broadcast_ai_event(
+    event_type: str,
+    repository_id: Any,
+    organization_id: Any,
+    payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Broadcast an AI event to all connected SSE subscribers."""
+    event_data = {
+        "event_type": event_type,
+        "repository_id": str(repository_id),
+        "organization_id": str(organization_id),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **(payload or {}),
+    }
+    dead_queues = []
+    for q in list(_sse_subscribers):
+        try:
+            q.put_nowait(event_data)
+        except Exception:
+            dead_queues.append(q)
+    for dq in dead_queues:
+        if dq in _sse_subscribers:
+            _sse_subscribers.remove(dq)
+
+
+@router.get("/events/stream")
+async def stream_ai_events(
+    request: Request,
+    repository_id: Optional[str] = Query(default=None),
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    """Server-Sent Events stream for real-time AI analysis notifications."""
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    _sse_subscribers.append(queue)
+    org_id_str = str(org_id)
+
+    async def event_generator():
+        try:
+            init_msg = json.dumps({
+                "event_type": "CONNECTED",
+                "organization_id": org_id_str,
+                "repository_id": repository_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            yield f"data: {init_msg}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if event.get("organization_id") not in (org_id_str, "*"):
+                        continue
+                    if repository_id and event.get("repository_id") not in (str(repository_id), "*"):
+                        continue
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+        finally:
+            if queue in _sse_subscribers:
+                _sse_subscribers.remove(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
 
 # Global worker instance (initialized in lifespan)
 index_worker: DurableIndexWorker | None = None
@@ -427,6 +507,7 @@ async def sync_push_event(
 
     saved_report = await report_repo.upsert_commit_report(commit_report)
 
+    broadcast_ai_event("PUSH_ANALYZED", req.repository_id, org_id, {"commit_sha": req.commit_sha, "ref": req.ref})
     return PushSyncResponse(
         status=result.get("status", "COMPLETED"),
         repository_id=req.repository_id,
@@ -1637,8 +1718,8 @@ async def get_repository_dependency_security(
             seen_files[c.file_path] += f"\n{c.content}"
     files_to_scan = [{"filename": fp, "content": cnt} for fp, cnt in seen_files.items()]
 
-    scanner = DependencyVulnerabilityScanner(is_external_configured=False)
-    scan_res = scanner.scan_files(files_to_scan)
+    scanner = DependencyVulnerabilityScanner(is_external_configured=True)
+    scan_res = await scanner.scan_files_live(files_to_scan)
 
     return DependencySecurityStatusDTO(
         status=scan_res.status,
@@ -2026,6 +2107,7 @@ async def generate_repository_documents(
 
     import uuid
     job_id = f"docgen-{uuid.uuid4().hex[:8]}"
+    broadcast_ai_event("DOCUMENT_GENERATED", repository_id, org_id, {"commit_sha": getattr(req, 'commit_sha', 'HEAD')})
     return GenerateDocumentsResponseDTO(
         job_id=job_id,
         repository_id=repository_id,
@@ -2485,6 +2567,7 @@ async def analyze_commit_on_demand(
 
     saved_report = await report_repo.upsert_commit_report(commit_report)
 
+    broadcast_ai_event("COMMIT_ANALYZED", repository_id, org_id, {"commit_sha": req.commit_sha, "ref": getattr(req, 'ref', 'main')})
     return CommitAnalysisReportDTO(
         id=saved_report.id,
         organization_id=saved_report.organization_id,
@@ -2507,6 +2590,54 @@ async def analyze_commit_on_demand(
         alert_status=saved_report.alert_status,
         created_at=saved_report.created_at,
     )
+
+
+from pydantic import BaseModel
+
+
+class TestEmailRequest(BaseModel):
+    to_email: Optional[str] = None
+    repo_name: str = "ForgeAI-SMTP-Verification"
+
+
+@router.post("/notifications/test-email")
+async def send_test_alert_email(
+    req: TestEmailRequest,
+    org_id: UUID = Depends(get_tenant_org_id),
+):
+    from app.infrastructure.notifications.email_notifier import EmailNotificationService
+    email_notifier = EmailNotificationService()
+    sent, status, recipient = await email_notifier.send_commit_alert_email(
+        to_email=req.to_email or "",
+        repo_name=req.repo_name,
+        commit_sha="test00000000",
+        branch_ref="main",
+        author_name="ForgeAI Admin",
+        risk_score=85.0,
+        status="CRITICAL_ALERT",
+        secrets_detected=1,
+        security_issues=1,
+        reliability_issues=0,
+        findings=[
+            {
+                "severity": "CRITICAL",
+                "category": "SECRET_LEAK",
+                "title": "Test Secret Alert Verification",
+                "file_path": "src/config/settings.py",
+                "line_number": 42,
+                "redacted_evidence": "API_KEY = [REDACTED SECRET]",
+                "remediation": "This is a verification email confirming ForgeAI Commit Guard SMTP delivery.",
+            }
+        ],
+        report_markdown="### ForgeAI SMTP Verification\nYour email alert pipeline is active.",
+    )
+    return {
+        "alert_sent": sent,
+        "alert_status": status,
+        "recipient": recipient,
+        "smtp_configured": bool(email_notifier.smtp_host),
+        "smtp_host": email_notifier.smtp_host or None,
+    }
 
 
 

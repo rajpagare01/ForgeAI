@@ -219,6 +219,13 @@ services:
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
       ALLOW_TEST_FALLBACK: ${ALLOW_TEST_FALLBACK:-false}
       ENFORCE_INTERNAL_MARKER: "true"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-alerts@forgeai.dev}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      ALERT_FALLBACK_EMAIL: ${ALERT_FALLBACK_EMAIL:-}
     volumes:
       - ./services/ai-service:/app
     depends_on:
