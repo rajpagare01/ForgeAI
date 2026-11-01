@@ -21,7 +21,7 @@ export const Dialog: React.FC<DialogProps> = ({ open, onOpenChange, children }) 
         onClick={() => onOpenChange(false)}
       />
       {/* Content wrapper */}
-      <div className="relative z-50 w-full max-w-2xl transform overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900 p-6 text-left shadow-2xl transition-all sm:my-8 animate-in zoom-in-95">
+      <div className="relative z-50 w-full max-w-2xl transform overflow-hidden rounded-lg border border-[#25252b] bg-[#111113] p-6 text-left shadow-2xl transition-all sm:my-8 animate-in zoom-in-95">
         {children}
       </div>
     </div>
@@ -33,7 +33,7 @@ export const DialogHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   children,
   ...props
 }) => (
-  <div className={cn("flex items-start justify-between pb-4 border-b border-slate-800", className)} {...props}>
+  <div className={cn("flex items-start justify-between pb-4 border-b border-[#1f1f23]", className)} {...props}>
     <div>{children}</div>
   </div>
 );
@@ -74,7 +74,7 @@ export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   children,
   ...props
 }) => (
-  <div className={cn("mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-800", className)} {...props}>
+  <div className={cn("mt-6 flex items-center justify-end gap-3 pt-4 border-t border-[#1f1f23]", className)} {...props}>
     {children}
   </div>
 );

@@ -66,11 +66,13 @@ body {
 }
 
 /* High-Contrast Micro-Panels */
+.glass-panel,
 .carbon-panel {
   background-color: #111113;
   border: 1px solid #222226;
 }
 
+.glass-panel-subtle,
 .carbon-panel-subtle {
   background-color: #0d0d0f;
   border: 1px solid #1c1c20;
