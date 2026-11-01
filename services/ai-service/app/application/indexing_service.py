@@ -159,6 +159,9 @@ class IndexingService:
                     logger.info("Deactivated %d chunks for removed file %s", count, file_path)
                 elif status in ("modified", "added"):
                     if content:
+                        if "\x00" in content:
+                            logger.info("Skipping binary file %s containing null bytes", file_path)
+                            continue
                         res = await self.index_file(
                             organization_id=organization_id,
                             repository_id=repository_id,

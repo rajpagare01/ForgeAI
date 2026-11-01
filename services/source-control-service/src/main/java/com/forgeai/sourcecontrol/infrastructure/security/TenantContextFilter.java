@@ -19,7 +19,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
     public static final String HEADER_INTERNAL_ATTESTATION = "X-ForgeAI-Internal";
     public static final String ATTESTED_MARKER = "attested";
 
-    @org.springframework.beans.factory.annotation.Value("${forgeai.security.enforce-internal-marker:false}")
+    @org.springframework.beans.factory.annotation.Value("${forgeai.security.enforce-internal-marker:true}")
     private boolean enforceInternalMarker;
 
     public static final String HEADER_ORG_ID = "X-Org-Id";

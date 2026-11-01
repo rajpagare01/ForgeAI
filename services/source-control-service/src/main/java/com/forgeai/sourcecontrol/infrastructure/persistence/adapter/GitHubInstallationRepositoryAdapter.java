@@ -24,13 +24,35 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
 
     @Override
     public GitHubInstallation save(GitHubInstallation installation) {
+        UUID orgId = installation.getOrganizationId();
+        UUID wsId = installation.getWorkspaceId();
+        String scope = installation.getScope();
+
+        if ("ORGANIZATION".equalsIgnoreCase(scope)) {
+            if (orgId == null && wsId != null) {
+                orgId = wsId;
+            }
+            wsId = orgId;
+            scope = "ORGANIZATION";
+        } else if ("PERSONAL".equalsIgnoreCase(scope)) {
+            orgId = null;
+            scope = "PERSONAL";
+        } else {
+            if (orgId != null) {
+                scope = "ORGANIZATION";
+                wsId = orgId;
+            } else {
+                scope = "PERSONAL";
+            }
+        }
+
         if (installation.getId() != null) {
             Optional<GitHubInstallationJpaEntity> existingOpt = jpaRepository.findById(installation.getId());
             if (existingOpt.isPresent()) {
                 GitHubInstallationJpaEntity entity = existingOpt.get();
-                entity.setOrganizationId(installation.getOrganizationId());
-                entity.setWorkspaceId(installation.getWorkspaceId());
-                entity.setScope(installation.getScope());
+                entity.setOrganizationId(orgId);
+                entity.setWorkspaceId(wsId);
+                entity.setScope(scope);
                 entity.setGithubAppId(installation.getGithubAppId());
                 entity.setAccountId(installation.getAccountId());
                 entity.setAccountLogin(installation.getAccountLogin());
@@ -48,6 +70,9 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
             }
         }
         GitHubInstallationJpaEntity entity = mapper.toEntity(installation);
+        entity.setOrganizationId(orgId);
+        entity.setWorkspaceId(wsId);
+        entity.setScope(scope);
         return mapper.toDomain(jpaRepository.save(entity));
     }
 

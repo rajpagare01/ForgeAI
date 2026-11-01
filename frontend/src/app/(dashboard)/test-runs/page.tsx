@@ -763,8 +763,7 @@ export default function TestRunsPage() {
             onClick={() => setShowGenerateTestsModal(true)}
             className="text-xs gap-1.5"
           >
-            <Sparkles className="h-3.5 w-3.5" />
-            AI Generate Tests
+            Test Studio
           </Button>
 
           <Button
@@ -1035,12 +1034,10 @@ export default function TestRunsPage() {
                             onClick={() => handleDiagnoseFailure(t)}
                             className="text-[11px] h-7 px-2.5 border-rose-500/40 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 gap-1"
                           >
-                            {diagnosingTestName === (t.name || t.testCaseName) ? (
+                            {diagnosingTestName === (t.name || t.testCaseName) && (
                               <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Sparkles className="h-3 w-3 text-rose-400" />
                             )}
-                            ✨ AI Diagnose & Fix
+                            Diagnose Failure
                           </Button>
                         )}
                       </div>
@@ -1241,7 +1238,7 @@ export default function TestRunsPage() {
         <DialogHeader>
           <div className="flex items-center justify-between w-full">
             <div>
-              <DialogTitle>AI Test Studio (Selenium / TestNG / JUnit / Pytest / Vitest)</DialogTitle>
+              <DialogTitle>Test Studio (Selenium / TestNG / JUnit / Pytest / Vitest)</DialogTitle>
               <DialogDescription>
                 Generate multi-framework unit & E2E tests, run safe in-app verification, and diagnose failures with 1-click Fix PRs.
               </DialogDescription>
@@ -1560,12 +1557,10 @@ export default function TestRunsPage() {
                                   onClick={() => handleApplyFixPr(r.ai_failure_diagnosis!)}
                                   className="text-[11px] h-7 gap-1"
                                 >
-                                  {applyingFixForTest === r.name ? (
+                                  {applyingFixForTest === r.name && (
                                     <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <GitPullRequest className="h-3 w-3" />
                                   )}
-                                  ✨ 1-Click Open Fix Pull Request
+                                  Open Fix Pull Request
                                 </Button>
                               )}
                             </div>

@@ -119,16 +119,21 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
             ON CONFLICT (organization_id, repository_id, commit_sha, file_path, content_hash)
             DO UPDATE SET is_current = EXCLUDED.is_current;
         """
+        def sanitize_pg_str(s: Optional[str]) -> Optional[str]:
+            if s is None:
+                return None
+            return s.replace("\x00", "")
+
         args = [
             (
                 c.id,
                 c.organization_id,
                 c.repository_id,
                 c.commit_sha,
-                c.file_path,
-                c.symbol_name,
-                c.symbol_type,
-                c.content,
+                sanitize_pg_str(c.file_path),
+                sanitize_pg_str(c.symbol_name),
+                sanitize_pg_str(c.symbol_type),
+                sanitize_pg_str(c.content) or "",
                 c.content_hash,
                 f"[{','.join(str(x) for x in c.embedding)}]" if c.embedding else None,
                 c.is_current,
@@ -329,14 +334,19 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
             ON CONFLICT (organization_id, repository_id, valid_at_sha, source_symbol, target_symbol, edge_type)
             DO UPDATE SET is_current = EXCLUDED.is_current;
         """
+        def sanitize_pg_str(s: Optional[str]) -> Optional[str]:
+            if s is None:
+                return None
+            return s.replace("\x00", "")
+
         args = [
             (
                 e.id,
                 e.organization_id,
                 e.repository_id,
-                e.source_symbol,
-                e.target_symbol,
-                e.edge_type,
+                sanitize_pg_str(e.source_symbol),
+                sanitize_pg_str(e.target_symbol),
+                sanitize_pg_str(e.edge_type),
                 e.valid_at_sha,
                 e.is_current,
                 e.created_at,

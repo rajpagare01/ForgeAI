@@ -35,9 +35,31 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
         this.clientSecret = clientSecret != null ? clientSecret.trim() : "";
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
+    }
+
+    private HttpResponse<String> sendWithRetry(HttpRequest request, String operation) throws Exception {
+        int maxAttempts = 3;
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            } catch (java.net.http.HttpConnectTimeoutException | java.io.IOException e) {
+                lastException = e;
+                log.warn("GitHub OAuth {} failed on attempt {}/{}: {}", operation, attempt, maxAttempts, e.getMessage());
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(600L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw ie;
+                    }
+                }
+            }
+        }
+        throw lastException;
     }
 
     public boolean isConfigured() {
@@ -74,7 +96,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithRetry(request, "token exchange");
 
             if (response.statusCode() != 200) {
                 log.error("GitHub token exchange failed with HTTP status: {}", response.statusCode());
@@ -124,7 +146,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
                     .GET()
                     .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithRetry(request, "token exchange");
 
             if (response.statusCode() != 200) {
                 log.error("Failed to fetch GitHub user profile, HTTP status: {}", response.statusCode());
@@ -166,7 +188,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
                     .GET()
                     .build();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = sendWithRetry(request, "token exchange");
 
             if (response.statusCode() == 200) {
                 JsonNode root = objectMapper.readTree(response.body());

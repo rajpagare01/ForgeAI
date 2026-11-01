@@ -34,7 +34,7 @@ public class GitHubAuthController {
     private final GitHubAuthenticationUseCase gitHubAuthenticationUseCase;
     private final JwtService jwtService;
 
-    @org.springframework.beans.factory.annotation.Value("${forgeai.security.enforce-internal-marker:false}")
+    @org.springframework.beans.factory.annotation.Value("${forgeai.security.enforce-internal-marker:true}")
     private boolean enforceInternalMarker;
 
     @Autowired

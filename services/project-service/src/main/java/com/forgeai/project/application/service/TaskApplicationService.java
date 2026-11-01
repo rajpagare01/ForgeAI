@@ -41,25 +41,21 @@ public class TaskApplicationService {
         }
 
         // 1. Validate project
-        Project project;
-        if (organizationId != null) {
-            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
-        } else {
-            project = projectRepository.findById(projectId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
-            verifyPersonalProjectOwnership(project, reporterId);
-        }
+        Project project = resolveProject(organizationId, projectId, reporterId);
+        UUID effectiveOrgId = project.getOrganizationId();
 
-        // 2. Validate requirement if supplied and ensure it belongs to the SAME project
+        // 2. Validate requirement if supplied and ensure it belongs to the SAME project and workspace
         if (command.requirementId() != null) {
             Requirement req;
-            if (organizationId != null) {
-                req = requirementRepository.findByIdAndOrganizationId(command.requirementId(), organizationId)
-                        .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + command.requirementId() + " in org=" + organizationId));
+            if (effectiveOrgId != null) {
+                req = requirementRepository.findByIdAndOrganizationId(command.requirementId(), effectiveOrgId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + command.requirementId() + " in org=" + effectiveOrgId));
             } else {
                 req = requirementRepository.findById(command.requirementId())
                         .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + command.requirementId()));
+            }
+            if (project.getWorkspaceId() != null && req.getWorkspaceId() != null && !project.getWorkspaceId().equals(req.getWorkspaceId())) {
+                throw new IllegalArgumentException("Requirement " + command.requirementId() + " does not belong to the active project workspace.");
             }
             if (!req.getProjectId().equals(projectId)) {
                 throw new IllegalArgumentException("Requirement " + command.requirementId() + " belongs to project " + req.getProjectId() + ", not " + projectId);
@@ -78,7 +74,6 @@ public class TaskApplicationService {
 
         Instant now = Instant.now();
         TaskPriority priority = command.priority() != null ? command.priority() : TaskPriority.MEDIUM;
-        UUID effectiveOrgId = project.getOrganizationId();
         Task task = Task.builder()
                 .projectId(project.getId())
                 .workspaceId(project.getWorkspaceId())
@@ -125,17 +120,9 @@ public class TaskApplicationService {
 
     @Transactional
     public Task updateTaskStatus(UUID organizationId, UUID taskId, UUID userId, UpdateTaskStatusCommand command) {
-        Task task;
-        if (organizationId != null) {
-            task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
-        } else {
-            task = taskRepository.findById(taskId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
-            Project project = projectRepository.findById(task.getProjectId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
-            verifyPersonalProjectOwnership(project, userId);
-        }
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+        resolveProject(organizationId, task.getProjectId(), userId);
 
         if (command.version() != null && !command.version().equals(task.getVersion())) {
             throw new jakarta.persistence.OptimisticLockException(
@@ -179,17 +166,9 @@ public class TaskApplicationService {
 
     @Transactional
     public CodeLink linkCodeArtifact(UUID organizationId, UUID taskId, UUID userId, LinkCodeArtifactCommand command) {
-        Task task;
-        if (organizationId != null) {
-            task = taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
-        } else {
-            task = taskRepository.findById(taskId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
-            Project project = projectRepository.findById(task.getProjectId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
-            verifyPersonalProjectOwnership(project, userId);
-        }
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
+        resolveProject(organizationId, task.getProjectId(), userId);
 
         if (codeLinkRepository.existsByTaskIdAndLinkTypeAndExternalRef(taskId, command.linkType(), command.externalRef())) {
             throw new DuplicateResourceException("Code link for task " + taskId + " with ref " + command.externalRef() + " already exists");
@@ -234,15 +213,9 @@ public class TaskApplicationService {
 
     @Transactional(readOnly = true)
     public Task getTaskById(UUID organizationId, UUID taskId, UUID userId) {
-        if (organizationId != null) {
-            return taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
-        }
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
-        Project project = projectRepository.findById(task.getProjectId())
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
-        verifyPersonalProjectOwnership(project, userId);
+        resolveProject(organizationId, task.getProjectId(), userId);
         return task;
     }
 
@@ -253,19 +226,14 @@ public class TaskApplicationService {
 
     @Transactional(readOnly = true)
     public List<Task> listTasks(UUID organizationId, UUID projectId, UUID userId, TaskStatus status) {
-        if (organizationId != null) {
-            projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
-
+        Project project = resolveProject(organizationId, projectId, userId);
+        UUID effectiveOrgId = project.getOrganizationId();
+        if (effectiveOrgId != null) {
             if (status != null) {
-                return taskRepository.findAllByOrganizationIdAndProjectIdAndStatus(organizationId, projectId, status);
+                return taskRepository.findAllByOrganizationIdAndProjectIdAndStatus(effectiveOrgId, projectId, status);
             }
-            return taskRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
+            return taskRepository.findAllByOrganizationIdAndProjectId(effectiveOrgId, projectId);
         }
-
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
-        verifyPersonalProjectOwnership(project, userId);
 
         if (status != null) {
             return taskRepository.findAllByProjectIdAndStatus(projectId, status);
@@ -280,20 +248,32 @@ public class TaskApplicationService {
 
     @Transactional(readOnly = true)
     public List<CodeLink> getCodeLinksForTask(UUID organizationId, UUID taskId, UUID userId) {
-        if (organizationId != null) {
-            taskRepository.findByIdAndOrganizationId(taskId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId + " in org=" + organizationId));
-
-            return codeLinkRepository.findAllByOrganizationIdAndTaskId(organizationId, taskId);
-        }
-
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Task not found: id=" + taskId));
-        Project project = projectRepository.findById(task.getProjectId())
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + task.getProjectId()));
-        verifyPersonalProjectOwnership(project, userId);
+        resolveProject(organizationId, task.getProjectId(), userId);
+        UUID effectiveOrgId = task.getOrganizationId();
+        if (effectiveOrgId != null) {
+            return codeLinkRepository.findAllByOrganizationIdAndTaskId(effectiveOrgId, taskId);
+        }
 
         return codeLinkRepository.findAllByTaskId(taskId);
+    }
+
+    public Project resolveProject(UUID organizationId, UUID projectId, UUID userId) {
+        if (projectId == null) {
+            throw new IllegalArgumentException("Project ID is required");
+        }
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+
+        if (project.getOrganizationId() != null) {
+            if (organizationId != null && !organizationId.equals(project.getOrganizationId())) {
+                throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
+            }
+        } else {
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
+        return project;
     }
 
     private void verifyPersonalProjectOwnership(Project project, UUID userId) {

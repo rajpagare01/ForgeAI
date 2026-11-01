@@ -35,11 +35,24 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
 
                 UUID orgId = repository.getOrganizationId();
                 UUID wsId = repository.getWorkspaceId();
-                String scope = (orgId != null) ? "ORGANIZATION" : "PERSONAL";
-                if ("ORGANIZATION".equals(scope)) {
+                String scope = repository.getScope();
+
+                if ("ORGANIZATION".equalsIgnoreCase(scope)) {
+                    if (orgId == null && wsId != null) {
+                        orgId = wsId;
+                    }
                     wsId = orgId;
-                } else {
+                    scope = "ORGANIZATION";
+                } else if ("PERSONAL".equalsIgnoreCase(scope)) {
                     orgId = null;
+                    scope = "PERSONAL";
+                } else {
+                    if (orgId != null) {
+                        scope = "ORGANIZATION";
+                        wsId = orgId;
+                    } else {
+                        scope = "PERSONAL";
+                    }
                 }
                 entity.setOrganizationId(orgId);
                 entity.setWorkspaceId(wsId);
@@ -60,11 +73,24 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
         RepositoryJpaEntity entity = mapper.toEntity(repository);
         UUID orgId = entity.getOrganizationId();
         UUID wsId = entity.getWorkspaceId();
-        String scope = (orgId != null) ? "ORGANIZATION" : "PERSONAL";
-        if ("ORGANIZATION".equals(scope)) {
+        String scope = entity.getScope();
+
+        if ("ORGANIZATION".equalsIgnoreCase(scope)) {
+            if (orgId == null && wsId != null) {
+                orgId = wsId;
+            }
             wsId = orgId;
-        } else {
+            scope = "ORGANIZATION";
+        } else if ("PERSONAL".equalsIgnoreCase(scope)) {
             orgId = null;
+            scope = "PERSONAL";
+        } else {
+            if (orgId != null) {
+                scope = "ORGANIZATION";
+                wsId = orgId;
+            } else {
+                scope = "PERSONAL";
+            }
         }
         entity.setOrganizationId(orgId);
         entity.setWorkspaceId(wsId);
@@ -96,7 +122,8 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
     public List<Repository> findAllByOrganizationId(UUID organizationId) {
         return jpaRepository.findAllByOrganizationId(organizationId).stream()
                 .map(mapper::toDomain)
-                .sorted(java.util.Comparator.comparing(r -> r.getFullName() != null ? r.getFullName().toLowerCase() : ""))
+                .sorted(java.util.Comparator
+                        .comparing(r -> r.getFullName() != null ? r.getFullName().toLowerCase() : ""))
                 .toList();
     }
 
@@ -104,7 +131,8 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
     public List<Repository> findAllByWorkspaceId(UUID workspaceId) {
         return jpaRepository.findAllByWorkspaceId(workspaceId).stream()
                 .map(mapper::toDomain)
-                .sorted(java.util.Comparator.comparing(r -> r.getFullName() != null ? r.getFullName().toLowerCase() : ""))
+                .sorted(java.util.Comparator
+                        .comparing(r -> r.getFullName() != null ? r.getFullName().toLowerCase() : ""))
                 .toList();
     }
 
@@ -122,4 +150,3 @@ public class RepositoryRepositoryAdapter implements RepositoryRepository {
                 .toList();
     }
 }
-

@@ -36,20 +36,13 @@ public class RequirementApplicationService {
 
     @Transactional
     public Requirement createRequirement(UUID organizationId, UUID projectId, UUID userId, CreateRequirementCommand command) {
-        Project project;
-        if (organizationId != null) {
-            project = projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
-        } else {
-            project = projectRepository.findById(projectId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
-            verifyPersonalProjectOwnership(project, userId);
-        }
+        Project project = resolveProject(organizationId, projectId, userId);
+        UUID effectiveOrgId = project.getOrganizationId();
 
         String effectiveIdentifier = command.identifier().trim().toUpperCase();
         if (requirementRepository.existsByProjectIdAndIdentifier(projectId, effectiveIdentifier)) {
-            var existingList = organizationId != null
-                    ? requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId)
+            var existingList = effectiveOrgId != null
+                    ? requirementRepository.findAllByOrganizationIdAndProjectId(effectiveOrgId, projectId)
                     : requirementRepository.findAllByProjectId(projectId);
             for (Requirement r : existingList) {
                 if (effectiveIdentifier.equalsIgnoreCase(r.getIdentifier())) {
@@ -70,7 +63,7 @@ public class RequirementApplicationService {
         Requirement requirement = Requirement.builder()
                 .projectId(project.getId())
                 .workspaceId(project.getWorkspaceId())
-                .organizationId(project.getOrganizationId())
+                .organizationId(effectiveOrgId)
                 .identifier(effectiveIdentifier)
                 .title(command.title())
                 .description(command.description())
@@ -92,15 +85,9 @@ public class RequirementApplicationService {
 
     @Transactional(readOnly = true)
     public Requirement getRequirementById(UUID organizationId, UUID requirementId, UUID userId) {
-        if (organizationId != null) {
-            return requirementRepository.findByIdAndOrganizationId(requirementId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId + " in org=" + organizationId));
-        }
         Requirement req = requirementRepository.findById(requirementId)
                 .orElseThrow(() -> new ResourceNotFoundException("Requirement not found: id=" + requirementId));
-        Project project = projectRepository.findById(req.getProjectId())
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + req.getProjectId()));
-        verifyPersonalProjectOwnership(project, userId);
+        resolveProject(organizationId, req.getProjectId(), userId);
         return req;
     }
 
@@ -111,16 +98,29 @@ public class RequirementApplicationService {
 
     @Transactional(readOnly = true)
     public List<Requirement> listRequirements(UUID organizationId, UUID projectId, UUID userId) {
-        if (organizationId != null) {
-            projectRepository.findByIdAndOrganizationId(projectId, organizationId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId));
-            return requirementRepository.findAllByOrganizationIdAndProjectId(organizationId, projectId);
+        Project project = resolveProject(organizationId, projectId, userId);
+        UUID effectiveOrgId = project.getOrganizationId();
+        if (effectiveOrgId != null) {
+            return requirementRepository.findAllByOrganizationIdAndProjectId(effectiveOrgId, projectId);
         }
+        return requirementRepository.findAllByProjectId(projectId);
+    }
 
+    public Project resolveProject(UUID organizationId, UUID projectId, UUID userId) {
+        if (projectId == null) {
+            throw new IllegalArgumentException("Project ID is required");
+        }
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
-        verifyPersonalProjectOwnership(project, userId);
-        return requirementRepository.findAllByProjectId(projectId);
+
+        if (project.getOrganizationId() != null) {
+            if (organizationId != null && !organizationId.equals(project.getOrganizationId())) {
+                throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
+            }
+        } else {
+            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+        }
+        return project;
     }
 
     private void verifyPersonalProjectOwnership(Project project, UUID userId) {

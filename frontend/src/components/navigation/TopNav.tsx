@@ -128,24 +128,14 @@ export const TopNav: React.FC = () => {
       <div className="flex items-center gap-3.5">
         {/* Gateway Health Indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 text-xs">
-          <span className="relative flex h-2 w-2">
-            <span
-              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${gatewayOnline === true
-                ? "bg-emerald-400"
-                : gatewayOnline === false
-                  ? "bg-rose-400"
-                  : "bg-amber-400"
-                }`}
-            />
-            <span
-              className={`relative inline-flex rounded-full h-2 w-2 ${gatewayOnline === true
-                ? "bg-emerald-500"
-                : gatewayOnline === false
-                  ? "bg-rose-500"
-                  : "bg-amber-500"
-                }`}
-            />
-          </span>
+          <span
+            className={`inline-block h-1.5 w-1.5 rounded-full ${gatewayOnline === true
+              ? "bg-emerald-500"
+              : gatewayOnline === false
+                ? "bg-rose-500"
+                : "bg-amber-500"
+              }`}
+          />
           <span className="text-slate-400 text-[11px] font-mono">Gateway:</span>
           <span
             className={`font-semibold text-[11px] ${gatewayOnline === true
@@ -263,7 +253,7 @@ export const TopNav: React.FC = () => {
                     <div>
                       <div className="font-medium text-slate-200 flex items-center gap-1.5">
                         Live Push Guard & Telemetry
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
                         Real-time SSE event pipeline active. Automatic commit scanning, audit alerts, and auto-docs regeneration.

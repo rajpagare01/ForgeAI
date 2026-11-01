@@ -637,8 +637,7 @@ export default function ProjectsPage() {
                 }}
                 className="text-xs gap-1.5"
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                AI Sprint Planner
+                Sprint Planner
               </Button>
 
               <Button
@@ -1220,7 +1219,7 @@ export default function ProjectsPage() {
                   className="text-xs gap-1.5"
                 >
                   {isImportingBacklog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  Import Backlog into Project
+                  Import Backlog
                 </Button>
               </div>
             </div>

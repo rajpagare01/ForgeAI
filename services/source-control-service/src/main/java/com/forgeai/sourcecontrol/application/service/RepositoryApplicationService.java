@@ -30,7 +30,8 @@ import com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient;
 /**
  * Application service for repository management.
  *
- * <p>All repository connection operations require a real GitHub App installation.
+ * <p>
+ * All repository connection operations require a real GitHub App installation.
  * No fake installation IDs, no random repository IDs, and no caller-supplied
  * repository metadata are accepted. All authoritative data comes from GitHub.
  */
@@ -38,7 +39,10 @@ import com.forgeai.sourcecontrol.infrastructure.ai.AiServiceClient;
 @Service
 public class RepositoryApplicationService {
 
-    /** Quarantine sentinel — installations without a claimed organization are held here. */
+    /**
+     * Quarantine sentinel — installations without a claimed organization are held
+     * here.
+     */
     private static final UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     private final RepositoryRepository repositoryRepository;
@@ -69,11 +73,13 @@ public class RepositoryApplicationService {
         this.discoveryService = discoveryService;
     }
 
-    public void setWorkspaceRepository(com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository) {
+    public void setWorkspaceRepository(
+            com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository) {
         this.workspaceRepository = workspaceRepository;
     }
 
-    public void setIdentityServiceClient(com.forgeai.sourcecontrol.infrastructure.identity.IdentityServiceClient identityServiceClient) {
+    public void setIdentityServiceClient(
+            com.forgeai.sourcecontrol.infrastructure.identity.IdentityServiceClient identityServiceClient) {
         this.identityServiceClient = identityServiceClient;
     }
 
@@ -84,7 +90,8 @@ public class RepositoryApplicationService {
             OutboxService outboxService,
             GitHubAppClient gitHubAppClient,
             GitHubAppConfig gitHubAppConfig) {
-        this(repositoryRepository, installationRepository, pullRequestRepository, null, outboxService, gitHubAppClient, gitHubAppConfig, null);
+        this(repositoryRepository, installationRepository, pullRequestRepository, null, outboxService, gitHubAppClient,
+                gitHubAppConfig, null);
     }
 
     public RepositoryApplicationService(
@@ -95,7 +102,8 @@ public class RepositoryApplicationService {
             OutboxService outboxService,
             GitHubAppClient gitHubAppClient,
             GitHubAppConfig gitHubAppConfig) {
-        this(repositoryRepository, installationRepository, pullRequestRepository, commitRepository, outboxService, gitHubAppClient, gitHubAppConfig, null);
+        this(repositoryRepository, installationRepository, pullRequestRepository, commitRepository, outboxService,
+                gitHubAppClient, gitHubAppConfig, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -131,7 +139,8 @@ public class RepositoryApplicationService {
     @Transactional(readOnly = true)
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
-        return listPullRequests(organizationId, workspaceId, repositoryId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+        return listPullRequests(organizationId, workspaceId, repositoryId,
+                com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
     @Transactional
@@ -141,7 +150,8 @@ public class RepositoryApplicationService {
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
         if (repositoryId != null) {
             getRepository(organizationId, effectiveWsId, repositoryId, callerUserId);
-            List<com.forgeai.sourcecontrol.domain.model.PullRequest> prs = pullRequestRepository.findAllByRepositoryId(repositoryId);
+            List<com.forgeai.sourcecontrol.domain.model.PullRequest> prs = pullRequestRepository
+                    .findAllByRepositoryId(repositoryId);
             if (prs.isEmpty() && gitHubAppConfig != null && gitHubAppConfig.isConfigured()) {
                 try {
                     prs = syncPullRequests(organizationId, effectiveWsId, repositoryId);
@@ -152,7 +162,8 @@ public class RepositoryApplicationService {
             return prs != null ? prs : java.util.Collections.emptyList();
         }
         if (organizationId != null && !isPersonalWorkspace(effectiveWsId)) {
-            List<com.forgeai.sourcecontrol.domain.model.PullRequest> orgPrs = pullRequestRepository.findAllByOrganizationId(organizationId);
+            List<com.forgeai.sourcecontrol.domain.model.PullRequest> orgPrs = pullRequestRepository
+                    .findAllByOrganizationId(organizationId);
             if (!orgPrs.isEmpty()) {
                 return orgPrs;
             }
@@ -171,7 +182,8 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public List<Repository> listRepositories(UUID organizationId, UUID workspaceId) {
-        return listRepositories(organizationId, workspaceId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+        return listRepositories(organizationId, workspaceId,
+                com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
     @Transactional(readOnly = true)
@@ -199,7 +211,8 @@ public class RepositoryApplicationService {
             }
         }
         return result.stream()
-                .sorted(java.util.Comparator.comparing((Repository r) -> r.getFullName() != null ? r.getFullName().toLowerCase() : "")
+                .sorted(java.util.Comparator
+                        .comparing((Repository r) -> r.getFullName() != null ? r.getFullName().toLowerCase() : "")
                         .thenComparing(r -> r.getId() != null ? r.getId() : UUID.randomUUID()))
                 .toList();
     }
@@ -211,7 +224,8 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public Repository getRepository(UUID organizationId, UUID workspaceId, UUID repositoryId) {
-        return getRepository(organizationId, workspaceId, repositoryId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+        return getRepository(organizationId, workspaceId, repositoryId,
+                com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
     @Transactional(readOnly = true)
@@ -225,7 +239,9 @@ public class RepositoryApplicationService {
             }
         }
         Repository repo = repositoryRepository.findByIdAndWorkspaceId(repositoryId, effectiveWsId)
-                .or(() -> organizationId != null ? repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId) : java.util.Optional.empty())
+                .or(() -> organizationId != null
+                        ? repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
+                        : java.util.Optional.empty())
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
         if (repo.getOrganizationId() == null && !"PERSONAL".equalsIgnoreCase(repo.getScope())) {
             throw new ResourceNotFoundException("Repository not found: " + repositoryId);
@@ -279,7 +295,8 @@ public class RepositoryApplicationService {
         }
         String defaultBranch = repo.getDefaultBranch() != null ? repo.getDefaultBranch() : "main";
         String sha = repo.getLatestObservedSha() != null ? repo.getLatestObservedSha() : "HEAD";
-        return List.of(new com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata(defaultBranch, sha, true));
+        return List
+                .of(new com.forgeai.sourcecontrol.infrastructure.github.GitHubBranchMetadata(defaultBranch, sha, true));
     }
 
     @Transactional
@@ -298,13 +315,13 @@ public class RepositoryApplicationService {
             UUID organizationId, UUID workspaceId, UUID repositoryId, String branch) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         Repository repo = getRepository(organizationId, workspaceId, repositoryId);
-        List<com.forgeai.sourcecontrol.infrastructure.github.GitHubCommitMetadata> ghCommits =
-                gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), branch, 30);
+        List<com.forgeai.sourcecontrol.infrastructure.github.GitHubCommitMetadata> ghCommits = gitHubAppClient
+                .listCommits(repo.getInstallationId(), repo.getFullName(), branch, 30);
 
         List<com.forgeai.sourcecontrol.domain.model.Commit> savedList = new java.util.ArrayList<>();
         for (var ghCommit : ghCommits) {
-            Optional<com.forgeai.sourcecontrol.domain.model.Commit> existing =
-                    commitRepository.findByRepositoryIdAndSha(repo.getId(), ghCommit.sha());
+            Optional<com.forgeai.sourcecontrol.domain.model.Commit> existing = commitRepository
+                    .findByRepositoryIdAndSha(repo.getId(), ghCommit.sha());
             if (existing.isPresent()) {
                 com.forgeai.sourcecontrol.domain.model.Commit c = existing.get();
                 c.setMessage(ghCommit.message());
@@ -313,7 +330,8 @@ public class RepositoryApplicationService {
                 c.setCommittedAt(ghCommit.committedAt());
                 savedList.add(commitRepository.save(c));
             } else {
-                com.forgeai.sourcecontrol.domain.model.Commit c = com.forgeai.sourcecontrol.domain.model.Commit.builder()
+                com.forgeai.sourcecontrol.domain.model.Commit c = com.forgeai.sourcecontrol.domain.model.Commit
+                        .builder()
                         .organizationId(repo.getOrganizationId())
                         .workspaceId(repo.getWorkspaceId())
                         .repositoryId(repo.getId())
@@ -327,12 +345,14 @@ public class RepositoryApplicationService {
                 savedList.add(commitRepository.save(c));
             }
         }
-        log.info("[GitHub] Synchronized {} commits for repo: {} (branch: {})", savedList.size(), repo.getFullName(), branch);
+        log.info("[GitHub] Synchronized {} commits for repo: {} (branch: {})", savedList.size(), repo.getFullName(),
+                branch);
         return savedList;
     }
 
     @Transactional
-    public List<com.forgeai.sourcecontrol.domain.model.PullRequest> syncPullRequests(UUID organizationId, UUID repositoryId) {
+    public List<com.forgeai.sourcecontrol.domain.model.PullRequest> syncPullRequests(UUID organizationId,
+            UUID repositoryId) {
         return syncPullRequests(organizationId, null, repositoryId);
     }
 
@@ -341,8 +361,8 @@ public class RepositoryApplicationService {
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         Repository repo = getRepository(organizationId, workspaceId, repositoryId);
-        List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestMetadata> ghPrs =
-                gitHubAppClient.listPullRequests(repo.getInstallationId(), repo.getFullName());
+        List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestMetadata> ghPrs = gitHubAppClient
+                .listPullRequests(repo.getInstallationId(), repo.getFullName());
 
         if (ghPrs == null || ghPrs.isEmpty()) {
             return java.util.Collections.emptyList();
@@ -350,12 +370,12 @@ public class RepositoryApplicationService {
 
         List<com.forgeai.sourcecontrol.domain.model.PullRequest> savedList = new java.util.ArrayList<>();
         for (var ghPr : ghPrs) {
-            Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing =
-                    pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), ghPr.number());
-            com.forgeai.sourcecontrol.domain.model.PullRequestStatus status =
-                    "closed".equalsIgnoreCase(ghPr.state())
-                            ? (ghPr.mergedAt() != null ? com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.CLOSED)
-                            : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN;
+            Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing = pullRequestRepository
+                    .findByRepositoryIdAndNumber(repo.getId(), ghPr.number());
+            com.forgeai.sourcecontrol.domain.model.PullRequestStatus status = "closed".equalsIgnoreCase(ghPr.state())
+                    ? (ghPr.mergedAt() != null ? com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED
+                            : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.CLOSED)
+                    : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN;
 
             if (existing.isPresent()) {
                 var pr = existing.get();
@@ -403,27 +423,29 @@ public class RepositoryApplicationService {
 
         if (gitHubAppConfig.isConfigured()) {
             try {
-                var detail = gitHubAppClient.getPullRequestDetail(repo.getInstallationId(), repo.getFullName(), prNumber);
+                var detail = gitHubAppClient.getPullRequestDetail(repo.getInstallationId(), repo.getFullName(),
+                        prNumber);
                 List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestFile> enrichedFiles = new java.util.ArrayList<>();
                 if (detail.files() != null) {
                     for (var f : detail.files()) {
                         String content = null;
                         if (!"removed".equalsIgnoreCase(f.status())) {
-                            content = gitHubAppClient.getFileContent(repo.getInstallationId(), repo.getFullName(), f.filename(), detail.headSha())
+                            content = gitHubAppClient
+                                    .getFileContent(repo.getInstallationId(), repo.getFullName(), f.filename(),
+                                            detail.headSha())
                                     .orElse(null);
                         }
                         enrichedFiles.add(new com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestFile(
                                 f.filename(), f.status(), f.additions(), f.deletions(), f.changes(),
-                                f.patch(), f.rawUrl(), f.contentsUrl(), content
-                        ));
+                                f.patch(), f.rawUrl(), f.contentsUrl(), content));
                     }
                 }
 
                 // Update or save local pull request record
-                Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing =
-                        pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), prNumber);
-                com.forgeai.sourcecontrol.domain.model.PullRequestStatus status =
-                        "closed".equalsIgnoreCase(detail.state())
+                Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing = pullRequestRepository
+                        .findByRepositoryIdAndNumber(repo.getId(), prNumber);
+                com.forgeai.sourcecontrol.domain.model.PullRequestStatus status = "closed"
+                        .equalsIgnoreCase(detail.state())
                                 ? com.forgeai.sourcecontrol.domain.model.PullRequestStatus.CLOSED
                                 : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN;
 
@@ -476,13 +498,16 @@ public class RepositoryApplicationService {
                         .build();
 
             } catch (Exception e) {
-                log.warn("[GitHub] Could not fetch real-time PR changeset from GitHub API ({}); falling back to persisted PR record", e.getMessage());
+                log.warn(
+                        "[GitHub] Could not fetch real-time PR changeset from GitHub API ({}); falling back to persisted PR record",
+                        e.getMessage());
             }
         }
 
         // Fallback to persisted pull request record
         var pr = pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), prNumber)
-                .orElseThrow(() -> new ResourceNotFoundException("Pull request #" + prNumber + " not found for repository " + repositoryId));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Pull request #" + prNumber + " not found for repository " + repositoryId));
 
         return com.forgeai.sourcecontrol.domain.model.PullRequestChangeSet.builder()
                 .repositoryId(repo.getId())
@@ -515,28 +540,34 @@ public class RepositoryApplicationService {
         requireTenantOrWorkspace(organizationId, workspaceId);
         Repository repo = getRepository(organizationId, workspaceId, repositoryId);
         return pullRequestRepository.findByRepositoryIdAndNumber(repo.getId(), prNumber)
-                .orElseThrow(() -> new ResourceNotFoundException("Pull request #" + prNumber + " not found for repository " + repositoryId));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Pull request #" + prNumber + " not found for repository " + repositoryId));
     }
-
 
     // -------------------------------------------------------------------------
     // Installation claim
     // -------------------------------------------------------------------------
 
     /**
-     * Claims a quarantined GitHub installation for an authenticated ForgeAI organization.
+     * Claims a quarantined GitHub installation for an authenticated ForgeAI
+     * organization.
      *
-     * <p>Security contract:
+     * <p>
+     * Security contract:
      * <ul>
-     *   <li>Installation must exist in the local DB with status {@link InstallationStatus#SUSPENDED}
-     *       and organization ID {@link #QUARANTINE_ORG_ID}.</li>
-     *   <li>The GitHub App must be configured — we call GitHub to confirm the installation exists.</li>
-     *   <li>Only the authenticated caller's organization is assigned — never guessed.</li>
-     *   <li>An organization may claim at most one installation (one-to-one mapping).</li>
+     * <li>Installation must exist in the local DB with status
+     * {@link InstallationStatus#SUSPENDED}
+     * and organization ID {@link #QUARANTINE_ORG_ID}.</li>
+     * <li>The GitHub App must be configured — we call GitHub to confirm the
+     * installation exists.</li>
+     * <li>Only the authenticated caller's organization is assigned — never
+     * guessed.</li>
+     * <li>An organization may claim at most one installation (one-to-one
+     * mapping).</li>
      * </ul>
      *
-     * @param organizationId  authenticated organization (from JWT/gateway)
-     * @param installationId  GitHub installation_id to claim
+     * @param organizationId authenticated organization (from JWT/gateway)
+     * @param installationId GitHub installation_id to claim
      * @return the updated {@link GitHubInstallation}
      */
     @Transactional
@@ -546,11 +577,13 @@ public class RepositoryApplicationService {
 
     @Transactional
     public GitHubInstallation claimInstallation(UUID organizationId, UUID workspaceId, Long installationId) {
-        return claimInstallation(organizationId, workspaceId, installationId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+        return claimInstallation(organizationId, workspaceId, installationId,
+                com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
     @Transactional
-    public GitHubInstallation claimInstallation(UUID organizationId, UUID workspaceId, Long installationId, UUID callerUserId) {
+    public GitHubInstallation claimInstallation(UUID organizationId, UUID workspaceId, Long installationId,
+            UUID callerUserId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         UUID targetWorkspaceId = workspaceId != null ? workspaceId : organizationId;
         validateWorkspaceAccess(targetWorkspaceId, organizationId, callerUserId);
@@ -589,12 +622,15 @@ public class RepositoryApplicationService {
         if ("PERSONAL".equals(scope) && callerUserId != null && identityServiceClient != null) {
             var profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
             if (profileOpt.isEmpty() || !profileOpt.get().connected()) {
-                throw new GitHubAccessDeniedException("User must connect GitHub account before claiming a GitHub App installation.");
+                throw new GitHubAccessDeniedException(
+                        "User must connect GitHub account before claiming a GitHub App installation.");
             }
             var profile = profileOpt.get();
-            boolean loginMatches = profile.githubLogin() != null && profile.githubLogin().equalsIgnoreCase(accountLogin);
+            boolean loginMatches = profile.githubLogin() != null
+                    && profile.githubLogin().equalsIgnoreCase(accountLogin);
             if (!loginMatches) {
-                log.warn("[Security] Installation claim ownership mismatch! Caller login '{}' != Installation account '{}'",
+                log.warn(
+                        "[Security] Installation claim ownership mismatch! Caller login '{}' != Installation account '{}'",
                         profile.githubLogin(), accountLogin);
                 throw new GitHubAccessDeniedException(
                         "Installation " + installationId + " belongs to GitHub account '" + accountLogin +
@@ -610,8 +646,9 @@ public class RepositoryApplicationService {
         if (existingInstall.isPresent() && !QUARANTINE_ORG_ID.equals(existingInstall.get().getOrganizationId())) {
             if (!installationId.equals(existingInstall.get().getInstallationId())) {
                 throw new GitHubAccessDeniedException(
-                        "Tenant already has a claimed GitHub installation (" + existingInstall.get().getInstallationId() + "). " +
-                        "Remove it before claiming a different installation.");
+                        "Tenant already has a claimed GitHub installation (" + existingInstall.get().getInstallationId()
+                                + "). " +
+                                "Remove it before claiming a different installation.");
             }
         }
 
@@ -625,11 +662,13 @@ public class RepositoryApplicationService {
             inst.setStatus(InstallationStatus.ACTIVE);
             inst.setUpdatedAt(Instant.now());
             GitHubInstallation saved = installationRepository.save(inst);
-            if (telemetryReconciler != null) telemetryReconciler.reconcile();
+            if (telemetryReconciler != null)
+                telemetryReconciler.reconcile();
             log.info("[GitHub] Installation {} claimed by orgId={}, wsId={}", installationId, targetOrg, targetWs);
             return saved;
         } else {
-            // Installation exists on GitHub but not yet in our DB (e.g. webhook not yet received)
+            // Installation exists on GitHub but not yet in our DB (e.g. webhook not yet
+            // received)
             GitHubInstallation inst = GitHubInstallation.builder()
                     .organizationId(targetOrg)
                     .workspaceId(targetWs)
@@ -643,14 +682,17 @@ public class RepositoryApplicationService {
                     .updatedAt(Instant.now())
                     .build();
             GitHubInstallation saved = installationRepository.save(inst);
-            if (telemetryReconciler != null) telemetryReconciler.reconcile();
-            log.info("[GitHub] New installation {} registered and claimed by orgId={}, wsId={}", installationId, targetOrg, targetWs);
+            if (telemetryReconciler != null)
+                telemetryReconciler.reconcile();
+            log.info("[GitHub] New installation {} registered and claimed by orgId={}, wsId={}", installationId,
+                    targetOrg, targetWs);
             return saved;
         }
     }
 
     /**
-     * Lists all GitHub repositories accessible to the installation claimed by this organization or workspace.
+     * Lists all GitHub repositories accessible to the installation claimed by this
+     * organization or workspace.
      * All data comes from GitHub — no local cache.
      */
     @Transactional(readOnly = true)
@@ -660,11 +702,13 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId) {
-        return listAvailableRepositories(organizationId, workspaceId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+        return listAvailableRepositories(organizationId, workspaceId,
+                com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
     @Transactional(readOnly = true)
-    public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId, UUID callerUserId) {
+    public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId,
+            UUID callerUserId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
@@ -688,7 +732,8 @@ public class RepositoryApplicationService {
 
     @Transactional
     public Repository connectRepository(UUID organizationId, UUID workspaceId, String fullName) {
-        return connectRepository(organizationId, workspaceId, fullName, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+        return connectRepository(organizationId, workspaceId, fullName,
+                com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
     @Transactional
@@ -723,12 +768,14 @@ public class RepositoryApplicationService {
         if (existing.isPresent()) {
             Repository existingRepo = existing.get();
             boolean isOwner = false;
-            if (existingRepo.getInstallationId() != null && existingRepo.getInstallationId().equals(installation.getInstallationId())) {
+            if (existingRepo.getInstallationId() != null
+                    && existingRepo.getInstallationId().equals(installation.getInstallationId())) {
                 isOwner = true;
             } else if ("ORGANIZATION".equalsIgnoreCase(existingRepo.getScope())) {
                 isOwner = organizationId != null && organizationId.equals(existingRepo.getOrganizationId());
             } else if ("PERSONAL".equalsIgnoreCase(existingRepo.getScope())) {
-                isOwner = organizationId == null && (existingRepo.getWorkspaceId() == null || (targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId())));
+                isOwner = organizationId == null && (existingRepo.getWorkspaceId() == null
+                        || (targetWorkspaceId != null && targetWorkspaceId.equals(existingRepo.getWorkspaceId())));
             }
             if (isOwner) {
                 existingRepo.setOrganizationId(targetOrg);
@@ -744,12 +791,14 @@ public class RepositoryApplicationService {
                 if (updated == null) {
                     updated = existingRepo;
                 }
-                log.info("[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
+                log.info(
+                        "[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
                         updated.getId(), updated.getFullName(), updated.getGithubRepoId(), targetOrg, targetWs);
                 return updated;
             }
             throw new DuplicateResourceException(
-                    "Repository '" + fullName + "' (GitHub ID " + ghRepo.id() + ") is already connected to another organization or workspace.");
+                    "Repository '" + fullName + "' (GitHub ID " + ghRepo.id()
+                            + ") is already connected to another organization or workspace.");
         }
 
         Repository repo = Repository.builder()
@@ -785,7 +834,8 @@ public class RepositoryApplicationService {
     }
 
     /**
-     * Returns the active claimed installation for this organization or workspace, or throws
+     * Returns the active claimed installation for this organization or workspace,
+     * or throws
      * {@link ResourceNotFoundException} if none exists.
      */
     @Transactional(readOnly = true)
@@ -795,7 +845,8 @@ public class RepositoryApplicationService {
 
     @Transactional(readOnly = true)
     public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId) {
-        return getClaimedInstallation(organizationId, workspaceId, com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
+        return getClaimedInstallation(organizationId, workspaceId,
+                com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
     @Transactional
@@ -824,7 +875,8 @@ public class RepositoryApplicationService {
                     List<GitHubInstallationDetails> appInstalls = gitHubAppClient.listAppInstallations();
                     if (!appInstalls.isEmpty() && discoveryService != null) {
                         GitHubInstallationDetails first = appInstalls.get(0);
-                        GitHubInstallation claimed = discoveryService.validateAndAssociate(callerUserId, effectiveWsId, organizationId, first.id());
+                        GitHubInstallation claimed = discoveryService.validateAndAssociate(callerUserId, effectiveWsId,
+                                organizationId, first.id());
                         opt = Optional.of(claimed);
                     }
                 } catch (Exception e) {
@@ -837,11 +889,12 @@ public class RepositoryApplicationService {
                 .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No active GitHub App installation found for this tenant. " +
-                        "Install the ForgeAI GitHub App and claim the installation first."));
+                                "Install the ForgeAI GitHub App and claim the installation first."));
     }
 
     private Optional<GitHubInstallation> findAndBindPersonalInstallation(UUID callerUserId, UUID effectiveWsId) {
-        if (identityServiceClient == null) return Optional.empty();
+        if (identityServiceClient == null)
+            return Optional.empty();
         try {
             var profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
             if (profileOpt.isPresent() && profileOpt.get().connected()) {
@@ -870,18 +923,19 @@ public class RepositoryApplicationService {
                 }
             }
         } catch (Exception e) {
-            log.warn("[GitHub] Could not auto-resolve personal installation for user {}: {}", callerUserId, e.getMessage());
+            log.warn("[GitHub] Could not auto-resolve personal installation for user {}: {}", callerUserId,
+                    e.getMessage());
         }
         return Optional.empty();
     }
-
 
     // -------------------------------------------------------------------------
     // Synchronization & Reconciliation
     // -------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO getSyncStatus(UUID organizationId, UUID repositoryId) {
+    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO getSyncStatus(UUID organizationId,
+            UUID repositoryId) {
         return getSyncStatus(organizationId, null, repositoryId);
     }
 
@@ -897,10 +951,10 @@ public class RepositoryApplicationService {
         }
 
         if (status != com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCING &&
-            status != com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.FAILED) {
+                status != com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.FAILED) {
             if (repo.getLatestObservedSha() != null &&
-                !repo.getLatestObservedSha().isBlank() &&
-                !repo.getLatestObservedSha().equals(repo.getLatestIndexedSha())) {
+                    !repo.getLatestObservedSha().isBlank() &&
+                    !repo.getLatestObservedSha().equals(repo.getLatestIndexedSha())) {
                 status = com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.STALE;
             }
         }
@@ -921,7 +975,8 @@ public class RepositoryApplicationService {
     }
 
     @Transactional
-    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(UUID organizationId, UUID repositoryId) {
+    public com.forgeai.sourcecontrol.domain.model.RepositorySyncStatusDTO reconcileRepository(UUID organizationId,
+            UUID repositoryId) {
         return reconcileRepository(organizationId, null, repositoryId, null);
     }
 
@@ -953,7 +1008,8 @@ public class RepositoryApplicationService {
                     }
                 }
                 if (currentHead == null) {
-                    var commits = gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(), effectiveBranch, 1);
+                    var commits = gitHubAppClient.listCommits(repo.getInstallationId(), repo.getFullName(),
+                            effectiveBranch, 1);
                     if (!commits.isEmpty()) {
                         currentHead = commits.get(0).sha();
                     }
@@ -981,11 +1037,14 @@ public class RepositoryApplicationService {
                 if (aiServiceClient != null) {
                     UUID tenantId = repo.getOrganizationId() != null ? repo.getOrganizationId() : repo.getWorkspaceId();
                     Optional<GitHubAppClient.GitHubCommitDetail> commitDetailOpt = Optional.empty();
-                    if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0) {
+                    if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null
+                            && repo.getInstallationId() > 0) {
                         try {
-                            commitDetailOpt = gitHubAppClient.getCommitDetail(repo.getInstallationId(), repo.getFullName(), finalHead);
+                            commitDetailOpt = gitHubAppClient.getCommitDetail(repo.getInstallationId(),
+                                    repo.getFullName(), finalHead);
                         } catch (Exception ex) {
-                            log.warn("[GitHub] Could not fetch commit detail for {}@{}: {}", repo.getFullName(), finalHead, ex.getMessage());
+                            log.warn("[GitHub] Could not fetch commit detail for {}@{}: {}", repo.getFullName(),
+                                    finalHead, ex.getMessage());
                         }
                     }
 
@@ -1010,11 +1069,14 @@ public class RepositoryApplicationService {
                         List<AiServiceClient.ChangedFilePayload> changedFiles = new ArrayList<>();
                         int count = 0;
                         for (var file : commitDetail.files()) {
-                            if (count >= 30) break;
+                            if (count >= 30)
+                                break;
                             String status = file.status() != null ? file.status() : "modified";
                             String content = "";
                             if (!"removed".equalsIgnoreCase(status)) {
-                                content = gitHubAppClient.getFileContent(repo.getInstallationId(), repo.getFullName(), file.filename(), finalHead)
+                                content = gitHubAppClient
+                                        .getFileContent(repo.getInstallationId(), repo.getFullName(), file.filename(),
+                                                finalHead)
                                         .orElse(file.patch() != null ? file.patch() : "");
                             }
                             changedFiles.add(new AiServiceClient.ChangedFilePayload(file.filename(), status, content));
@@ -1029,16 +1091,14 @@ public class RepositoryApplicationService {
                                 changedFiles,
                                 commitDetail.authorName(),
                                 commitDetail.authorEmail(),
-                                commitDetail.message()
-                        );
+                                commitDetail.message());
                     } else {
                         syncSuccess = aiServiceClient.syncPush(
                                 tenantId,
                                 repo.getId(),
                                 finalHead,
                                 "refs/heads/" + effectiveBranch,
-                                java.util.List.of()
-                        );
+                                java.util.List.of());
                     }
                 }
 
@@ -1063,11 +1123,13 @@ public class RepositoryApplicationService {
 
         repositoryRepository.save(repo);
 
-        if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0 && workflowRunTestingServiceForwarder != null) {
+        if (gitHubAppConfig.isConfigured() && repo.getInstallationId() != null && repo.getInstallationId() > 0
+                && workflowRunTestingServiceForwarder != null) {
             try {
                 var runs = gitHubAppClient.listWorkflowRuns(repo.getInstallationId(), repo.getFullName(), 5);
                 for (var r : runs) {
-                    String scope = repo.getScope() != null ? repo.getScope() : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
+                    String scope = repo.getScope() != null ? repo.getScope()
+                            : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
                     UUID effectiveOrgId = "PERSONAL".equalsIgnoreCase(scope) ? null : repo.getOrganizationId();
                     var event = com.forgeai.sourcecontrol.domain.event.WorkflowRunReceivedEvent.builder()
                             .repositoryId(repo.getId())
@@ -1088,11 +1150,12 @@ public class RepositoryApplicationService {
                             .timestamp(Instant.now())
                             .build();
                     workflowRunTestingServiceForwarder.onEventEnvelope(
-                            com.forgeai.sourcecontrol.domain.event.EventEnvelope.from(event, "reconcile-" + r.id(), "WorkflowRun", String.valueOf(r.id()))
-                    );
+                            com.forgeai.sourcecontrol.domain.event.EventEnvelope.from(event, "reconcile-" + r.id(),
+                                    "WorkflowRun", String.valueOf(r.id())));
                 }
             } catch (Exception ex) {
-                log.debug("[Reconcile] Could not query/forward workflow runs for repo {}: {}", repo.getFullName(), ex.getMessage());
+                log.debug("[Reconcile] Could not query/forward workflow runs for repo {}: {}", repo.getFullName(),
+                        ex.getMessage());
             }
         }
 
@@ -1141,18 +1204,21 @@ public class RepositoryApplicationService {
                     var ws = wsOpt.get();
                     if (ws.getOrganizationId() != null && !organizationId.equals(ws.getOrganizationId())) {
                         throw new IllegalArgumentException(
-                                "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+                                "Organization context " + organizationId + " does not match workspace context "
+                                        + workspaceId);
                     }
                     if ("PERSONAL".equalsIgnoreCase(ws.getType())) {
                         if (!organizationId.equals(workspaceId)) {
                             throw new IllegalArgumentException(
-                                    "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+                                    "Organization context " + organizationId + " does not match workspace context "
+                                            + workspaceId);
                         }
                         return workspaceId;
                     }
                 } else if (!organizationId.equals(workspaceId)) {
                     throw new IllegalArgumentException(
-                            "Organization context " + organizationId + " does not match workspace context " + workspaceId);
+                            "Organization context " + organizationId + " does not match workspace context "
+                                    + workspaceId);
                 }
             } else if (!organizationId.equals(workspaceId)) {
                 throw new IllegalArgumentException(
@@ -1166,7 +1232,8 @@ public class RepositoryApplicationService {
         if (organizationId != null) {
             return organizationId;
         }
-        if (com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId() != null && workspaceRepository != null) {
+        if (com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId() != null
+                && workspaceRepository != null) {
             var personalWs = workspaceRepository.findByOwnerUserIdAndType(
                     com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId(), "PERSONAL");
             if (personalWs.isPresent()) {
@@ -1193,4 +1260,3 @@ public class RepositoryApplicationService {
         });
     }
 }
-

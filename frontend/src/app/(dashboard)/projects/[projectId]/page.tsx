@@ -247,6 +247,7 @@ function ProjectDetailContent() {
       // Update count on project
       setProject((prev) => prev ? { ...prev, requirementCount: (prev.requirementCount || 0) + 1 } : prev);
       showNotification(`✓ Engineering requirement ${created?.identifier || generatedId} created successfully!`);
+      fetchProjectData();
     } catch (err: any) {
       console.error("Failed to create requirement on backend:", err);
       setError(err?.message || "Failed to create requirement.");
@@ -303,6 +304,7 @@ function ProjectDetailContent() {
       setShowRepoModal(false);
       setSelectedRepoToLink("");
       showNotification(`✓ Repository "${repoName}" linked to project successfully!`);
+      fetchProjectData();
     } catch (err: any) {
       console.error("Failed to link repository:", err);
       const msg = err?.message || "";

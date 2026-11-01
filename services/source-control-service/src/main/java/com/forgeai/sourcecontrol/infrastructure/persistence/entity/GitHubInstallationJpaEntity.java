@@ -73,8 +73,16 @@ public class GitHubInstallationJpaEntity {
     @PrePersist
     public void prePersist() {
         Instant now = Instant.now();
-        if (createdAt == null) createdAt = now;
-        if (updatedAt == null) updatedAt = now;
+        if (createdAt == null)
+            createdAt = now;
+        if (updatedAt == null)
+            updatedAt = now;
+        if (scope == null) {
+            scope = organizationId != null ? "ORGANIZATION" : (workspaceId != null ? "PERSONAL" : "ORGANIZATION");
+        }
+        if (workspaceId == null && organizationId != null) {
+            workspaceId = organizationId;
+        }
         if (repositorySelection == null) {
             repositorySelection = "ALL";
         }
