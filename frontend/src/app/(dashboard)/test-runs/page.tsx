@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { TestRun } from "@/types";
 import { useTenant } from "@/lib/tenant-context";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, formatUserError } from "@/lib/api-client";
 import {
   CheckCircle2,
   XCircle,
@@ -119,20 +119,6 @@ interface GeneratedTestSuite {
   used_fallback: boolean;
 }
 
-const SAMPLE_FAILING_JUNIT_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forgeai.security.AuthenticationServiceTest" tests="3" failures="1" errors="0" skipped="0" time="1.45">
-  <testcase name="testTokenValidationSuccess" classname="com.forgeai.security.AuthenticationServiceTest" time="0.32"/>
-  <testcase name="testExpiredTokenRejection" classname="com.forgeai.security.AuthenticationServiceTest" time="0.41"/>
-  <testcase name="testTenantBoundaryIsolation" classname="com.forgeai.security.AuthenticationServiceTest" time="0.72">
-    <failure message="AssertionError: Expected tenant isolation exception was not thrown when header X-Org-Id is null" type="java.lang.AssertionError">
-java.lang.AssertionError: Expected tenant isolation exception was not thrown
-    at com.forgeai.security.AuthenticationServiceTest.testTenantBoundaryIsolation(AuthenticationServiceTest.java:78)
-    at org.junit.jupiter.api.AssertThrows.assertThrows(AssertThrows.java:53)
-    at com.forgeai.security.AuthenticationService.validateTenantContext(AuthenticationService.java:42)
-    </failure>
-  </testcase>
-</testsuite>`;
-
 export default function TestRunsPage() {
   const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
   const [runs, setRuns] = useState<TestRun[]>([]);
@@ -166,7 +152,7 @@ export default function TestRunsPage() {
   const [recordRepoId, setRecordRepoId] = useState("");
   const [recordCommitSha, setRecordCommitSha] = useState("main001");
   const [recordBranch, setRecordBranch] = useState("main");
-  const [recordXmlContent, setRecordXmlContent] = useState(SAMPLE_FAILING_JUNIT_XML);
+  const [recordXmlContent, setRecordXmlContent] = useState("");
   const [isSubmittingRun, setIsSubmittingRun] = useState(false);
 
   // AI Generate Unit Tests Modal State
@@ -177,7 +163,6 @@ export default function TestRunsPage() {
   const [genFramework, setGenFramework] = useState("AUTO");
   const [isGeneratingTests, setIsGeneratingTests] = useState(false);
   const [generatedSuite, setGeneratedSuite] = useState<GeneratedTestSuite | null>(null);
-  const [simulateEdgeCase, setSimulateEdgeCase] = useState(false);
   const [isVerifyingSuite, setIsVerifyingSuite] = useState(false);
   const [verifiedResults, setVerifiedResults] = useState<VerifyTestSuiteResponse | null>(null);
   const [isExecutingSuite, setIsExecutingSuite] = useState(false);
@@ -229,16 +214,6 @@ export default function TestRunsPage() {
           const isSuccess = r.conclusion === "success" || r.status === "PASSED" || r.status === "COMPLETED";
           const isFailed = r.conclusion === "failure" || r.status === "FAILED";
 
-          if (total === 0) {
-            if (isSuccess) {
-              passed = 1;
-              total = 1;
-            } else if (isFailed) {
-              failed = 1;
-              total = 1;
-            }
-          }
-
           const status = (isFailed || failed > 0)
             ? "FAILED"
             : (isSuccess)
@@ -247,7 +222,7 @@ export default function TestRunsPage() {
             ? "RUNNING"
             : "QUEUED";
 
-          let durationMs = r.durationMs;
+          let durationMs = r.durationMs || 0;
           if (!durationMs || durationMs === 0) {
             const start = r.runStartedAt || r.startedAt || r.createdAt;
             const end = r.runCompletedAt || r.completedAt || r.updatedAt;
@@ -256,9 +231,6 @@ export default function TestRunsPage() {
               if (diff > 0) durationMs = diff;
             }
           }
-          if (!durationMs || durationMs === 0) {
-            durationMs = 1500;
-          }
 
           const repoName = (r.repositoryId && repoMap[r.repositoryId])
             ? repoMap[r.repositoryId]
@@ -266,7 +238,7 @@ export default function TestRunsPage() {
             ? r.repositoryFullName
             : r.repositoryId
             ? `repo-${r.repositoryId.substring(0, 8)}`
-            : "governance-core";
+            : "Unlinked Repository";
 
           return {
             id: r.id,
@@ -309,44 +281,7 @@ export default function TestRunsPage() {
       if (Array.isArray(results) && results.length > 0) {
         setTestResults(results);
       } else {
-        // Deterministic synthetic display if individual items were aggregated
-        if (run.status === "FAILED") {
-          setTestResults([
-            {
-              id: "t-1",
-              name: "testTenantBoundaryIsolation",
-              className: "com.forgeai.security.AuthenticationServiceTest",
-              status: "FAILED",
-              durationMs: 720,
-              errorMessage: "AssertionError: Expected tenant isolation exception was not thrown",
-              stackTrace: "java.lang.AssertionError: Expected tenant isolation exception was not thrown\n\tat com.forgeai.security.AuthenticationServiceTest.testTenantBoundaryIsolation(AuthenticationServiceTest.java:78)",
-            },
-            {
-              id: "t-2",
-              name: "testTokenValidationSuccess",
-              className: "com.forgeai.security.AuthenticationServiceTest",
-              status: "PASSED",
-              durationMs: 320,
-            },
-          ]);
-        } else {
-          setTestResults([
-            {
-              id: "t-1",
-              name: "testCoreExecutionInvariant",
-              className: "com.forgeai.service.ExecutionTest",
-              status: "PASSED",
-              durationMs: 420,
-            },
-            {
-              id: "t-2",
-              name: "testBoundaryCheckIntegrity",
-              className: "com.forgeai.service.ExecutionTest",
-              status: "PASSED",
-              durationMs: 310,
-            },
-          ]);
-        }
+        setTestResults([]);
       }
     } catch (err) {
       console.warn("Could not fetch test results for run:", err);
@@ -370,12 +305,15 @@ export default function TestRunsPage() {
     setIsSyncingCi(true);
     try {
       const res = await apiClient.post<any>(`/api/v1/repositories/${targetRepo.id}/workflow-runs/sync`, {});
-      showNotification(`✓ Synced ${res?.syncedRunsCount || 1} CI workflow run(s) from ${targetRepo.fullName}`);
+      if (res?.syncedRunsCount > 0) {
+        showNotification(`✓ Synced ${res.syncedRunsCount} GitHub Actions workflow run(s)!`);
+      } else {
+        showNotification("No GitHub Actions workflow runs found for this repository on GitHub yet.");
+      }
       await fetchRuns();
     } catch (err: any) {
       console.error("Failed to sync GitHub Actions workflow runs:", err);
-      showNotification(`⚠ Synced 1 deterministic CI workflow run into Testing Service`);
-      await fetchRuns();
+      setError(formatUserError(err, "Unable to sync GitHub Actions runs right now. Please try again."));
     } finally {
       setIsSyncingCi(false);
     }
@@ -401,7 +339,7 @@ export default function TestRunsPage() {
       setDiagnosisResult(diagnosis);
     } catch (err: any) {
       console.error("Failed to diagnose test failure:", err);
-      setError("AI diagnosis unavailable. Inspect logs.");
+      setError(formatUserError(err, "AI diagnosis unavailable right now."));
     } finally {
       setDiagnosingTestName(null);
     }
@@ -422,13 +360,14 @@ export default function TestRunsPage() {
           [diagnosisResult.suspected_file]: diagnosisResult.patched_content,
         },
       });
-      const prUrl = res?.prUrl || res?.pr_url || `https://github.com/${selectedRun.repositoryFullName}/pulls`;
-      setOpenedPrUrl(prUrl);
-      showNotification("✓ Automated Remediation Pull Request proposed successfully!");
+      const prUrl = res?.pullRequestUrl || res?.prUrl || res?.pr_url || res?.htmlUrl || null;
+      if (prUrl) {
+        setOpenedPrUrl(prUrl);
+        showNotification("✓ Automated Remediation Pull Request proposed successfully!");
+      }
     } catch (err: any) {
       console.error("Failed to open fix PR:", err);
-      setOpenedPrUrl(`https://github.com/${selectedRun.repositoryFullName}/compare`);
-      showNotification("✓ Remediation compare branch prepared!");
+      setError(formatUserError(err, "Unable to create the remediation pull request. Please verify your GitHub App permissions and try again."));
     } finally {
       setIsOpeningPr(false);
     }
@@ -458,38 +397,20 @@ export default function TestRunsPage() {
       const newRunId = runRes?.id;
       if (!newRunId) throw new Error("Failed to initialize TestRun on Testing Service");
 
-      // 2. Ingest JUnit Report or Batch Results
-      let ingestedResults = false;
-      try {
-        await apiClient.post(`/api/v1/test-runs/${newRunId}/reports/junit`, recordXmlContent, {
-          headers: { "Content-Type": "application/xml" },
-        });
-        ingestedResults = true;
-      } catch (xmlErr) {
-        // Fallback to results batch
-        await apiClient.post(`/api/v1/test-runs/${newRunId}/results/batch`, {
-          results: [
-            {
-              testCaseName: "testTenantBoundaryIsolation",
-              className: "com.forgeai.security.AuthenticationServiceTest",
-              status: "FAILED",
-              durationMs: 720,
-              errorMessage: "AssertionError: Expected tenant isolation exception was not thrown",
-            },
-            {
-              testCaseName: "testTokenValidationSuccess",
-              className: "com.forgeai.security.AuthenticationServiceTest",
-              status: "PASSED",
-              durationMs: 320,
-            },
-          ],
-        });
-        ingestedResults = true;
+      // 2. Ingest JUnit Report if provided
+      if (recordXmlContent.trim()) {
+        try {
+          await apiClient.post(`/api/v1/test-runs/${newRunId}/reports/junit`, recordXmlContent, {
+            headers: { "Content-Type": "application/xml" },
+          });
+        } catch (xmlErr: any) {
+          throw new Error("Unable to parse the provided JUnit XML report. Please check that the XML format is valid.");
+        }
       }
 
       // 3. Complete Run
       await apiClient.post(`/api/v1/test-runs/${newRunId}/complete`, {
-        status: "FAILED",
+        status: "COMPLETED",
       });
 
       setShowRecordRunModal(false);
@@ -497,7 +418,7 @@ export default function TestRunsPage() {
       await fetchRuns();
     } catch (err: any) {
       console.error("Failed to record run:", err);
-      setError(err?.message || "Failed to record run on Testing Service.");
+      setError(formatUserError(err, "Failed to record run on Testing Service."));
     } finally {
       setIsSubmittingRun(false);
     }
@@ -548,7 +469,6 @@ export default function TestRunsPage() {
           source_file: generatedSuite.source_file,
           test_file_path: generatedSuite.test_file_path,
           test_code: generatedSuite.test_code,
-          include_edge_case_failure_simulation: simulateEdgeCase,
         }
       );
       setVerifiedResults(resp);
@@ -577,7 +497,7 @@ export default function TestRunsPage() {
       showNotification(`✓ Verified ${resp.total_tests} tests (${resp.passed_tests} passed, ${resp.failed_tests} failed) in ${resp.duration_ms}ms`);
     } catch (err: any) {
       console.error("Verification failed:", err);
-      setError("Verification runner error: " + (err?.message || "Failed to verify suite"));
+      setError(formatUserError(err, "Failed to verify test suite."));
     } finally {
       setIsVerifyingSuite(false);
     }
@@ -588,8 +508,6 @@ export default function TestRunsPage() {
     if (!genRepoId) return;
     setApplyingFixForTest(diag.test_name);
     try {
-      const repo = repositories.find((r) => r.id === genRepoId);
-      const repoName = repo?.fullName || "ForgeAI";
       const branchName = `forgeai/fix-${diag.test_name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now()}`;
       const res = await apiClient.post<any>(`/api/v1/repositories/${genRepoId}/pull-requests/propose`, {
         title: diag.proposed_fix_title || `fix: resolve ${diag.test_name} failure`,
@@ -600,12 +518,14 @@ export default function TestRunsPage() {
           [diag.suspected_file]: diag.patched_content,
         },
       });
-      const prUrl = res?.prUrl || res?.pr_url || `https://github.com/${repoName}/pulls`;
-      setFixPrUrlMap((prev) => ({ ...prev, [diag.test_name]: prUrl }));
-      showNotification(`✓ Fix PR proposed: ${diag.proposed_fix_title}`);
+      const prUrl = res?.pullRequestUrl || res?.htmlUrl || res?.prUrl || res?.pr_url || null;
+      if (prUrl) {
+        setFixPrUrlMap((prev) => ({ ...prev, [diag.test_name]: prUrl }));
+        showNotification(`✓ Fix PR proposed: ${diag.proposed_fix_title}`);
+      }
     } catch (err: any) {
       console.error("Failed to propose fix PR:", err);
-      showNotification("✓ Fix PR created in staging branch!");
+      setError(formatUserError(err, "Unable to open the remediation pull request on GitHub right now."));
     } finally {
       setApplyingFixForTest(null);
     }
@@ -637,8 +557,7 @@ export default function TestRunsPage() {
       await fetchRuns();
     } catch (err: any) {
       console.error("Failed to record generated suite in Testing Service:", err);
-      showNotification("✓ Ingested generated suite execution!");
-      await fetchRuns();
+      setError(formatUserError(err, "Unable to record the test suite execution right now."));
     } finally {
       setIsExecutingSuite(false);
     }
@@ -649,8 +568,6 @@ export default function TestRunsPage() {
     if (!generatedSuite || !genRepoId) return;
     setIsCommittingPr(true);
     try {
-      const repo = repositories.find((r) => r.id === genRepoId);
-      const repoName = repo?.fullName || "ForgeAI";
       const branchName = `forgeai/unit-tests-${Date.now()}`;
       const res = await apiClient.post<any>(`/api/v1/repositories/${genRepoId}/pull-requests/propose`, {
         title: `test: add AI-generated ${generatedSuite.framework} suite for ${generatedSuite.source_file.split("/").pop()}`,
@@ -661,13 +578,14 @@ export default function TestRunsPage() {
           [generatedSuite.test_file_path]: generatedSuite.test_code,
         },
       });
-      const prUrl = res?.prUrl || res?.pr_url || `https://github.com/${repoName}/pulls`;
-      setCommittedPrUrl(prUrl);
-      showNotification("✓ Pull Request proposed with generated tests!");
+      const prUrl = res?.pullRequestUrl || res?.htmlUrl || res?.prUrl || res?.pr_url || null;
+      if (prUrl) {
+        setCommittedPrUrl(prUrl);
+        showNotification("✓ Pull Request proposed with generated tests!");
+      }
     } catch (err: any) {
       console.error("Failed to commit test PR:", err);
-      setCommittedPrUrl("https://github.com/pulls");
-      showNotification("✓ Pull request draft branch prepared!");
+      setError(formatUserError(err, "Unable to commit the generated test suite to GitHub right now."));
     } finally {
       setIsCommittingPr(false);
     }
@@ -943,7 +861,7 @@ export default function TestRunsPage() {
                       <span className="text-slate-500"> / {run.totalCount}</span>
                     </TableCell>
                     <TableCell className="text-xs text-slate-400 font-mono">
-                      {(run.durationMs / 1000).toFixed(2)}s
+                      {run.durationMs && run.durationMs > 0 ? `${(run.durationMs / 1000).toFixed(2)}s` : "—"}
                     </TableCell>
                     <TableCell className="text-xs text-slate-400">
                       {formatDate(run.createdAt)}
@@ -983,7 +901,9 @@ export default function TestRunsPage() {
               </div>
               <div>
                 <span className="text-slate-500">Duration: </span>
-                <span className="text-white font-mono">{(selectedRun.durationMs / 1000).toFixed(2)}s</span>
+                <span className="text-white font-mono">
+                  {selectedRun.durationMs && selectedRun.durationMs > 0 ? `${(selectedRun.durationMs / 1000).toFixed(2)}s` : "—"}
+                </span>
               </div>
             </div>
 
@@ -1201,16 +1121,7 @@ export default function TestRunsPage() {
           </div>
 
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-slate-300">JUnit XML Report Content</label>
-              <button
-                type="button"
-                onClick={() => setRecordXmlContent(SAMPLE_FAILING_JUNIT_XML)}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
-              >
-                Load Sample JUnit XML With 1 Failure
-              </button>
-            </div>
+            <label className="text-xs font-medium text-slate-300">JUnit XML Report Content</label>
             <textarea
               value={recordXmlContent}
               onChange={(e) => setRecordXmlContent(e.target.value)}
@@ -1300,19 +1211,6 @@ export default function TestRunsPage() {
                 onChange={(e) => setGenRequirementTitle(e.target.value)}
                 placeholder="e.g. Boundary checks, tenant isolation, and error handling"
               />
-            </div>
-
-            <div className="flex items-center gap-2 pt-1 pb-1">
-              <input
-                type="checkbox"
-                id="simulate-edge-case"
-                checked={simulateEdgeCase}
-                onChange={(e) => setSimulateEdgeCase(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-0 h-4 w-4"
-              />
-              <label htmlFor="simulate-edge-case" className="text-xs text-slate-300 cursor-pointer select-none">
-                Simulate Edge-Case Failure to Test AI Root-Cause Analyzer & 1-Click Fix PR
-              </label>
             </div>
 
             <Button

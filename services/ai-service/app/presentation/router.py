@@ -624,7 +624,8 @@ async def analyze_pull_request(
             trace_id=trace_id,
         )
     except AIUnavailableException as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        logger.warning(f"AI Service unavailable: {e}")
+        raise HTTPException(status_code=503, detail="The AI analysis service is temporarily unavailable. Please try again shortly.")
     meta = analysis.impact_metadata or {}
     return AnalysisResponseDTO(
         id=analysis.id,
@@ -2212,9 +2213,10 @@ async def approve_document(
     try:
         doc = await doc_service.approve_document(org_id, document_id, actor_id=actor_id)
     except Exception as e:
+        logger.warning(f"Failed to approve document {document_id}: {e}")
         if "404" in str(e) or "not found" in str(e).lower():
             raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Unable to approve the document. Please check the document state and try again.")
 
     if isinstance(doc, dict) and "document" in doc:
         doc = doc["document"]
@@ -2263,9 +2265,10 @@ async def reject_document(
     try:
         doc = await doc_service.reject_document(org_id, document_id, actor_id=actor_id, reason=effective_reason)
     except Exception as e:
+        logger.warning(f"Failed to approve document {document_id}: {e}")
         if "404" in str(e) or "not found" in str(e).lower():
             raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Unable to approve the document. Please check the document state and try again.")
 
     if isinstance(doc, dict) and "document" in doc:
         doc = doc["document"]
@@ -2323,12 +2326,13 @@ async def apply_document(
     except HTTPException:
         raise
     except Exception as e:
+        logger.warning(f"Failed to apply document {document_id}: {e}")
         err_msg = str(e)
         if "404" in err_msg or "not found" in err_msg.lower():
             raise HTTPException(status_code=404, detail="Document not found or unauthorized.")
         if "403" in err_msg or "advisory_only" in err_msg.lower() or "mode" in err_msg.lower():
-            raise HTTPException(status_code=403, detail=err_msg)
-        raise HTTPException(status_code=400, detail=err_msg)
+            raise HTTPException(status_code=403, detail="Document cannot be applied in ADVISORY_ONLY mode.")
+        raise HTTPException(status_code=400, detail="Unable to apply document changes. Please try again.")
 
     if isinstance(doc, dict) and "document" in doc:
         doc = doc["document"]

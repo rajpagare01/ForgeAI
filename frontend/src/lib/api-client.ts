@@ -42,6 +42,87 @@ interface RequestOptions extends RequestInit {
   _retry?: boolean;
 }
 
+export interface ApiError extends Error {
+  status?: number;
+  statusText?: string;
+  data?: any;
+  details?: any;
+  isNetworkError?: boolean;
+}
+
+export const TECHNICAL_ERROR_PATTERNS = [
+  /Exception\b/i,
+  /Traceback\b/i,
+  /\bat\s+[a-zA-Z0-9_.$]+\(/,
+  /\b(org\.springframework|java\.lang|java\.net|jakarta\.|io\.netty|reactor\.|com\.forgeai|psycopg|asyncpg|sqlalchemy|pydantic)\b/i,
+  /\b(SQL|JDBC|Hibernate|constraint|violates check constraint|duplicate key value|null value in column|relation ".*" does not exist)\b/i,
+  /\bHTTP Error \d+\b/i,
+  /\bstatus code \d{3}\b/i,
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i,
+  /\b(ECONNREFUSED|ETIMEDOUT|ENOTFOUND|Failed to fetch|NetworkError|AbortError|Load failed)\b/i,
+];
+
+export const STATUS_FALLBACK_MESSAGES: Record<number, string> = {
+  400: "Some of the information provided wasn't valid. Please review your input and try again.",
+  401: "Your session has expired. Please sign in again to continue.",
+  403: "You don't have permission to perform this action in the current workspace.",
+  404: "The requested item could not be found or is no longer available.",
+  409: "This item already exists or conflicts with an existing record.",
+  422: "We couldn't process your request. Please check your inputs and try again.",
+  429: "Too many requests in a short period. Please wait a moment and try again.",
+  500: "Something went wrong on our end. Please try again in a moment.",
+  502: "An external service took too long to respond. Please try again shortly.",
+  503: "This service is temporarily unavailable. Please try again in a few moments.",
+  504: "The request timed out while waiting for a response. Please try again.",
+};
+
+export function sanitizeUserFacingError(
+  status?: number,
+  rawMessage?: string | null,
+  fallback = "Something went wrong. Please try again."
+): string {
+  if (status && status >= 500) {
+    return STATUS_FALLBACK_MESSAGES[status] || STATUS_FALLBACK_MESSAGES[500];
+  }
+
+  const trimmed = (rawMessage || "").trim();
+  if (!trimmed) {
+    return (status && STATUS_FALLBACK_MESSAGES[status]) || fallback;
+  }
+
+  const looksTechnical =
+    trimmed.length > 220 ||
+    trimmed.includes("\n") ||
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("<") ||
+    TECHNICAL_ERROR_PATTERNS.some((pattern) => pattern.test(trimmed));
+
+  if (looksTechnical) {
+    return (status && STATUS_FALLBACK_MESSAGES[status]) || fallback;
+  }
+
+  return trimmed;
+}
+
+export function formatUserError(
+  err: unknown,
+  fallback = "Unable to complete your request right now. Please try again."
+): string {
+  if (!err) return fallback;
+  if (typeof err === "string") {
+    return sanitizeUserFacingError(undefined, err, fallback);
+  }
+  if (typeof err === "object") {
+    const anyErr = err as { status?: number; message?: string; detail?: string; error?: string };
+    return sanitizeUserFacingError(
+      anyErr.status,
+      anyErr.message || anyErr.detail || anyErr.error,
+      fallback
+    );
+  }
+  return fallback;
+}
+
 class ApiClient {
   private baseUrl: string;
   private refreshPromise: Promise<string | null> | null = null;
@@ -252,11 +333,13 @@ class ApiClient {
     try {
       response = await fetch(url, { ...options, headers });
     } catch (networkError: any) {
-      console.warn(`Gateway fetch failed for ${url}:`, networkError);
-      if (networkError) {
-        networkError.isNetworkError = true;
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`Gateway fetch failed for ${url}:`, networkError);
       }
-      throw networkError;
+      const netErr: ApiError = new Error("Unable to reach the ForgeAI server. Please check your connection and try again.") as ApiError;
+      netErr.status = 0;
+      netErr.isNetworkError = true;
+      throw netErr;
     }
 
     // 4. Automatic 401 Interception & Refresh Rotation (One Retry Guaranteed)
@@ -272,18 +355,26 @@ class ApiClient {
     }
 
     if (!response.ok) {
-      let errorMessage = `HTTP Error ${response.status}: ${response.statusText}`;
       let errorData: any = null;
       try {
         errorData = await response.json();
-        errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
       } catch {
         // fallback to statusText
       }
-      const apiError: any = new Error(errorMessage);
+      if (process.env.NODE_ENV !== "production" && errorData) {
+        console.warn(`[ApiClient] Request to ${endpoint} failed (${response.status}):`, errorData);
+      }
+      const rawErrorMessage =
+        errorData?.message || errorData?.detail || errorData?.error || response.statusText || "";
+      const safeMessage = sanitizeUserFacingError(
+        response.status,
+        typeof rawErrorMessage === "string" ? rawErrorMessage : ""
+      );
+      const apiError: ApiError = new Error(safeMessage) as ApiError;
       apiError.status = response.status;
       apiError.statusText = response.statusText;
       apiError.data = errorData;
+      apiError.details = errorData;
       throw apiError;
     }
 

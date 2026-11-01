@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, formatUserError } from "@/lib/api-client";
 import { Cpu, AlertCircle, CheckCircle2, ArrowRight, RotateCcw } from "lucide-react";
 import Link from "next/link";
 
@@ -129,7 +129,7 @@ function GitHubCallbackContent() {
         }, 1200);
       } catch (err: any) {
         setStatus("error");
-        setErrorMessage(err?.message || "Failed to authenticate with GitHub. Please try again.");
+        setErrorMessage(formatUserError(err, "Failed to authenticate with GitHub. Please try again."));
       }
     };
 

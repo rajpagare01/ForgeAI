@@ -61,6 +61,40 @@ app = FastAPI(
 # Register W3C trace context middleware
 app.add_middleware(TraceContextMiddleware)
 
+from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(HTTPException)
+async def sanitized_http_exception_handler(request: Request, exc: HTTPException):
+    raw_detail = str(exc.detail) if exc.detail else ""
+    if exc.status_code >= 500:
+        logger.error(f"AI Service HTTP {exc.status_code} on {request.url.path}: {raw_detail}")
+        safe_msg = "The AI analysis service encountered a temporary issue. Please try again in a moment."
+    else:
+        safe_msg = raw_detail or "Unable to process the AI request."
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": safe_msg, "message": safe_msg, "status": exc.status_code},
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning(f"Validation error on {request.url.path}: {exc}")
+    safe_msg = "Some of the parameters sent to the AI service were invalid."
+    return JSONResponse(
+        status_code=422,
+        content={"detail": safe_msg, "message": safe_msg, "status": 422},
+    )
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception on {request.url.path}: {exc}", exc_info=True)
+    safe_msg = "The AI intelligence engine is temporarily unavailable. Please try again shortly."
+    return JSONResponse(
+        status_code=500,
+        content={"detail": safe_msg, "message": safe_msg, "status": 500},
+    )
+
 # Include API router
 app.include_router(ai_router.router)
 

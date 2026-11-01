@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Project, Task, TaskStatus, TaskPriority } from "@/types";
 import { useTenant } from "@/lib/tenant-context";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, formatUserError } from "@/lib/api-client";
 import {
   FolderGit2,
   Plus,
@@ -74,8 +75,12 @@ interface CodeLinkItem {
   createdAt: string;
 }
 
-export default function ProjectsPage() {
+function ProjectsPageContent() {
   const { currentOrg, activeWorkspace, isPersonalWorkspace, isLoading: isTenantLoading } = useTenant();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const rawSearchQuery = searchParams.get("q") || "";
+  const searchQuery = rawSearchQuery.trim().toLowerCase();
   const [projects, setProjects] = useState<Project[]>([]);
   const [availableRepositories, setAvailableRepositories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -414,8 +419,7 @@ export default function ProjectsPage() {
       await fetchProjectDetails(selectedProjectId);
     } catch (err: any) {
       console.error("Failed to sync git activity:", err);
-      showNotification("✓ Commits & branches synced with project tasks!");
-      await fetchProjectDetails(selectedProjectId);
+      setError(formatUserError(err, "Unable to sync Git activity right now. Please check that a repository is linked and try again."));
     } finally {
       setIsSyncingGit(false);
     }
@@ -708,6 +712,33 @@ export default function ProjectsPage() {
             </div>
           </div>
 
+          {/* Active Search Filter Indicator */}
+          {rawSearchQuery && (
+            <div className="flex items-center justify-between px-3.5 py-2 rounded-lg border border-[#27272c] bg-[#141418] text-xs text-zinc-300">
+              <span className="flex items-center gap-2">
+                <span>Filtering tasks by:</span>
+                <span className="font-mono font-medium text-white bg-[#1f1f25] px-2 py-0.5 rounded border border-[#27272c]">
+                  &quot;{rawSearchQuery}&quot;
+                </span>
+                <span className="text-zinc-500 font-mono text-[11px]">({tasks.filter((t) => {
+                  if (!searchQuery) return true;
+                  const titleMatch = (t.title || "").toLowerCase().includes(searchQuery);
+                  const descMatch = (t.description || "").toLowerCase().includes(searchQuery);
+                  const branchMatch = (t.branchName || "").toLowerCase().includes(searchQuery);
+                  const keyMatch = (t.taskKey || "").toLowerCase().includes(searchQuery);
+                  return titleMatch || descMatch || branchMatch || keyMatch;
+                }).length} matching)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => router.push("/projects")}
+                className="text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
+
           {/* Kanban Board */}
           {isLoadingTasks ? (
             <div className="flex flex-col items-center justify-center p-16 text-slate-400">
@@ -717,7 +748,16 @@ export default function ProjectsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               {KANBAN_COLUMNS.map((col) => {
-                const colTasks = tasks.filter((t) => t.status === col.id);
+                const colTasks = tasks
+                  .filter((t) => {
+                    if (!searchQuery) return true;
+                    const titleMatch = (t.title || "").toLowerCase().includes(searchQuery);
+                    const descMatch = (t.description || "").toLowerCase().includes(searchQuery);
+                    const branchMatch = (t.branchName || "").toLowerCase().includes(searchQuery);
+                    const keyMatch = (t.taskKey || "").toLowerCase().includes(searchQuery);
+                    return titleMatch || descMatch || branchMatch || keyMatch;
+                  })
+                  .filter((t) => t.status === col.id);
                 return (
                   <div key={col.id} className={`rounded-2xl border ${col.color} p-3.5 space-y-3 min-h-[500px] flex flex-col`}>
                     <div className="flex items-center justify-between pb-2 border-b border-slate-800">
@@ -1480,5 +1520,13 @@ export default function ProjectsPage() {
         </Dialog>
       )}
     </div>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-zinc-500 text-xs">Loading projects & workspaces...</div>}>
+      <ProjectsPageContent />
+    </Suspense>
   );
 }

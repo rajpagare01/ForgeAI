@@ -148,40 +148,12 @@ public class RepositoryController {
                 }
                 syncedCount++;
             }
-        } else {
-            // Synthesize 1 deterministic staging verification run anchored to repo state
-            String headSha = (repo.getLatestIndexedSha() != null && !repo.getLatestIndexedSha().isBlank())
-                    ? repo.getLatestIndexedSha()
-                    : "0000000000000000000000000000000000000000";
-            com.forgeai.sourcecontrol.domain.event.WorkflowRunReceivedEvent synthEvent =
-                    com.forgeai.sourcecontrol.domain.event.WorkflowRunReceivedEvent.builder()
-                            .repositoryId(repo.getId())
-                            .organizationId(repo.getOrganizationId())
-                            .workspaceId(repo.getWorkspaceId())
-                            .scope(repo.getScope() != null ? repo.getScope() : (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL"))
-                            .workflowRunId(System.currentTimeMillis())
-                            .workflowName("CI / Verification Pipeline")
-                            .runNumber(1)
-                            .status("completed")
-                            .conclusion("success")
-                            .headBranch(effectiveBranch)
-                            .headSha(headSha)
-                            .triggerEvent("push")
-                            .runStartedAt(java.time.Instant.now().minusSeconds(45))
-                            .completedAt(java.time.Instant.now())
-                            .htmlUrl("https://github.com/" + repo.getFullName() + "/actions")
-                            .timestamp(java.time.Instant.now())
-                            .build();
-            if (workflowRunForwarder != null) {
-                workflowRunForwarder.forward(synthEvent);
-            }
-            syncedCount = 1;
         }
 
         return ResponseEntity.ok(Map.of(
                 "repositoryId", id,
                 "syncedRunsCount", syncedCount,
-                "status", "SYNCED"
+                "status", "COMPLETED"
         ));
     }
 

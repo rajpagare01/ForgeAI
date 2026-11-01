@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Task, TaskStatus, TaskPriority, Project } from "@/types";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, formatUserError } from "@/lib/api-client";
 import {
   FolderGit2,
   Layers,
@@ -152,7 +152,7 @@ function ProjectDetailContent() {
       }
     } catch (err: any) {
       console.warn("Failed to load project details:", err);
-      setError(err?.message || "Failed to load project details from Gateway.");
+      setError(formatUserError(err, "Failed to load project details from Gateway."));
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +212,7 @@ function ProjectDetailContent() {
       setAssignee("");
     } catch (err: any) {
       console.error("Failed to create task on backend:", err);
-      setError(err?.message || "Failed to create task on server.");
+      setError(formatUserError(err, "Failed to create task on server."));
     } finally {
       setIsSubmitting(false);
     }
@@ -235,7 +235,7 @@ function ProjectDetailContent() {
 
       const reqPromise = apiClient.post<any>(`/api/v1/projects/${rawProjectId}/requirements`, payload);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Requirement creation timed out after 30 seconds. Please try again.")), 30000)
+        setTimeout(() => reject(new Error("Requirement creation timed out after 15 seconds. Please try again.")), 15000)
       );
 
       const created: any = await Promise.race([reqPromise, timeoutPromise]);
@@ -250,7 +250,7 @@ function ProjectDetailContent() {
       fetchProjectData();
     } catch (err: any) {
       console.error("Failed to create requirement on backend:", err);
-      setError(err?.message || "Failed to create requirement.");
+      setError(formatUserError(err, "Failed to create requirement."));
     } finally {
       setIsSubmittingReq(false);
     }
@@ -295,7 +295,7 @@ function ProjectDetailContent() {
 
       const linkPromise = apiClient.linkProjectRepository<any>(rawProjectId, selectedRepoToLink, repoName);
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Linking repository timed out after 30 seconds. Please check connection.")), 30000)
+        setTimeout(() => reject(new Error("Linking repository timed out after 15 seconds. Please check connection.")), 15000)
       );
 
       const link: any = await Promise.race([linkPromise, timeoutPromise]);
@@ -316,7 +316,7 @@ function ProjectDetailContent() {
         setSelectedRepoToLink("");
         showNotification(`✓ Repository "${repoName}" is already linked to this project!`);
       } else {
-        setError(msg || "Failed to link repository.");
+        setError(formatUserError(err, "Failed to link repository."));
       }
     } finally {
       setIsSubmittingRepo(false);
@@ -333,6 +333,7 @@ function ProjectDetailContent() {
       await apiClient.patch(`/api/v1/tasks/${taskId}/status`, { status: newStatus });
     } catch (err: any) {
       console.error("Failed to update task status on backend:", err);
+      setError(formatUserError(err, "Failed to update task status."));
       // Revert / re-fetch on failure
       fetchProjectData();
     }
