@@ -100,7 +100,7 @@ export const TopNav: React.FC = () => {
   const githubIdentity = githubStatus?.identity;
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-[#1f1f23] bg-[#09090b]/80 px-6 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-slate-950/70 px-6 backdrop-blur-xl">
       {/* Left: Search & Breadcrumbs */}
       <div className="flex items-center gap-4">
         <form
@@ -112,13 +112,13 @@ export const TopNav: React.FC = () => {
           }}
           className="relative w-64 md:w-80"
         >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tasks, PRs, requirements..."
-            className="h-9 w-full rounded-md border border-[#25252b] bg-[#131316] pl-9 pr-4 text-xs text-zinc-200 placeholder-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 transition-colors"
+            className="h-9 w-full rounded-lg border border-slate-800 bg-slate-900/90 pl-9 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
             aria-label="Search tasks, PRs, requirements"
           />
         </form>
@@ -127,7 +127,7 @@ export const TopNav: React.FC = () => {
       {/* Right: Gateway Health, OrgSwitcher, GitHub Status, User */}
       <div className="flex items-center gap-3.5">
         {/* Gateway Health Indicator */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md border border-[#25252b] bg-[#111113] text-xs">
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 text-xs">
           <span
             className={`inline-block h-1.5 w-1.5 rounded-full ${gatewayOnline === true
               ? "bg-emerald-500"
@@ -136,7 +136,7 @@ export const TopNav: React.FC = () => {
                 : "bg-amber-500"
               }`}
           />
-          <span className="text-zinc-400 text-[11px] font-mono">Gateway:</span>
+          <span className="text-slate-400 text-[11px] font-mono">Gateway:</span>
           <span
             className={`font-semibold text-[11px] ${gatewayOnline === true
               ? "text-emerald-400"

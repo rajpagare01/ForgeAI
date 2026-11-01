@@ -46,7 +46,7 @@ public class GitHubOAuthClientAdapter implements GitHubOAuthClient {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            } catch (java.net.http.HttpConnectTimeoutException | java.io.IOException e) {
+            } catch (java.io.IOException e) {
                 lastException = e;
                 log.warn("GitHub OAuth {} failed on attempt {}/{}: {}", operation, attempt, maxAttempts, e.getMessage());
                 if (attempt < maxAttempts) {

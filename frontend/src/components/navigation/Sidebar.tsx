@@ -53,11 +53,11 @@ export const Sidebar: React.FC = () => {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-[#1f1f23] bg-[#0c0c0e]">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
       {/* Brand Header */}
-      <div className="flex h-16 items-center gap-3 px-6 border-b border-[#1f1f23]">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-100 text-zinc-950 font-mono text-xs font-bold">
-          F
+      <div className="flex h-16 items-center gap-3 px-6 border-b border-slate-800/80">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-md shadow-indigo-500/30 border border-indigo-400/30">
+          <Cpu className="h-5 w-5 text-white" />
         </div>
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5">
@@ -66,7 +66,7 @@ export const Sidebar: React.FC = () => {
               Core
             </Badge>
           </div>
-          <span className="text-[10px] text-zinc-400 font-mono tracking-wider">
+          <span className="text-[10px] text-slate-400 font-mono tracking-wider">
             GOVERNANCE MATRIX
           </span>
         </div>
@@ -74,7 +74,7 @@ export const Sidebar: React.FC = () => {
 
       {/* Main Navigation Links */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
           Platform Workspace
         </div>
         {navigationItems.map((item) => {
@@ -88,17 +88,17 @@ export const Sidebar: React.FC = () => {
             <Link
               key={item.name}
               href={item.href}
-              className={`group flex items-center gap-3 rounded-lg px-3 py-2 text-xs transition-colors ${
+              className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
                 isActive
-                  ? "bg-[#1c1c21] text-zinc-100 font-medium"
-                  : "text-zinc-400 hover:bg-[#141418] hover:text-zinc-200"
+                  ? "bg-indigo-600/15 text-indigo-300 border border-indigo-500/30 shadow-sm"
+                  : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
               }`}
             >
               <Icon
                 className={`h-4 w-4 shrink-0 transition-colors ${
                   isActive
-                    ? "text-zinc-100"
-                    : "text-zinc-400 group-hover:text-zinc-200"
+                    ? "text-indigo-400"
+                    : "text-slate-400 group-hover:text-slate-200"
                 }`}
               />
               <span>{item.name}</span>
@@ -108,33 +108,33 @@ export const Sidebar: React.FC = () => {
 
         {/* Traceability Anchor Link */}
         <div className="pt-6">
-          <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+          <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             Core Governance Anchor
           </div>
           <Link
             href="/traceability"
-            className="group flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white bg-[#131316] border border-[#232329] hover:border-zinc-700 transition-colors"
+            className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-slate-300 hover:bg-slate-900 border border-slate-800/80 hover:border-indigo-500/40 transition-all bg-gradient-to-r from-indigo-950/20 to-purple-950/20"
           >
-            <Layers className="h-4 w-4 text-zinc-400 shrink-0 group-hover:text-zinc-200" />
+            <Layers className="h-4 w-4 text-indigo-400 shrink-0" />
             <div className="flex flex-col">
-              <span className="font-semibold text-zinc-200">Traceability Spine</span>
-              <span className="text-[10px] text-zinc-500">REQ → TASK → PR → AI</span>
+              <span className="font-semibold text-indigo-300">Traceability Spine</span>
+              <span className="text-[10px] text-slate-400">REQ → TASK → PR → AI</span>
             </div>
           </Link>
         </div>
       </div>
 
       {/* Bottom Health & Telemetry Info */}
-      <div className="p-4 border-t border-[#1f1f23]">
-        <div className="rounded-lg border border-[#232329] bg-[#131316] p-3 space-y-2">
+      <div className="p-4 border-t border-slate-800/80">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 space-y-2">
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-zinc-400 flex items-center gap-1.5">
-              <Terminal className="h-3 w-3 text-zinc-400" />
+            <span className="text-slate-400 flex items-center gap-1.5">
+              <Terminal className="h-3 w-3 text-indigo-400" />
               Correlation Trace
             </span>
             <span className="text-emerald-400 font-mono text-[10px]">W3C ACTIVE</span>
           </div>
-          <div className="text-[10px] text-zinc-500 leading-tight">
+          <div className="text-[10px] text-slate-400 leading-tight">
             All requests signed with JWT & tenant isolation headers.
           </div>
         </div>
