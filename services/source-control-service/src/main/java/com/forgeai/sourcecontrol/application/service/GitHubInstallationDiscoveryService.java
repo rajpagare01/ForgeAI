@@ -200,15 +200,15 @@ public class GitHubInstallationDiscoveryService {
                 try {
                     List<GitHubInstallationDetails> appInstalls = gitHubAppClient.listAppInstallations();
                     GitHubInstallationDetails matched = null;
-                    if (userGitHubLogin != null) {
-                        for (GitHubInstallationDetails d : appInstalls) {
-                            if (userGitHubLogin.equalsIgnoreCase(d.accountLogin())) {
-                                matched = d;
-                                break;
-                            }
+                    for (GitHubInstallationDetails d : appInstalls) {
+                        boolean loginMatch = (userGitHubLogin != null && userGitHubLogin.equalsIgnoreCase(d.accountLogin()));
+                        boolean idMatch = (userGitHubId != null && userGitHubId.equals(d.accountId()));
+                        if (loginMatch || idMatch) {
+                            matched = d;
+                            break;
                         }
                     }
-                    if (matched == null && !appInstalls.isEmpty()) {
+                    if (!isPersonal && matched == null && !appInstalls.isEmpty()) {
                         matched = appInstalls.get(0);
                     }
                     if (matched != null) {
@@ -349,20 +349,15 @@ public class GitHubInstallationDiscoveryService {
                     boolean loginMatches = profile.githubLogin() != null && profile.githubLogin().equalsIgnoreCase(details.accountLogin());
 
                     if (!idMatches && !loginMatches) {
-                        // Check if another user claimed this in DB
-                        Optional<GitHubInstallation> existingClaim = installationRepository.findByInstallationId(installationId);
-                        if (existingClaim.isPresent() && existingClaim.get().getClaimedByUserId() != null
-                                && !callerUserId.equals(existingClaim.get().getClaimedByUserId())) {
-                            log.warn("[Security] Installation ownership verification failed! Caller GitHub account '{}/{}' != Installation account '{}/{}'",
-                                    profile.githubLogin(), profile.githubUserId(), details.accountLogin(), details.accountId());
-                            if (metrics != null) {
-                                metrics.recordInstallationOwnershipRejection();
-                                metrics.recordInstallationFailure();
-                            }
-                            throw new GitHubAccessDeniedException(
-                                    "Installation " + installationId + " belongs to GitHub account '" + details.accountLogin() +
-                                            "', which does not match your authenticated GitHub account.");
+                        log.warn("[Security] Installation ownership verification failed! Caller GitHub account '{}/{}' != Installation account '{}/{}'",
+                                profile.githubLogin(), profile.githubUserId(), details.accountLogin(), details.accountId());
+                        if (metrics != null) {
+                            metrics.recordInstallationOwnershipRejection();
+                            metrics.recordInstallationFailure();
                         }
+                        throw new GitHubAccessDeniedException(
+                                "Installation " + installationId + " belongs to GitHub account '" + details.accountLogin() +
+                                        "', which does not match your authenticated GitHub account.");
                     }
                 }
             }
@@ -551,9 +546,21 @@ public class GitHubInstallationDiscoveryService {
     }
 
     private UUID resolveEffectiveWorkspaceId(UUID organizationId, UUID workspaceId) {
-        if (workspaceId != null) return workspaceId;
+        if (workspaceId != null) {
+            if (organizationId != null && !isPersonalWorkspace(workspaceId)) {
+                return organizationId;
+            }
+            return workspaceId;
+        }
         if (organizationId != null) return organizationId;
         throw new IllegalArgumentException("Either workspaceId or organizationId must be provided");
+    }
+
+    private boolean isPersonalWorkspace(UUID workspaceId) {
+        if (workspaceId == null || workspaceRepository == null) return false;
+        return workspaceRepository.findById(workspaceId)
+                .map(ws -> "PERSONAL".equalsIgnoreCase(ws.getType()))
+                .orElse(false);
     }
 
     private void validateWorkspaceAccess(UUID workspaceId, UUID organizationId, UUID callerUserId) {

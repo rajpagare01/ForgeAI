@@ -100,8 +100,6 @@ function ProjectsPageContent() {
   const [key, setKey] = useState("");
   const [description, setDescription] = useState("");
   const [selectedRepoId, setSelectedRepoId] = useState("");
-  const [manualRepoName, setManualRepoName] = useState("");
-  const [isManualRepo, setIsManualRepo] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // AI Sprint Planner Modal State
@@ -145,8 +143,9 @@ function ProjectsPageContent() {
 
   // Fetch available repositories
   const fetchRepositories = useCallback(async () => {
+    if (isTenantLoading || !activeWorkspace?.id) return;
     try {
-      const data = await apiClient.get<any[]>("/api/v1/repositories");
+      const data = await apiClient.get<any[]>(`/api/v1/repositories?workspaceId=${activeWorkspace.id}`);
       if (Array.isArray(data)) {
         setAvailableRepositories(data);
         if (data.length > 0 && !selectedRepoId) {
@@ -156,7 +155,7 @@ function ProjectsPageContent() {
     } catch (e) {
       console.warn("Failed to load repositories:", e);
     }
-  }, [selectedRepoId]);
+  }, [activeWorkspace?.id, isTenantLoading, selectedRepoId]);
 
   // Fetch all projects
   const fetchProjects = useCallback(async () => {
@@ -295,7 +294,7 @@ function ProjectsPageContent() {
 
       // Link repository if selected
       let linkedRepoName: string | null = null;
-      if (!isManualRepo && selectedRepoId) {
+      if (selectedRepoId) {
         const repo = availableRepositories.find((r) => r.id === selectedRepoId);
         if (repo) {
           linkedRepoName = repo.fullName || repo.name;
@@ -304,15 +303,6 @@ function ProjectsPageContent() {
           } catch (linkErr) {
             console.warn("Could not link repository on project creation:", linkErr);
           }
-        }
-      } else if (isManualRepo && manualRepoName.trim()) {
-        linkedRepoName = manualRepoName.trim();
-        try {
-          const matched = availableRepositories.find((r) => r.fullName?.toLowerCase() === linkedRepoName?.toLowerCase());
-          const repoId = matched ? matched.id : (availableRepositories[0]?.id || "00000000-0000-0000-0000-000000000001");
-          await apiClient.linkProjectRepository(res.id, repoId, linkedRepoName);
-        } catch (linkErr) {
-          console.warn("Could not link manual repository:", linkErr);
         }
       }
 
@@ -369,7 +359,13 @@ function ProjectsPageContent() {
 
     setIsSubmittingLink(true);
     try {
-      const repoId = availableRepositories[0]?.id || "00000000-0000-0000-0000-000000000001";
+      const linkedRepo = availableRepositories.find(
+        (r) => r.fullName === selectedProject?.repositoryName || r.name === selectedProject?.repositoryName
+      );
+      const repoId = linkedRepo?.id || availableRepositories[0]?.id;
+      if (!repoId) {
+        throw new Error("No repository connected to workspace. Please connect a repository in Source Control first.");
+      }
       await apiClient.post(`/api/v1/tasks/${linkTask.id}/links`, {
         linkType,
         externalRef: linkExternalRef.trim(),
@@ -383,7 +379,7 @@ function ProjectsPageContent() {
       setLinkExternalRef("");
     } catch (err: any) {
       console.error("Failed to link code artifact:", err);
-      setError("Failed to link code artifact.");
+      setError(formatUserError(err, "Failed to link code artifact."));
     } finally {
       setIsSubmittingLink(false);
     }
@@ -396,7 +392,10 @@ function ProjectsPageContent() {
     try {
       let activities: any[] = [];
       try {
-        const repoId = availableRepositories[0]?.id;
+        const linkedRepo = availableRepositories.find(
+          (r) => r.fullName === selectedProject?.repositoryName || r.name === selectedProject?.repositoryName
+        );
+        const repoId = linkedRepo?.id || availableRepositories[0]?.id;
         if (repoId) {
           const commits = await apiClient.get<any[]>(`/api/v1/repositories/${repoId}/commits?limit=15`);
           if (Array.isArray(commits)) {
@@ -1101,25 +1100,17 @@ function ProjectsPageContent() {
             />
           </div>
 
-          {/* Repository Selector Dropdown with Toggle */}
+          {/* Repository Selector Dropdown */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <label className="font-medium text-slate-300">Associated Repository</label>
-              <button
-                type="button"
-                onClick={() => setIsManualRepo(!isManualRepo)}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 underline"
-              >
-                {isManualRepo ? "Choose connected repository" : "Enter repository manually"}
-              </button>
-            </div>
-
-            {isManualRepo ? (
-              <Input
-                placeholder="e.g. rajpagare01/ForgeAI"
-                value={manualRepoName}
-                onChange={(e) => setManualRepoName(e.target.value)}
-              />
+            <label className="font-medium text-slate-300 text-xs">Associated Repository</label>
+            {availableRepositories.length === 0 ? (
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-400">
+                No connected repositories found.{" "}
+                <Link href="/repositories" className="text-sky-400 hover:underline">
+                  Connect a repository
+                </Link>{" "}
+                first.
+              </div>
             ) : (
               <select
                 aria-label="Associated Repository"
@@ -1127,15 +1118,12 @@ function ProjectsPageContent() {
                 onChange={(e) => setSelectedRepoId(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none"
               >
-                {availableRepositories.length === 0 ? (
-                  <option value="">No connected repositories found</option>
-                ) : (
-                  availableRepositories.map((repo) => (
-                    <option key={repo.id} value={repo.id}>
-                      {repo.fullName || repo.name}
-                    </option>
-                  ))
-                )}
+                <option value="">None (Link later)</option>
+                {availableRepositories.map((repo) => (
+                  <option key={repo.id} value={repo.id}>
+                    {repo.fullName || repo.name}
+                  </option>
+                ))}
               </select>
             )}
           </div>

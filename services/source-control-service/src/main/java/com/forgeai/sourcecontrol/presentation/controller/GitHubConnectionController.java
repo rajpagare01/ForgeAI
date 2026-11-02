@@ -5,6 +5,7 @@ import com.forgeai.sourcecontrol.application.service.GitHubConnectionService;
 import com.forgeai.sourcecontrol.application.service.GitHubInstallationDiscoveryService;
 import com.forgeai.sourcecontrol.application.service.GitHubInstallationStateService;
 import com.forgeai.sourcecontrol.domain.model.GitHubInstallation;
+import com.forgeai.sourcecontrol.infrastructure.github.GitHubAccessDeniedException;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubAppConfig;
 import com.forgeai.sourcecontrol.infrastructure.persistence.entity.GitHubInstallationStateJpaEntity;
 import com.forgeai.sourcecontrol.infrastructure.security.TenantContext;
@@ -80,11 +81,10 @@ public class GitHubConnectionController {
         if (userId == null) {
             throw new IllegalStateException("Authenticated user required to initiate GitHub App installation");
         }
-        if (effectiveWsId == null) {
+        if (orgId != null) {
             effectiveWsId = orgId;
-        }
-        if (effectiveWsId == null) {
-            throw new IllegalStateException("Workspace or Organization context is required to start GitHub App installation.");
+        } else if (effectiveWsId == null) {
+            throw new IllegalStateException("Workspace context is required to start GitHub App installation.");
         }
 
         // If installation is already completed on GitHub, auto-claim and return directly
@@ -184,19 +184,26 @@ public class GitHubConnectionController {
         }
 
         UUID callerUserId = TenantContext.getUserId();
-        UUID targetWsId = request.workspaceId() != null ? request.workspaceId() : TenantContext.getWorkspaceId();
+        UUID orgId = TenantContext.getOrganizationId();
+        UUID targetWsId = (orgId != null) ? orgId : (request.workspaceId() != null ? request.workspaceId() : TenantContext.getWorkspaceId());
 
         // Validate and atomically consume state (enforcing caller and workspace matching if present)
+        // For organization workspaces, pass null as expectedWorkspaceId to avoid rejecting frontend workspace sub-UUID
+        // when state was bound to orgId, then verify organization context matches.
         GitHubInstallationStateJpaEntity stateEntity = stateService.validateAndConsumeState(
-                request.state(), callerUserId, targetWsId);
+                request.state(), callerUserId, orgId != null ? null : targetWsId);
+
+        if (orgId != null && stateEntity.getOrganizationId() != null && !orgId.equals(stateEntity.getOrganizationId())) {
+            throw new GitHubAccessDeniedException("GitHub installation state token does not match the active organization context.");
+        }
 
         UUID effectiveUserId = callerUserId != null ? callerUserId : stateEntity.getUserId();
         UUID effectiveWsId = stateEntity.getWorkspaceId() != null ? stateEntity.getWorkspaceId() : targetWsId;
-        UUID orgId = stateEntity.getOrganizationId();
+        UUID stateOrgId = stateEntity.getOrganizationId() != null ? stateEntity.getOrganizationId() : orgId;
 
-        discoveryService.validateAndAssociate(effectiveUserId, effectiveWsId, orgId, request.installationId());
+        discoveryService.validateAndAssociate(effectiveUserId, effectiveWsId, stateOrgId, request.installationId());
 
-        GitHubConnectionResponse response = connectionService.getConnectionStatus(effectiveUserId, effectiveWsId, orgId);
+        GitHubConnectionResponse response = connectionService.getConnectionStatus(effectiveUserId, effectiveWsId, stateOrgId);
         return ResponseEntity.ok(response);
     }
 

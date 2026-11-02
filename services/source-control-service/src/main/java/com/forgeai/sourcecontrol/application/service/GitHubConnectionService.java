@@ -246,12 +246,22 @@ public class GitHubConnectionService {
                     }
                 });
             }
+            if (organizationId != null && !isPersonalWorkspace(workspaceId)) {
+                return organizationId;
+            }
             return workspaceId;
         }
         if (organizationId != null) {
             return organizationId;
         }
         return null;
+    }
+
+    private boolean isPersonalWorkspace(UUID workspaceId) {
+        if (workspaceId == null || workspaceRepository == null) return false;
+        return workspaceRepository.findById(workspaceId)
+                .map(ws -> "PERSONAL".equalsIgnoreCase(ws.getType()))
+                .orElse(false);
     }
 }
 

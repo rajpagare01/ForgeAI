@@ -160,6 +160,10 @@ export interface Repository {
   webhookInstalled: boolean;
   openPullRequestsCount: number;
   lastSyncAt: string;
+  syncStatus?: "SYNCED" | "SYNCING" | "STALE" | "FAILED" | "INACCESSIBLE" | "DISCONNECTED" | string;
+  latestObservedSha?: string | null;
+  latestIndexedSha?: string | null;
+  lastError?: string | null;
 }
 
 

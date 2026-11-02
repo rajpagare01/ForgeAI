@@ -86,6 +86,7 @@ export default function RepositoriesPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importingRepoName, setImportingRepoName] = useState<string | null>(null);
   const [disconnectingRepoId, setDisconnectingRepoId] = useState<string | null>(null);
+  const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -147,6 +148,10 @@ export default function RepositoriesPage() {
           webhookInstalled: r.webhookInstalled ?? true,
           openPullRequestsCount: r.openPullRequestsCount ?? 0,
           lastSyncAt: r.lastSyncedAt || r.updatedAt || "",
+          syncStatus: r.syncStatus || "SYNCED",
+          latestObservedSha: r.latestObservedSha || null,
+          latestIndexedSha: r.latestIndexedSha || null,
+          lastError: r.lastError || null,
         }));
         setRepositories(mapped);
       } else {
@@ -176,7 +181,7 @@ export default function RepositoriesPage() {
         setConnectionState("GITHUB_UNAVAILABLE");
         setError("Service unavailable: Unable to connect to GitHub service.");
       } else {
-        setError(err?.message || "Failed to load GitHub connection.");
+        setError(formatUserError(err, "Failed to load GitHub connection."));
       }
     } finally {
       setIsLoading(false);
@@ -241,7 +246,7 @@ export default function RepositoriesPage() {
           .catch((err: any) => {
             console.error("Installation callback verification failed:", err);
             setConnectionState("INSTALLATION_FAILED");
-            setError(err?.message || "Failed to verify GitHub App installation.");
+            setError(formatUserError(err, "Failed to verify GitHub App installation."));
           })
           .finally(() => {
             setIsConnecting(false);
@@ -277,7 +282,7 @@ export default function RepositoriesPage() {
         }
       } catch (err: any) {
         setConnectionState("AUTHENTICATION_FAILED");
-        setError(err?.message || "GitHub OAuth service is currently unavailable.");
+        setError(formatUserError(err, "GitHub OAuth service is currently unavailable."));
         setIsConnecting(false);
       }
       return;
@@ -456,6 +461,63 @@ export default function RepositoriesPage() {
     } finally {
       setDisconnectingRepoId(null);
     }
+  };
+
+  // Sync individual repository
+  const handleSyncRepository = async (repoId: string, fullName: string) => {
+    if (!activeWorkspace?.id) return;
+    setError(null);
+    setSuccess(null);
+    setSyncingRepoId(repoId);
+    try {
+      await apiClient.post(`/api/v1/repositories/${repoId}/reconcile?workspaceId=${activeWorkspace.id}`);
+      setSuccess(`Repository '${fullName}' synchronized successfully.`);
+      await fetchData();
+    } catch (err: any) {
+      console.error("Sync repository failed:", err);
+      setError(formatUserError(err, `Failed to synchronize repository '${fullName}'.`));
+    } finally {
+      setSyncingRepoId(null);
+    }
+  };
+
+  // Render status badge based on syncStatus
+  const renderSyncStatusBadge = (repo: Repository) => {
+    const status = (repo.syncStatus || "SYNCED").toUpperCase();
+    if (status === "SYNCED") {
+      return (
+        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1 py-0.5">
+          <CheckCircle2 className="h-3 w-3" />
+          Synchronized
+        </Badge>
+      );
+    }
+    if (status === "SYNCING") {
+      return (
+        <Badge variant="outline" className="text-[10px] text-sky-400 border-sky-500/30 bg-sky-500/10 gap-1 py-0.5">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Syncing
+        </Badge>
+      );
+    }
+    if (status === "STALE") {
+      return (
+        <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 bg-amber-500/10 gap-1 py-0.5">
+          <AlertCircle className="h-3 w-3" />
+          Stale
+        </Badge>
+      );
+    }
+    return (
+      <Badge
+        variant="outline"
+        className="text-[10px] text-rose-400 border-rose-500/30 bg-rose-500/10 gap-1 py-0.5 cursor-help"
+        title={repo.lastError || "Repository synchronization failed"}
+      >
+        <AlertTriangle className="h-3 w-3" />
+        {status}
+      </Badge>
+    );
   };
 
   // Header primary button text based on connection state
@@ -778,7 +840,14 @@ export default function RepositoriesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <span className="font-mono text-xs text-slate-300">{repo.defaultBranch}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs text-slate-300">{repo.defaultBranch}</span>
+                      {repo.latestObservedSha && (
+                        <Badge variant="outline" className="text-[9px] font-mono text-slate-400 border-slate-700/60 px-1 py-0">
+                          {repo.latestObservedSha.slice(0, 7)}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-400">
@@ -786,30 +855,40 @@ export default function RepositoriesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span>Synchronized</span>
-                    </div>
+                    {renderSyncStatusBadge(repo)}
                   </TableCell>
                   <TableCell className="text-xs text-slate-400 font-mono">
                     {repo.lastSyncAt ? formatDate(repo.lastSyncAt) : "Just now"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDisconnectRepository(repo.id, repo.fullName)}
-                      disabled={disconnectingRepoId === repo.id}
-                      className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 text-xs gap-1.5 h-8 px-2.5"
-                      title="Disconnect repository from workspace"
-                    >
-                      {disconnectingRepoId === repo.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
-                      )}
-                      Disconnect
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSyncRepository(repo.id, repo.fullName)}
+                        disabled={syncingRepoId === repo.id || disconnectingRepoId === repo.id}
+                        className="text-slate-400 hover:text-sky-400 hover:bg-sky-950/20 text-xs gap-1.5 h-8 px-2.5"
+                        title="Re-synchronize repository commits, pull requests, and webhooks"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${syncingRepoId === repo.id ? "animate-spin" : ""}`} />
+                        Sync
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDisconnectRepository(repo.id, repo.fullName)}
+                        disabled={disconnectingRepoId === repo.id || syncingRepoId === repo.id}
+                        className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 text-xs gap-1.5 h-8 px-2.5"
+                        title="Disconnect repository from workspace"
+                      >
+                        {disconnectingRepoId === repo.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                        Disconnect
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

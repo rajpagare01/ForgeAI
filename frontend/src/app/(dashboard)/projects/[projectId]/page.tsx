@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Task, TaskStatus, TaskPriority, Project } from "@/types";
+import { useTenant } from "@/lib/tenant-context";
 import { apiClient, formatUserError } from "@/lib/api-client";
 import {
   FolderGit2,
@@ -43,6 +44,7 @@ function ProjectDetailContent() {
   const params = useParams();
   const router = useRouter();
   const rawProjectId = params?.projectId as string | undefined;
+  const { activeWorkspace } = useTenant();
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -260,13 +262,27 @@ function ProjectDetailContent() {
     setShowRepoModal(true);
     setIsLoadingAvailableRepos(true);
     try {
-      const repos = await apiClient.get<any[]>("/api/v1/repositories");
+      const wsId = project?.workspaceId || activeWorkspace?.id;
+      const url = wsId ? `/api/v1/repositories?workspaceId=${wsId}` : "/api/v1/repositories";
+      const repos = await apiClient.get<any[]>(url);
       setAvailableRepos(Array.isArray(repos) ? repos : []);
     } catch (err) {
       console.warn("Could not fetch available repositories:", err);
       setAvailableRepos([]);
     } finally {
       setIsLoadingAvailableRepos(false);
+    }
+  };
+
+  const handleUnlinkRepo = async (repoId: string, repoName: string) => {
+    if (!rawProjectId) return;
+    try {
+      await apiClient.unlinkProjectRepository(rawProjectId, repoId);
+      showNotification(`✓ Repository "${repoName}" unlinked from project.`);
+      await fetchProjectData();
+    } catch (err: any) {
+      console.error("Failed to unlink repository:", err);
+      setError(formatUserError(err, "Failed to unlink repository."));
     }
   };
 
@@ -373,18 +389,39 @@ function ProjectDetailContent() {
       {/* Project Banner with Traceability Anchor link */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-xl">
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="default" className="font-mono text-xs">
               PROJECT: {project?.key || "PROJECT"}
             </Badge>
-            <span className="text-xs text-slate-400">
-              Repository:{" "}
-              {linkedRepo ? (
-                <span className="font-mono text-slate-200">{linkedRepo}</span>
-              ) : (
-                <span className="text-slate-500 italic">No repository linked</span>
-              )}
-            </span>
+            <span className="text-xs text-slate-400">Repositories:</span>
+            {repositories && repositories.length > 0 ? (
+              repositories.map((r: any) => {
+                const repoId = r.repositoryId || r.id;
+                const name = r.repositoryName || r.name || repoId;
+                return (
+                  <Badge
+                    key={repoId}
+                    variant="outline"
+                    className="text-xs font-mono text-slate-200 border-slate-700 bg-slate-800/80 gap-1.5 py-0.5 px-2"
+                  >
+                    <FolderGit2 className="h-3 w-3 text-sky-400" />
+                    {name}
+                    <button
+                      type="button"
+                      onClick={() => handleUnlinkRepo(repoId, name)}
+                      className="text-slate-400 hover:text-rose-400 ml-1 font-bold"
+                      title="Unlink repository from project"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                );
+              })
+            ) : linkedRepo ? (
+              <span className="font-mono text-slate-200 text-xs">{linkedRepo}</span>
+            ) : (
+              <span className="text-slate-500 italic text-xs">No repository linked</span>
+            )}
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
             {project?.name || "Project Details"}

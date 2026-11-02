@@ -795,7 +795,16 @@ public class RepositoryApplicationService {
                 log.info(
                         "[GitHub] Idempotently reconciled repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
                         updated.getId(), updated.getFullName(), updated.getGithubRepoId(), targetOrg, targetWs);
-                return updated;
+
+                try {
+                    syncCommits(organizationId, targetWs, updated.getId(), updated.getDefaultBranch());
+                    syncPullRequests(organizationId, targetWs, updated.getId());
+                    reconcileRepository(organizationId, targetWs, updated.getId(), updated.getDefaultBranch());
+                    return getRepository(organizationId, targetWs, updated.getId(), callerUserId);
+                } catch (Exception syncEx) {
+                    log.warn("[GitHub] Initial sync deferred for repo {}: {}", updated.getFullName(), syncEx.getMessage());
+                    return updated;
+                }
             }
             throw new DuplicateResourceException(
                     "Repository '" + fullName + "' (GitHub ID " + ghRepo.id()
@@ -812,6 +821,8 @@ public class RepositoryApplicationService {
                 .fullName(ghRepo.fullName())
                 .defaultBranch(ghRepo.defaultBranch())
                 .isPrivate(ghRepo.isPrivate())
+                .syncStatus(com.forgeai.sourcecontrol.domain.model.RepositorySyncStatus.SYNCED)
+                .lastSyncedAt(Instant.now())
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
@@ -831,7 +842,16 @@ public class RepositoryApplicationService {
         outboxService.publish(event, "connect-" + saved.getId(), "Repository", saved.getId().toString());
         log.info("[GitHub] Connected repository: id={}, fullName={}, githubRepoId={}, orgId={}, wsId={}",
                 saved.getId(), saved.getFullName(), saved.getGithubRepoId(), organizationId, targetWorkspaceId);
-        return saved;
+
+        try {
+            syncCommits(organizationId, targetWs, saved.getId(), saved.getDefaultBranch());
+            syncPullRequests(organizationId, targetWs, saved.getId());
+            reconcileRepository(organizationId, targetWs, saved.getId(), saved.getDefaultBranch());
+            return getRepository(organizationId, targetWs, saved.getId(), callerUserId);
+        } catch (Exception syncEx) {
+            log.warn("[GitHub] Initial sync deferred for repo {}: {}", saved.getFullName(), syncEx.getMessage());
+            return saved;
+        }
     }
 
     @Transactional
@@ -892,13 +912,30 @@ public class RepositoryApplicationService {
                 inst.setUpdatedAt(Instant.now());
                 opt = Optional.of(installationRepository.save(inst));
             }
-            if (opt.isEmpty() && gitHubAppConfig.isConfigured()) {
+            if (opt.isEmpty() && gitHubAppConfig.isConfigured() && callerUserId != null) {
                 try {
                     List<GitHubInstallationDetails> appInstalls = gitHubAppClient.listAppInstallations();
-                    if (!appInstalls.isEmpty() && discoveryService != null) {
-                        GitHubInstallationDetails first = appInstalls.get(0);
+                    GitHubInstallationDetails matched = null;
+                    if (identityServiceClient != null) {
+                        var profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
+                        if (profileOpt.isPresent() && profileOpt.get().connected()) {
+                            String login = profileOpt.get().githubLogin();
+                            Long ghId = profileOpt.get().githubUserId();
+                            for (GitHubInstallationDetails d : appInstalls) {
+                                if ((login != null && login.equalsIgnoreCase(d.accountLogin()))
+                                        || (ghId != null && ghId.equals(d.accountId()))) {
+                                    matched = d;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (matched == null && organizationId != null && !appInstalls.isEmpty()) {
+                        matched = appInstalls.get(0);
+                    }
+                    if (matched != null && discoveryService != null) {
                         GitHubInstallation claimed = discoveryService.validateAndAssociate(callerUserId, effectiveWsId,
-                                organizationId, first.id());
+                                organizationId, matched.id());
                         opt = Optional.of(claimed);
                     }
                 } catch (Exception e) {
@@ -1216,11 +1253,9 @@ public class RepositoryApplicationService {
     }
 
     private UUID resolveEffectiveWorkspaceId(UUID organizationId, UUID workspaceId) {
-        if (organizationId != null && workspaceId != null) {
-            if (organizationId.equals(workspaceId) && isPersonalWorkspace(workspaceId)) {
-                return workspaceId;
-            }
-            if (workspaceRepository != null) {
+        String scope = com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getWorkspaceScope();
+        if (organizationId != null) {
+            if (workspaceId != null && workspaceRepository != null) {
                 var wsOpt = workspaceRepository.findById(workspaceId);
                 if (wsOpt.isPresent()) {
                     var ws = wsOpt.get();
@@ -1229,24 +1264,17 @@ public class RepositoryApplicationService {
                                 "Organization context " + organizationId + " does not match workspace context "
                                         + workspaceId);
                     }
-                    if ("PERSONAL".equalsIgnoreCase(ws.getType())) {
-                        if (!organizationId.equals(workspaceId)) {
-                            throw new IllegalArgumentException(
-                                    "Organization context " + organizationId + " does not match workspace context "
-                                            + workspaceId);
-                        }
-                        return workspaceId;
+                    if ("PERSONAL".equalsIgnoreCase(ws.getType()) && !organizationId.equals(workspaceId)) {
+                        throw new IllegalArgumentException(
+                                "Organization context " + organizationId + " does not match workspace context "
+                                        + workspaceId);
                     }
-                } else if (!organizationId.equals(workspaceId)) {
-                    throw new IllegalArgumentException(
-                            "Organization context " + organizationId + " does not match workspace context "
-                                    + workspaceId);
                 }
-            } else if (!organizationId.equals(workspaceId)) {
-                throw new IllegalArgumentException(
-                        "Organization context " + organizationId + " does not match workspace context " + workspaceId);
             }
-            return workspaceId;
+            if (!isPersonalWorkspace(workspaceId) || "ORGANIZATION".equalsIgnoreCase(scope)) {
+                return organizationId;
+            }
+            return workspaceId != null ? workspaceId : organizationId;
         }
         if (workspaceId != null) {
             return workspaceId;

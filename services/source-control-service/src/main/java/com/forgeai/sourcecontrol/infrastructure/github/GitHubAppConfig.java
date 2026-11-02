@@ -31,9 +31,27 @@ public class GitHubAppConfig {
 
     private final long appId;
     private final String appSlug;
+    private volatile String resolvedAppSlug;
     private final String privateKeyPem;
     private final String webhookSecret;
     private final boolean configured;
+
+    public void setResolvedAppSlug(String resolvedAppSlug) {
+        if (resolvedAppSlug != null && !resolvedAppSlug.isBlank()) {
+            this.resolvedAppSlug = resolvedAppSlug.trim();
+        }
+    }
+
+    public String getAppSlug() {
+        if (resolvedAppSlug != null && !resolvedAppSlug.isBlank()) {
+            return resolvedAppSlug;
+        }
+        return (appSlug != null && !appSlug.isBlank()) ? appSlug : "forgeai";
+    }
+
+    public String getAppInstallUrl() {
+        return "https://github.com/apps/" + getAppSlug() + "/installations/new";
+    }
 
     public GitHubAppConfig(long appId, String privateKeyPem, String webhookSecret) {
         this(String.valueOf(appId), "forgeai", privateKeyPem, "", webhookSecret);
@@ -135,10 +153,6 @@ public class GitHubAppConfig {
                     + "Repository connection and installation claim endpoints are disabled until credentials are provided.",
                     appIdPresent, keyPresent, secretPresent);
         }
-    }
-
-    public String getAppInstallUrl() {
-        return "https://github.com/apps/" + (appSlug != null && !appSlug.isBlank() ? appSlug : "forgeai") + "/installations/new";
     }
 
     /**

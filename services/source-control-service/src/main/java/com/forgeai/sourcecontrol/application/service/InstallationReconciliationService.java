@@ -71,7 +71,7 @@ public class InstallationReconciliationService {
             throw new IllegalArgumentException("Valid installationId is required for reconciliation");
         }
 
-        UUID effectiveWsId = workspaceId != null ? workspaceId : organizationId;
+        UUID effectiveWsId = (organizationId != null && !isPersonalWorkspace(workspaceId)) ? organizationId : (workspaceId != null ? workspaceId : organizationId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
 
         GitHubInstallation installation = installationRepository.findByInstallationId(installationId)
@@ -81,7 +81,9 @@ public class InstallationReconciliationService {
         if (organizationId != null && !organizationId.equals(installation.getOrganizationId())) {
             throw new GitHubAccessDeniedException("Installation " + installationId + " does not belong to this organization.");
         }
-        if (effectiveWsId != null && !effectiveWsId.equals(installation.getWorkspaceId())) {
+        boolean matchesWs = effectiveWsId != null && (effectiveWsId.equals(installation.getWorkspaceId())
+                || (organizationId != null && organizationId.equals(installation.getOrganizationId())));
+        if (!matchesWs && effectiveWsId != null) {
             throw new GitHubAccessDeniedException("Installation " + installationId + " does not belong to this workspace.");
         }
 
@@ -180,5 +182,12 @@ public class InstallationReconciliationService {
                 }
             }
         });
+    }
+
+    private boolean isPersonalWorkspace(UUID workspaceId) {
+        if (workspaceId == null || workspaceRepository == null) return false;
+        return workspaceRepository.findById(workspaceId)
+                .map(ws -> "PERSONAL".equalsIgnoreCase(ws.getType()))
+                .orElse(false);
     }
 }

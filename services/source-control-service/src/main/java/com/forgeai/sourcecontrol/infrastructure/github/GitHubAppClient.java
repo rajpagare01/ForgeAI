@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import jakarta.annotation.PostConstruct;
 
 /**
  * Authoritative GitHub App API client.
@@ -390,6 +391,56 @@ public class GitHubAppClient {
             log.warn("Could not list GitHub App installations: {}", e.getMessage());
         }
         return List.of();
+    }
+
+    /**
+     * Fetches the authenticated GitHub App's slug directly from GET /app using the App JWT.
+     */
+    public Optional<String> fetchAuthenticatedAppSlug() {
+        if (!config.isConfigured()) return Optional.empty();
+        try {
+            String appJwt = buildAppJwt();
+            String url = GITHUB_API + "/app";
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + appJwt)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", USER_AGENT)
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .GET()
+                    .timeout(Duration.ofSeconds(15))
+                    .build();
+
+            HttpResponse<String> response = executeRaw(request, "fetch authenticated app slug");
+            if (response.statusCode() == 200) {
+                JsonNode root = objectMapper.readTree(response.body());
+                if (root.hasNonNull("slug")) {
+                    String slug = root.path("slug").asText();
+                    if (!slug.isBlank()) {
+                        config.setResolvedAppSlug(slug);
+                        return Optional.of(slug);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch authenticated GitHub App slug: {}", e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    @PostConstruct
+    public void initAppSlug() {
+        if (config.isConfigured() && "forgeai".equalsIgnoreCase(config.getAppSlug())) {
+            try {
+                fetchAuthenticatedAppSlug().ifPresent(slug -> {
+                    config.setResolvedAppSlug(slug);
+                    log.info("[GitHub] Auto-resolved GitHub App slug from API: {}", slug);
+                });
+            } catch (Exception e) {
+                log.debug("[GitHub] Lazy slug resolution deferred: {}", e.getMessage());
+            }
+        }
     }
 
     private GitHubInstallationDetails mapInstallationDetails(JsonNode body) {
