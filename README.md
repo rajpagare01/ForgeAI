@@ -1,369 +1,352 @@
-<div align="center">
+&lt;div align=&quot;center&quot;&gt;
 
 # ⚡ ForgeAI
 
-### Autonomous Enterprise Engineering Governance Matrix & AI Operating System
+### The Autonomous Engineering Governance & Traceability Operating System
 
-*Bridging sprint requirements, source control, automated test execution, and generative AI blast-radius intelligence into a unified, cryptographically verified traceability spine.*
-
-<br/>
-
-[![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Java 21](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/)
-[![Spring Boot 3.2](https://img.shields.io/badge/Spring_Boot-3.2.4-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![Next.js 16](https://img.shields.io/badge/Next.js-16.4-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis 7](https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
-[![Security: Fail-Closed](https://img.shields.io/badge/Security-Fail--Closed-10B981?style=for-the-badge&logo=shield&logoColor=white)](#-security-architecture--threat-mitigations)
+**Bridge product requirements, sprint execution, GitHub source control, CI test verification, and multi-LLM blast-radius intelligence into a single cryptographically attested spine.**
 
 <br/>
 
-[Overview](#-overview--the-problem) •
-[Key Innovations](#-core-capabilities--innovations) •
-[Architecture](#-distributed-system-architecture) •
-[Traceability Spine](#-the-traceability-spine) •
-[Microservice Catalog](#-microservice-catalog) •
-[Getting Started](#-getting-started) •
-[Security Model](#-security-architecture--threat-mitigations) •
-[Testing](#-testing--verification-suite)
+[](https://www.docker.com/)
+[](https://openjdk.org/)
+[](https://spring.io/projects/spring-boot)
+[](https://nextjs.org/)
+[](https://fastapi.tiangolo.com/)
+[](https://www.postgresql.org/)
+[](https://redis.io/)
+[](https://github.com/rajpagare01/ForgeAI)
 
----
+&lt;/div&gt;
 
-</div>
+<br/>
 
-## 📌 Overview & The Problem
+> **The Engineering Silo Problem:** Product specs live in Jira or Linear. Code lives in GitHub. Test results live in CI logs. Risk assessment happens in ad-hoc PR comments—or during a 2:00 AM post-mortem.
+>
+> **The ForgeAI Solution:** Every code change is deterministically linked from its originating **Requirement** and **Sprint Task** down to the exact **Git Commit**, **Pull Request**, **JUnit Test Suite**, **AI Blast-Radius Score**, and **Remediation PR**—enforced continuously in real time.
 
-In modern enterprise software engineering, software delivery is fragmented across isolated silos:
-* **Product Requirements** reside in project management tools (Jira, Linear).
-* **Code Modifications** occur in distributed version control (GitHub, GitLab).
-* **Test Verification** executes in disparate CI/CD runners (GitHub Actions, Jenkins).
-* **Architectural Risk** is assessed ad-hoc during post-mortems or code reviews.
-
-When an outage occurs or compliance auditors demand verification, engineering teams spend days manually correlating Git commits and pull requests back to approved requirement specifications.
-
-**ForgeAI solves this by introducing an autonomous, real-time Engineering Governance Matrix.** It binds every product requirement to sprint tasks, Git commits, GitHub Pull Requests, automated JUnit test suites, and LLM-driven architectural blast-radius risk evaluations in an immutable, deterministic **Traceability Spine**.
-
-```
-[ REQUIREMENT ] ➔ [ SPRINT TASK ] ➔ [ GIT COMMIT ] ➔ [ PULL REQUEST ] ➔ [ CI TEST RUN ] ➔ [ AI BLAST RADIUS ]
+```text
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐    ┌───────────────┐    ┌───────────────┐    ┌──────────────────┐
+│  REQUIREMENT  │ ──▶│  SPRINT TASK  │ ──▶│  GIT COMMIT   │ ──▶│ PULL REQUEST  │ ──▶│  CI TEST RUN  │ ──▶│ AI BLAST RADIUS  │
+│  REQ-AUTH-01  │    │   FORGE-104   │    │   sha:71ebe13 │    │     PR #42    │    │  JUnit / GHA  │    │ Risk Score & Fix │
+└───────────────┘    └───────────────┘    └───────────────┘    └───────────────┘    └───────────────┘    └──────────────────┘
 ```
 
----
+## ⚡ Why ForgeAI vs. Traditional AI Coding Tools
 
-## ✨ Core Capabilities & Innovations
+Standard AI IDEs (Cursor, Copilot, Claude Code) help individual developers write lines of code faster on their laptop—but they have zero visibility into whether that code satisfies business requirements, breaks downstream repositories, or passes organizational governance gates.
 
-### 🧬 1. The Traceability Spine
-* **Deterministic Bidirectional Lineage:** Every code modification is tied to an explicit requirement UUID and task key. Audit trails can be traversed in both directions (`REQ ➔ Code` or `Commit ➔ Business Requirement`).
-* **Automated Git Activity Sync:** Webhook listeners automatically detect task keys in commit messages (e.g. `[FORGE-101] Fix SQL race condition`) and pull request bodies, instantly updating sprint boards without manual developer intervention.
-* **Traceability Matrices & Snapshots:** Export point-in-time cryptographic snapshots of requirement-to-test coverage for regulatory compliance (SOC 2, ISO 27001).
+| Dimension | Traditional AI IDEs (Cursor / Copilot) | Project Trackers (Jira / Linear) | **ForgeAI Operating System** |
+| :--- | :--- | :--- | :--- |
+| **Primary Scope** | Local file & prompt editing | Manual ticket status updates | **End-to-end autonomous engineering governance** |
+| **Requirement-to-Code Lineage** | None | Manual copy-pasting of PR links | **Deterministic bidirectional Traceability Spine** |
+| **Blast-Radius & Cross-Repo Impact** | Limited to open local workspace | None | **pgvector semantic AST graph + cross-repo impact engine** |
+| **Automated Test Verification** | Local terminal execution | None | **Real-time GitHub Actions & JUnit XML requirement mapping** |
+| **Security & Remediation Loop** | Suggests snippets in chat | Passive issue tracking | **Autonomous secret/CVE scan + 1-click Remediation PRs** |
+| **Multi-Tenant Isolation** | Single-user local client | Shared SaaS workspace | **Fail-closed Gateway attestation + DB check constraints** |
 
-### 🤖 2. AI Code Intelligence & Blast Radius Engine
-* **Semantic AST Diffing:** Parses unified diffs across commits and pull requests into Abstract Syntax Tree (AST) representations to detect altered function signatures, database schema shifts, and breaking API changes.
-* **Multi-LLM Hybrid Orchestration:** Leverages **Google Gemini 1.5 Flash** for rapid contextual embeddings and **Groq (Llama 3.3 70B Versatile)** for deep architectural impact reasoning.
-* **Regression Risk Index (0–100):** Real-time heuristic scoring combining code churn, file criticality, test coverage gaps, and author historical blast-radius metrics.
-* **Automated Remediation Advisories:** Generates targeted test plan recommendations and security patch guidance for high-risk pull requests before they merge.
+## ✨ Core Platform Pillars
 
-### ⚡ 3. Enterprise GitHub App & Reactive Webhook Mesh
-* **Frictionless One-Click Onboarding:** Unified onboarding combining GitHub OAuth identity linking with GitHub App installation into a single automated step.
-* **Live Repository Discovery:** Discovers all public and private repositories accessible to the authenticated account without requiring manual entry of installation or repository numeric IDs.
-* **Automated Sync & Reconcile:** Connects repositories with automatic ingestion of recent commits, pull requests, and CI workflow runs, ensuring zero onboarding delay.
-* **Cryptographic Single-Use State Security:** Installation flows use cryptographically random 256-bit tokens with a 15-minute TTL, consumed atomically to eliminate state injection and replay attacks.
+### 1. 🧬 Deterministic 10-Stage Traceability Spine
+- **Bidirectional Audit Lineage:** Traverse forward from any business requirement (`REQ-001`) to every implementing task, branch, commit, pull request, test case, and AI risk report—or backward from a production commit SHA to the exact product specification that authorized it.
+- **Zero-Touch Git Activity Sync:** Webhook and polling engines parse task keys (`[FORGE-104]`, `Fixes PROJ-12`) from commit messages, branch names, and PR descriptions, automatically progressing Kanban cards (`TODO ➔ IN_PROGRESS ➔ IN_REVIEW ➔ DONE`).
+- **Immutable Compliance Snapshots:** Capture point-in-time JSON snapshots (`TraceabilitySnapshot`) with gap-detection diagnostics (`ORPHAN_REQUIREMENT`, `TASK_WITHOUT_CODE`, `REQUIREMENT_WITHOUT_TEST`) ready for SOC 2 and ISO 27001 audits.
 
-### 🛡️ 4. Strict Workspace & Multi-Tenant Isolation
-* **Personal Workspaces (`organization_id = NULL`):** Individual developers can connect private GitHub accounts and personal repositories without requiring an enterprise organization structure.
-* **Enterprise Organizations (`organization_id = UUID`):** Teams enjoy role-based multi-tenancy with strict RBAC boundary checks.
-* **Zero Cross-Workspace Leakage:** Strict database check constraints (`chk_repo_scope`, `chk_gh_install_scope`) and fail-closed tenant filters ensure User A cannot enumerate, query, or observe User B's repositories, tasks, or credentials.
+### 2. 🧠 Hybrid AI Code Intelligence & Blast-Radius Engine
+- **Semantic AST Chunking & Vector Graph:** Indexes repository source code into PostgreSQL `pgvector` embeddings alongside an explicit symbol dependency graph (`code_chunks` + `graph_edges`).
+- **Dual-Provider LLM Orchestration:** Combines **Google Gemini (`gemini-1.5-flash` / `text-embedding-004`)** for high-throughput semantic retrieval with **Groq (`llama-3.3-70b-versatile`)** for low-latency architectural reasoning and failover resilience.
+- **Multi-Dimensional Risk Scoring (0–100):** Evaluates pull requests and commits across security vulnerabilities, secret exposure, dependency CVEs, test coverage gaps, and downstream blast radius.
+- **1-Click Autonomous Remediation PRs:** Generates concrete code patches, missing JUnit test suites, and architecture documentation (`README.md`, `ARCHITECTURE.md`, `API_REFERENCE.md`), committing branches and opening GitHub Pull Requests directly via the ForgeAI GitHub App.
 
-### 🎨 5. Linear / Carbon Modern Aesthetic
-* **Vercel / Linear Carbon UI:** Engineered with Next.js 16 (App Router + Turbopack), Tailwind CSS, Lucide icons, and Framer Motion.
-* **Visual Information Density:** Monospace short commit SHA pills (`71ebe13`), dynamic sync status badges (Synchronized, Syncing, Stale, Inaccessible), interactive Kanban boards, and glassmorphic telemetry cards.
+### 3. 🔗 Frictionless GitHub App & Webhook Mesh
+- **Unified Single-Click Onboarding:** Orchestrates GitHub OAuth 2.0 identity linking and GitHub App installation (`GET /api/v1/github/connection`) without ever asking users to copy-paste numeric installation IDs or personal access tokens.
+- **Auto-Resolved App Metadata:** Dynamically queries `GET https://api.github.com/app` using RS256-signed App JWTs to resolve the live GitHub App slug and installation state.
+- **Cryptographic Single-Use State Tokens:** Protects installation callbacks with 256-bit `SecureRandom` state tokens (`github_installation_states`, 15-minute TTL) consumed atomically to prevent CSRF, replay, and cross-user installation hijacking.
+- **Instant Sync & Disconnect Controls:** Connecting a repository immediately synchronizes commits, pull requests, workflow runs, and AI code indexing, with per-repository **Sync** and **Disconnect** controls in the UI.
 
----
+### 4. 🛡️ Defense-in-Depth Multi-Tenant Isolation
+- **Dual Workspace Model:** Supports both **Personal Workspaces** (`scope = 'PERSONAL'`, `organization_id IS NULL`) for individual builders and **Organization Workspaces** (`scope = 'ORGANIZATION'`, `workspace_id = organization_id`) for enterprise teams.
+- **Fail-Closed Internal Gateway Attestation:** The reactive Spring Cloud Gateway strips all inbound `X-User-Id`, `X-Org-Id`, and `X-Workspace-Id` headers from external clients, validates the RS256 JWT against Identity Service JWKS (`/.well-known/jwks.json`), verifies active Redis token revocation state, and injects `X-ForgeAI-Internal: attested`.
+- **Database-Enforced Invariants:** PostgreSQL `CHECK` constraints (`chk_repo_scope`, `chk_gh_install_scope`, `chk_pr_tenant`, `chk_commits_tenant`, `chk_sc_outbox_scope`) guarantee tenant boundaries even at the raw SQL layer.
 
-## 📐 Distributed System Architecture
+### 5. 🎨 Linear / Vercel Carbon Design System
+- **High-Contrast Carbon Palette:** Built with Next.js 16, React 19, Tailwind CSS, and Lucide icons using `#09090b` canvas surfaces, `#111113` micro-panels, and `#222226` hairline borders.
+- **Sanitized User-Facing Diagnostics:** Centralized error sanitization (`sanitizeUserFacingError` in `api-client.ts` + global exception handlers across all Java and Python services) guarantees users never see raw stack traces, SQL constraints, or internal UUIDs.
 
-ForgeAI operates as a reactive, event-driven microservices architecture communicating via REST APIs, asynchronous outbox messaging, and Redis rate-limiting:
+## 🏗️ Distributed System Architecture
+
+ForgeAI runs as a 9-container event-driven system with isolated PostgreSQL databases per bounded context, transactional outbox relays, and a reactive WebFlux API Gateway:
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#18181b', 'primaryTextColor': '#f4f4f5', 'primaryBorderColor': '#3f3f46', 'lineColor': '#71717a', 'secondaryColor': '#09090b', 'tertiaryColor': '#111113'}}}%%
 flowchart TD
-    subgraph ClientTier ["User Interface Tier"]
-        UI["Next.js 16 Carbon Dashboard\n(Port :3000 • Turbopack)"]
+    subgraph ClientTier ["Presentation Tier"]
+        UI["Next.js 16 Carbon Web App\n(Port :3000 • React 19)"]
     end
 
-    subgraph EdgeTier ["Gateway & Security Edge"]
-        GW["Spring Cloud API Gateway\n(Port :8080 • Reactive WebFlux)"]
-        Redis[("Redis 7 Cache & Rate Limiter\n(Port :6379)")]
+    subgraph EdgeTier ["Zero-Trust Security Edge"]
+        GW["Spring Cloud API Gateway\n(Port :8080 • WebFlux • JWKS Verification)"]
+        Redis[("Redis 7 Alpine\n(Port :6379 • Rate Limiter & JWT Blacklist)")]
         GW <--> Redis
     end
 
-    subgraph ServiceMesh ["Core Microservices Mesh (Internal Attestation)"]
-        Identity["Identity Service\n(Port :8081)\nOAuth 2.0 • RS256 JWT • Workspaces"]
-        SourceControl["Source Control Service\n(Port :8082)\nGitHub App • Webhooks • Repositories"]
-        Testing["Testing Service\n(Port :8083)\nJUnit Reports • Test Runs • CI Ingestion"]
-        Project["Project Service\n(Port :8085)\nRequirements • Sprint Tasks • Traceability"]
-        AI["AI Reliability Engine\n(Port :8084)\nFastAPI • AST Diff • Gemini & Groq"]
+    subgraph ServiceMesh ["Core Microservices Mesh (X-ForgeAI-Internal: attested)"]
+        Identity["Identity Service (:8081)\nJava 21 • OAuth 2.0 • RS256 JWT • Workspaces"]
+        SourceControl["Source Control Service (:8082)\nJava 21 • GitHub App • Webhooks • Outbox"]
+        Testing["Testing Service (:8083)\nJava 21 • JUnit XML Parser • CI Run Tracker"]
+        AI["AI Intelligence Engine (:8084)\nPython 3.11 • FastAPI • AST & pgvector"]
+        Project["Project Service (:8085)\nJava 21 • Requirements • Kanban • Spine"]
     end
 
-    subgraph External ["External Ecosystem"]
-        GitHub["GitHub API & Webhooks\n(Apps • OAuth • Octokit)"]
-        LLM["Google Gemini & Groq APIs"]
+    subgraph External ["External Providers"]
+        GitHub["GitHub REST API & Webhooks\n(RS256 App JWT • HMAC-SHA256)"]
+        LLM["Google Gemini 1.5 & Groq Llama 3.3"]
     end
 
-    subgraph Persistence ["Data Tier (Isolated Databases)"]
-        PG[("PostgreSQL 16 + pgvector\n(Port :5432)\nFlyway Migration Schema")]
+    subgraph Persistence ["PostgreSQL 16 + pgvector (:5432 • Multi-Database Isolation)"]
+        DB1[("forgeai_identity")]
+        DB2[("source_control_db")]
+        DB3[("testing_db")]
+        DB4[("ai_db (pgvector)")]
+        DB5[("forgeai_project")]
     end
 
-    UI -->|REST / JWT / W3C Trace| GW
+    UI -->|"Bearer JWT + X-Workspace-Id + W3C traceparent"| GW
 
-    GW -->|/api/v1/auth, /api/v1/workspaces| Identity
-    GW -->|/api/v1/repositories, /api/v1/github| SourceControl
-    GW -->|/api/v1/test-runs| Testing
-    GW -->|/api/v1/projects, /api/v1/tasks| Project
-    GW -->|/api/v1/ai-insights| AI
+    GW -->|"/api/v1/auth/**, /api/v1/workspaces/**"| Identity
+    GW -->|"/api/v1/repositories/**, /api/v1/github/**, /api/v1/webhooks/**"| SourceControl
+    GW -->|"/api/v1/test-runs/**, /api/v1/test-cases/**"| Testing
+    GW -->|"/api/v1/ai/**"| AI
+    GW -->|"/api/v1/projects/**, /api/v1/requirements/**, /api/v1/tasks/**"| Project
 
-    SourceControl <-->|OAuth / App Tokens / Webhooks| GitHub
-    AI <-->|Prompt / Embeddings| LLM
+    SourceControl <-->|"App Installation Tokens & Webhooks"| GitHub
+    Identity <-->|"OAuth 2.0 Code Exchange"| GitHub
+    SourceControl -->|"Incremental Push & Workflow Sync"| AI
+    SourceControl -->|"Workflow Run Forwarding"| Testing
+    Project -->|"Cross-Service Spine Aggregation"| SourceControl
+    Project -->|"Test Coverage Lookup"| Testing
+    Project -->|"PR Risk & Action Lookup"| AI
+    AI <-->|"Embeddings & Reasoning"| LLM
 
-    Identity --- PG
-    SourceControl --- PG
-    Testing --- PG
-    Project --- PG
-    AI --- PG
+    Identity --- DB1
+    SourceControl --- DB2
+    Testing --- DB3
+    AI --- DB4
+    Project --- DB5
 ```
 
----
-
-## 🧬 The Traceability Spine
-
-The following sequence illustrates how ForgeAI deterministically tracks an engineering artifact through its entire lifecycle:
+## 🔄 End-to-End Traceability Sequence
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': { 'actorBkg': '#18181b', 'actorBorder': '#52525b', 'actorTextColor': '#f4f4f5', 'signalColor': '#a1a1aa', 'signalTextColor': '#e4e4e7'}}}%%
 sequenceDiagram
     autonumber
-    actor Dev as Developer / Lead
-    participant FE as Frontend Dashboard
-    participant Proj as Project Service
-    participant SC as Source Control Service
-    participant GH as GitHub Platform
-    participant Test as Testing Service
-    participant AI as AI Engine
+    actor Dev as Engineer
+    participant UI as Next.js Carbon UI (:3000)
+    participant GW as API Gateway (:8080)
+    participant Proj as Project Service (:8085)
+    participant SC as Source Control (:8082)
+    participant GH as GitHub API / Webhooks
+    participant AI as AI Engine (:8084)
+    participant Test as Testing Service (:8083)
 
-    Dev->>FE: Define Requirement (e.g. REQ-AUTH-001)
-    FE->>Proj: POST /api/v1/projects/{id}/requirements
-    Dev->>FE: Create Sprint Task (TASK-104) linked to REQ-AUTH-001
-    FE->>Proj: POST /api/v1/tasks (validates workspace match)
+    Dev->>UI: Create Requirement (REQ-AUTH-001) & Task (FORGE-104)
+    UI->>GW: POST /api/v1/projects/{id}/requirements & /tasks
+    GW->>Proj: Validate Workspace Ownership & Persist Entities
 
-    Dev->>GH: Push Commit "feat: [TASK-104] implement token exchange"
-    GH->>SC: Webhook: push / commit
-    SC->>SC: Verify HMAC-SHA256 signature
-    SC->>Proj: Forward commit SHA to Project Service
-    Proj->>Proj: Parse [TASK-104] & link Commit to Task & Requirement
+    Dev->>GH: git push ("feat(auth): [FORGE-104] harden token rotation")
+    GH->>SC: POST /api/v1/webhooks/github (X-Hub-Signature-256)
+    SC->>SC: Verify HMAC-SHA256 & Upsert Commit Record
+    SC->>AI: POST /api/v1/ai/sync/push (Changed Files + Diff)
+    AI-->>SC: Update pgvector Chunks & Commit Risk Report
 
-    Dev->>GH: Open Pull Request #42
-    GH->>SC: Webhook: pull_request (opened)
-    SC->>AI: Trigger AST Diff & Blast Radius Assessment
-    AI-->>SC: Return Risk Score (24/100) & Regression Analysis
-
-    GH->>Test: CI executes tests & posts JUnit XML
-    Test->>Proj: Map Test Results to REQ-AUTH-001
+    Dev->>GH: Open Pull Request #42 referencing FORGE-104
+    GH->>SC: Webhook: pull_request / workflow_run
+    SC->>Test: Forward CI Workflow Run & Ingest JUnit Results
     
-    Dev->>FE: View Traceability Matrix
-    FE->>Proj: GET /api/v1/projects/{id}/traceability
-    Proj-->>FE: Return Complete Lineage: REQ ➔ TASK ➔ COMMIT ➔ PR ➔ TEST ➔ AI
+    Dev->>UI: Open Project Traceability Matrix
+    UI->>GW: GET /api/v1/projects/{id}/traceability
+    GW->>Proj: Aggregate Spine (Proj + SC + Test + AI)
+    Proj-->>UI: Render Full Lineage + Health Score + Gap Diagnostics
 ```
-
----
 
 ## 📦 Microservice Catalog
 
-| Service | Port | Runtime / Framework | Database / Cache | Responsibilities |
-| :--- | :--- | :--- | :--- | :--- |
-| **API Gateway** | `8080` | Java 21, Spring Cloud Gateway | Redis 7 | JWT authentication, W3C trace propagation, Redis sliding-window rate limiting, fail-closed internal header attestation. |
-| **Frontend UI** | `3000` | Node 20, Next.js 16 (Turbopack) | Browser Cache | Modern Carbon/Linear dashboard, one-click GitHub connect, Kanban task board, traceability matrix, AI analytics. |
-| **Identity Service** | `8081` | Java 21, Spring Boot 3.2 | PostgreSQL (`forgeai_identity`) | Asymmetric RS256 JWT issuance, GitHub OAuth 2.0 handshake, personal and enterprise workspace lifecycle. |
-| **Source Control** | `8082` | Java 21, Spring Boot 3.2 | PostgreSQL (`source_control_db`) | GitHub App installation orchestration, HMAC webhook verification, repo discovery, commit and PR synchronization. |
-| **Testing Service** | `8083` | Java 21, Spring Boot 3.2 | PostgreSQL (`testing_db`) | Ingestion of JUnit XML reports, automated test run cataloging, test case failure tracking, requirement linking. |
-| **Project Service** | `8085` | Java 21, Spring Boot 3.2 | PostgreSQL (`project_db`) | Governed projects, sprint tasks, engineering requirements backlog, traceability spine aggregation. |
-| **AI Reliability** | `8084` | Python 3.11, FastAPI | PostgreSQL + pgvector (`ai_db`) | AST code diff parsing, semantic code embeddings, blast radius scoring, Gemini 1.5 & Groq Llama 3.3 orchestration. |
-| **PostgreSQL** | `5432` | PostgreSQL 16 + pgvector | Persistent Volume | Multi-database relational storage, Flyway managed schema migrations, vector similarity indexes. |
-| **Redis** | `6379` | Redis 7 Alpine | In-Memory | Gateway distributed rate limiting, token revocation lists, ephemeral cache. |
-
----
+| Service | Container Name | Port | Stack | Dedicated Database | Key Responsibilities |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Web Dashboard** | `forgeai-frontend-dev` | `3000` | Next.js 16, React 19, Tailwind | Browser Storage | Carbon UI, 1-click GitHub onboarding, Kanban board, AI Test Studio, Traceability Matrix. |
+| **API Gateway** | `forgeai-api-gateway-dev` | `8080` | Java 21, Spring Cloud Gateway | Redis 7 (`:6379`) | RS256 JWKS verification, Redis token revocation check, rate limiting, `X-ForgeAI-Internal` attestation. |
+| **Identity Service** | `forgeai-identity-dev` | `8081` | Java 21, Spring Boot 3.2 | `forgeai_identity` | User auth, GitHub OAuth 2.0 (`HTTP/1.1` retry-hardened), RS256 JWT rotation, Personal & Org Workspaces. |
+| **Source Control** | `forgeai-source-control-dev` | `8082` | Java 21, Spring Boot 3.2 | `source_control_db` | GitHub App JWT/token manager, HMAC webhook ingestion, repo discovery, commit/PR/branch sync, PR creation. |
+| **Testing Service** | `forgeai-testing-dev` | `8083` | Java 21, Spring Boot 3.2 | `testing_db` | JUnit XML parser, GitHub Actions workflow run ingestion, requirement-to-test coverage mapping. |
+| **AI Service** | `forgeai-ai-dev` | `8084` | Python 3.11, FastAPI, `asyncpg` | `ai_db` (`pgvector`) | AST chunking, vector search, PR blast-radius scoring, secret scanning, AI Sprint Planner & Test Studio. |
+| **Project Service** | `forgeai-project-dev` | `8085` | Java 21, Spring Boot 3.2 | `forgeai_project` | Governed projects, requirements, Kanban tasks, code links, and cross-service Traceability Spine aggregation. |
+| **PostgreSQL 16** | `forgeai-postgres-dev` | `5432` | `pgvector/pgvector:pg16` | 5 Isolated DBs | Relational persistence, Flyway schema migrations, and 768-dim vector similarity indexing. |
+| **Redis 7** | `forgeai-redis-dev` | `6379` | `redis:7-alpine` (AOF) | In-Memory + AOF | Sliding-window gateway rate limiting, role caching, and revoked JWT blacklisting. |
 
 ## 🔒 Security Architecture & Threat Mitigations
 
-ForgeAI was engineered with defense-in-depth security principles:
-
-| Threat / Vulnerability | Vector | ForgeAI Mitigation |
+| Threat Scenario | Attack Vector | ForgeAI Defense-in-Depth Control |
 | :--- | :--- | :--- |
-| **State Injection / Replay** | Attacker intercepts or replays GitHub installation redirect | **Cryptographic Single-Use State Tokens:** 256-bit secure random state token stored in database with a 15-minute TTL. Consumed atomically on callback; second submission is rejected. |
-| **Cross-Tenant Identifier Snooping** | User B queries User A's repository UUID | **Workspace & Owner Isolation:** Repository lookups strictly enforce `callerUserId == claimedByUserId` and `workspaceId == repo.workspaceId`. Foreign access attempts return `404 Not Found` to prevent resource enumeration. |
-| **Internal Header Spoofing** | Untrusted client sends spoofed `X-Workspace-Id` or `X-User-Id` | **Fail-Closed Internal Attestation:** Microservices reject all incoming requests containing tenant context headers unless accompanied by `X-ForgeAI-Internal: attested` signed by the API Gateway. Default: `@Value("${forgeai.security.enforce-internal-marker:true}")`. |
-| **Forged Webhooks** | Attacker submits malicious push payloads | **Cryptographic HMAC-SHA256:** Source Control Service validates the `X-Hub-Signature-256` header against the configured webhook secret before parsing any payload. |
-| **Database Boundary Violation** | Application logic omits workspace filters | **SQL Check Constraints:** `source_control_db` enforces `chk_repo_scope` (`scope = 'PERSONAL' AND organization_id IS NULL OR scope = 'ORGANIZATION' AND workspace_id = organization_id`). |
+| **Header Spoofing / Privilege Escalation** | Client sends forged `X-User-Id` or `X-Org-Id` headers | `GatewayTenantFilter` strips all inbound identity/tenant headers before JWT decoding, then attaches `X-ForgeAI-Internal: attested`. Downstream filters enforce `@Value("${forgeai.security.enforce-internal-marker:true}")`. |
+| **GitHub Installation Hijacking** | User B replays or guesses User A's `installation_id` | `GitHubInstallationStateService` issues single-use 256-bit state tokens (15-min TTL), and `GitHubInstallationDiscoveryService` verifies that the GitHub App installation's `accountId`/`accountLogin` matches the caller's linked OAuth identity. |
+| **Cross-Workspace Snooping** | Active Org header (`X-Org-Id`) leaks into Personal Workspace queries | `TenantProvider` clears `X-Org-Id` in Personal Workspaces, and backend services validate `workspace.ownerUserId == callerUserId` before returning personal projects or repositories. |
+| **Webhook Forgery & Replay** | Attacker posts fabricated push/PR payloads to `/api/v1/webhooks/github` | `GitHubSignatureVerifier` validates `X-Hub-Signature-256` using constant-time HMAC-SHA256 comparison, and `webhook_deliveries` enforces idempotency on `X-GitHub-Delivery`. |
+| **Database Scope Corruption** | Buggy code attempts to mix Personal and Org tenant columns | PostgreSQL check constraints (`chk_repo_scope`, `chk_gh_install_scope`, `chk_project_workspace_scope`) reject any row where `PERSONAL` scope has a non-null `organization_id` or `ORGANIZATION` scope mismatches `workspace_id = organization_id`. |
+| **Exception & Stack-Trace Leakage** | Runtime SQL/Java/Python errors bubble up to the browser | `GlobalExceptionHandler` across all 4 Java services, FastAPI exception handlers in `ai-service`, and `sanitizeUserFacingError()` in `api-client.ts` log technical details server-side while returning clean, human-friendly messages to the UI. |
 
----
-
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-* **Docker Desktop** (with Docker Compose v2)
-* **Node.js 20+** and **npm**
-* **Java 21 JDK** & **Maven 3.9+** (for host development and compilation)
-* **Python 3.11+** (for AI Service)
+- **Docker Desktop** (Docker Engine 24+ & Docker Compose v2)
+- **Git** (and optionally **Java 21**, **Maven 3.9+**, **Node.js 20+**, and **Python 3.11+** for local host builds)
 
-### 1. Clone Repository & Setup Secrets
+### 1. Clone & Configure Environment
 
 ```bash
 git clone https://github.com/rajpagare01/ForgeAI.git
 cd ForgeAI
-```
-
-Create your `.env` file based on `.env.example`:
-
-```bash
 cp .env.example .env
 ```
 
-Configure the environment variables in `.env`:
+Update `.env` with your GitHub App, GitHub OAuth, and LLM API credentials:
 
 ```env
-# -----------------------------------------------------------------------------
-# GitHub App & OAuth Integration
-# -----------------------------------------------------------------------------
-GITHUB_APP_ID=123456
-GITHUB_APP_SLUG=your-github-app-slug
+# --- PostgreSQL & Redis ---
+POSTGRES_USER=forgeai
+POSTGRES_PASSWORD=password
+
+# --- GitHub OAuth (Identity Service :8081) ---
 GITHUB_CLIENT_ID=your-github-oauth-client-id
 GITHUB_CLIENT_SECRET=your-github-oauth-client-secret
-GITHUB_WEBHOOK_SECRET=your-secure-webhook-secret
-GITHUB_APP_PRIVATE_KEY_PATH=/app/secrets/github-app-private-key.pem
 
-# -----------------------------------------------------------------------------
-# AI Services & LLM API Keys
-# -----------------------------------------------------------------------------
-GEMINI_API_KEY=your_google_gemini_api_key
+# --- GitHub App & Webhooks (Source Control Service :8082) ---
+GITHUB_APP_ID=123456
+GITHUB_APP_SLUG=your-github-app-slug
+GITHUB_WEBHOOK_SECRET=your-github-webhook-secret
+GITHUB_PRIVATE_KEY_PATH=/app/secrets/github-app-private-key.pem
+
+# --- AI Intelligence Engine (AI Service :8084) ---
+GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-1.5-flash
-GROQ_API_KEY=your_groq_api_key
+GEMINI_EMBEDDING_MODEL=models/text-embedding-004
+GROQ_API_KEY=your-groq-api-key
 GROQ_MODEL=llama-3.3-70b-versatile
-
-# -----------------------------------------------------------------------------
-# Database & Security
-# -----------------------------------------------------------------------------
-POSTGRES_USER=forgeai
-POSTGRES_PASSWORD=forgeai_secure_password
-JWT_SECRET=your-secure-256-bit-jwt-secret-string
 ```
 
-Place your GitHub App's private key (`.pem`) in the `secrets/` directory:
+Place your GitHub App RSA private key (`.pem`) inside `./secrets/`:
+
 ```bash
 mkdir -p secrets
-cp /path/to/your-app.private-key.pem secrets/github-app-private-key.pem
+cp /path/to/your-github-app.private-key.pem secrets/github-app-private-key.pem
 ```
 
-### 2. Boot the Entire Platform
-
-Launch all 9 microservices, databases, and caches in detached mode:
+### 2. Launch the Full Stack
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
-Verify that all containers are healthy:
+Check that all 9 containers report `Up (healthy)`:
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-Expected healthy output:
+```text
+NAMES                        STATUS         PORTS
+forgeai-frontend-dev         Up (healthy)   0.0.0.0:3000->3000/tcp
+forgeai-api-gateway-dev      Up (healthy)   0.0.0.0:8080->8080/tcp
+forgeai-identity-dev         Up (healthy)   0.0.0.0:8081->8081/tcp
+forgeai-source-control-dev   Up (healthy)   0.0.0.0:8082->8082/tcp
+forgeai-testing-dev          Up (healthy)   0.0.0.0:8083->8083/tcp
+forgeai-ai-dev               Up (healthy)   0.0.0.0:8084->8084/tcp
+forgeai-project-dev          Up (healthy)   0.0.0.0:8085->8085/tcp
+forgeai-postgres-dev         Up (healthy)   0.0.0.0:5432->5432/tcp
+forgeai-redis-dev            Up (healthy)   0.0.0.0:6379->6379/tcp
 ```
-NAMES                                         STATUS                    PORTS
-forgeai-frontend-dev                          Up (healthy)              0.0.0.0:3000->3000/tcp
-forgeai-api-gateway-dev                       Up (healthy)              0.0.0.0:8080->8080/tcp
-forgeai-ai-dev                                Up (healthy)              0.0.0.0:8084->8084/tcp
-1bfb1a09d875_forgeai-source-control-dev       Up (healthy)              0.0.0.0:8082->8082/tcp
-0cb25774b0c0_forgeai-testing-dev              Up (healthy)              0.0.0.0:8083->8083/tcp
-917c21ad61bb_forgeai-project-dev              Up (healthy)              0.0.0.0:8085->8085/tcp
-95a99c4e8e32_forgeai-identity-dev             Up (healthy)              0.0.0.0:8081->8081/tcp
-forgeai-postgres-dev                          Up (healthy)              0.0.0.0:5432->5432/tcp
-forgeai-redis-dev                             Up (healthy)              0.0.0.0:6379->6379/tcp
-```
 
-### 3. Access ForgeAI
+### 3. Access Endpoints & Health Checks
 
-* **Web Application:** [http://localhost:3000](http://localhost:3000)
-* **API Gateway Base:** [http://localhost:8080](http://localhost:8080)
-* **Healthcheck Actuators:**
-  * Gateway Health: `http://localhost:8080/actuator/health`
-  * Identity Service: `http://localhost:8081/actuator/health`
-  * Source Control: `http://localhost:8082/actuator/health`
-  * Project Service: `http://localhost:8085/actuator/health`
-  * Testing Service: `http://localhost:8083/actuator/health`
-  * AI Service Health: `http://localhost:8084/healthz`
+| Endpoint | URL | Purpose |
+| :--- | :--- | :--- |
+| **ForgeAI Web Dashboard** | `http://localhost:3000` | Main Next.js 16 Carbon UI |
+| **API Gateway Health** | `http://localhost:8080/actuator/health` | Edge gateway & Redis connectivity |
+| **Identity Service Health** | `http://localhost:8081/actuator/health` | Auth, JWKS (`/.well-known/jwks.json`), Workspaces |
+| **Source Control Health** | `http://localhost:8082/api/v1/github/health` | GitHub App configuration & installation status |
+| **Testing Service Health** | `http://localhost:8083/actuator/health` | JUnit & CI test run service |
+| **AI Service Health** | `http://localhost:8084/healthz` | pgvector DB pool + Gemini/Groq provider status |
+| **Project Service Health** | `http://localhost:8085/actuator/health` | Projects, Kanban tasks & Traceability Spine |
 
----
+## 🧪 Verification & Test Suite
 
-## 🧪 Testing & Verification Suite
-
-ForgeAI maintains comprehensive automated test coverage across all microservice layers.
-
-### Run All Unit & Integration Tests
+Run the full verification suite across all backend services and the frontend bundle:
 
 ```bash
-# 1. Source Control Service (Security & GitHub Installation Tests)
-mvn test -pl services/source-control-service
+# 1. Compile & test all Java microservices (Identity, Source Control, Project, Testing, Gateway)
+mvn test-compile -f services/identity-service/pom.xml
+mvn test-compile -f services/source-control-service/pom.xml
+mvn test-compile -f services/project-service/pom.xml
+mvn test-compile -f services/testing-service/pom.xml
+mvn test-compile -f infrastructure/api-gateway/pom.xml
 
-# 2. Project Service (Traceability & Requirement Boundary Tests)
-mvn test -pl services/project-service
+# 2. Run adversarial security & lifecycle test suites
+mvn test -f services/source-control-service/pom.xml -Dtest=GitHubInstallationLifecycleSecurityTest
+mvn test -f services/project-service/pom.xml -Dtest=WorkspaceSecurityAndIntegrityE2ETest
 
-# 3. Identity Service (Authentication & Multi-Tenant Tests)
-mvn test -pl services/identity-service
-
-# 4. API Gateway (Routing & Rate Limiting Tests)
-mvn test -pl infrastructure/api-gateway
-
-# 5. AI Service (AST & Regression Prediction Tests)
+# 3. Run AI Service test suite
 pytest services/ai-service/tests
 
-# 6. Frontend Typecheck & Production Build
-cd frontend
-npx tsc --noEmit
-npx next build --webpack
+# 4. Run Frontend TypeScript validation & production build
+cd frontend && npx tsc --noEmit && npx next build --webpack
 ```
 
----
-
-## 🗺️ Project Structure
+## 🗂️ Monorepo Structure
 
 ```text
 ForgeAI/
-├── frontend/                               # Next.js 16 Web Dashboard
-│   ├── src/app/(dashboard)/                # Route groups (projects, repositories, ai-insights)
-│   ├── src/components/                     # Carbon design system UI components
-│   └── src/lib/                            # API client, tenant context, and state utilities
-├── services/
-│   ├── identity-service/                   # Auth, JWT, OAuth 2.0 & Workspaces
-│   ├── source-control-service/             # GitHub App, Webhook Ingestion & Commits
-│   ├── project-service/                    # Requirements, Tasks & Traceability Spine
-│   ├── testing-service/                    # JUnit Ingestion & Test Verification
-│   └── ai-service/                         # Python FastAPI, AST Diffing & Blast Radius
+├── frontend/                              # Next.js 16 + React 19 Carbon Web Application
+│   ├── src/app/(dashboard)/               # Dashboard routes:
+│   │   ├── page.tsx                       #   Executive Command Center & Telemetry
+│   │   ├── repositories/page.tsx          #   1-Click GitHub Onboarding, Sync & Disconnect
+│   │   ├── projects/page.tsx              #   Governed Projects, AI Sprint Planner & Kanban
+│   │   ├── projects/[projectId]/          #   Project Board & Traceability Spine Matrix
+│   │   ├── test-runs/page.tsx             #   CI Test Runs, AI Failure Diagnosis & Test Studio
+│   │   ├── ai-insights/page.tsx           #   PR Blast Radius, Security Scan & Doc Generator
+│   │   └── operations/page.tsx            #   Outbox Telemetry, Circuit Breakers & Health
+│   ├── src/components/                    # Carbon UI primitives, Traceability Spine & Navigation
+│   └── src/lib/                           # Gateway API client (error sanitizer + JWT refresh)
 ├── infrastructure/
-│   ├── api-gateway/                        # Spring Cloud Gateway (Edge Router)
-│   └── postgres/                           # Multi-database initial SQL schemas
-├── docker-compose.dev.yml                  # Local development container orchestration
-├── docker-compose.prod.yml                 # Production-hardened container stack
-└── pom.xml                                 # Root Maven Reactor build definition
+│   └── api-gateway/                       # Spring Cloud Gateway (JWKS, Redis rate limit, tenant filter)
+├── services/
+│   ├── identity-service/                  # OAuth 2.0, RS256 JWTs, RBAC, Personal & Org Workspaces
+│   ├── source-control-service/            # GitHub App client, webhooks, commit poller & PR proposer
+│   ├── project-service/                   # Requirements, tasks, code links & Traceability aggregator
+│   ├── testing-service/                   # JUnit XML ingestion, workflow run tracking & coverage
+│   └── ai-service/                        # FastAPI, pgvector indexing, Gemini/Groq & remediation
+├── scripts/docker/                        # Multi-PostgreSQL database initialization scripts
+├── docker-compose.dev.yml                 # Local development stack (9 containers)
+├── docker-compose.prod.yml                # Production-hardened stack with resource limits
+└── pom.xml                                # Root Maven multi-module reactor
 ```
 
----
+## 🗺️ Roadmap & Version 2.0 Vision
 
-## 👥 Authors & Acknowledgements
+ForgeAI v1.0 establishes the complete 10-stage Traceability Spine, multi-tenant zero-trust security mesh, and multi-LLM blast-radius engine. **ForgeAI v2.0** expands the platform from autonomous governance into an active, in-browser AI engineering studio and CI/CD enforcement plane:
 
-* **Raj Pagare** ([@rajpagare01](https://github.com/rajpagare01)) — *Lead Architect & Full-Stack Systems Engineer*
-* **ForgeAI Core Engineering Team** — *Major Project 2026*
+| Milestone | Target | Version 2.0 Capability | Architectural Impact |
+| :--- | :--- | :--- | :--- |
+| **v2.0-M1** | **In-Browser AI Code & Diff Studio** | Embedded Monaco code explorer (`/repositories/[repoId]`) with recursive Git tree navigation, multi-file AST search, inline AI refactoring, and 1-click branch/PR commits directly from the browser. | Eliminates context-switching between the governance dashboard and a local IDE for rapid hotfixes and test authoring. |
+| **v2.0-M2** | **Autonomous GitHub Check-Run Merge Gatekeeper** | Bi-directional GitHub Checks API integration (`POST /repos/{owner}/{repo}/check-runs`) that automatically blocks or approves Pull Requests on GitHub based on requirement test coverage, blast-radius thresholds, and zero-secret policies. | Elevates ForgeAI from an observability matrix into an active, cryptographically enforced merge gate on GitHub. |
+| **v2.0-M3** | **Ephemeral Sandbox Test Runner** | Isolated, short-lived container workers that execute AI-generated JUnit / Pytest / Vitest suites against PR branches in a sandboxed runtime before proposing a remediation PR. | Guarantees that 100% of AI-generated remediation patches and test suites compile and pass before a human reviewer ever sees them. |
+| **v2.0-M4** | **Multi-Provider VCS & Issue Federation** | Native connectors for **GitLab**, **Bitbucket**, **Jira**, and **Linear** via unified webhook adapters alongside OpenTelemetry distributed trace ingestion from production clusters. | Extends the Traceability Spine all the way to live production runtime telemetry (`Requirement ➔ Code ➔ Test ➔ Production Span`). |
 
----
+## 👥 Authors & Acknowledgments
+
+- **Raj Pagare** ([@rajpagare01](https://github.com/rajpagare01)) — *Lead Architect & Full-Stack Distributed Systems Engineer*
+- **ForgeAI Core Engineering** — *Enterprise AI Engineering Operating System (2026)*
 
 ## 📄 License
 
-This project is licensed under the **Apache License 2.0** — see the [LICENSE](LICENSE) file for details.
+Licensed under the **Apache License 2.0**. See `LICENSE` for full details.
