@@ -336,6 +336,16 @@ public class RepositoryController {
         return ResponseEntity.ok(repo);
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> disconnectRepository(
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID workspaceId) {
+        UUID organizationId = TenantContext.getOrganizationId();
+        repositoryApplicationService.disconnectRepository(
+                organizationId, resolveWorkspaceId(workspaceId), id, TenantContext.getUserId());
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * Connects multiple GitHub repositories in a single batch operation.
      */

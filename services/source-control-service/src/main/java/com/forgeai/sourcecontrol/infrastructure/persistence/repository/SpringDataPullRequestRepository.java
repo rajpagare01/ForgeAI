@@ -11,4 +11,8 @@ public interface SpringDataPullRequestRepository extends JpaRepository<PullReque
     Optional<PullRequestJpaEntity> findByGithubPrId(Long githubPrId);
     java.util.List<PullRequestJpaEntity> findAllByOrganizationId(UUID organizationId);
     java.util.List<PullRequestJpaEntity> findAllByRepositoryId(UUID repositoryId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM PullRequestJpaEntity pr WHERE pr.repositoryId = :repositoryId")
+    void deleteAllByRepositoryId(@org.springframework.data.repository.query.Param("repositoryId") UUID repositoryId);
 }

@@ -47,4 +47,9 @@ public class CommitRepositoryAdapter implements CommitRepository {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public void deleteAllByRepositoryId(UUID repositoryId) {
+        jpaRepository.deleteAllByRepositoryId(repositoryId);
+    }
 }

@@ -124,40 +124,8 @@ public class InstallationReconciliationService {
 
         for (GitHubRepositoryMetadata ghRepo : accessibleRepos) {
             Repository repo = existingRepoMap.get(ghRepo.id());
-            if (repo == null) {
-                // New repository granted access
-                repo = Repository.builder()
-                        .organizationId(targetOrg)
-                        .workspaceId(targetWs)
-                        .scope(targetScope)
-                        .installationId(installation.getInstallationId())
-                        .githubRepoId(ghRepo.id())
-                        .name(ghRepo.name())
-                        .fullName(ghRepo.fullName())
-                        .defaultBranch(ghRepo.defaultBranch())
-                        .isPrivate(ghRepo.isPrivate())
-                        .syncStatus(RepositorySyncStatus.SYNCED)
-                        .lastSyncedAt(Instant.now())
-                        .createdAt(Instant.now())
-                        .updatedAt(Instant.now())
-                        .build();
-                repo = repositoryRepository.save(repo);
-                addedCount++;
-
-                UUID repoId = repo.getId() != null ? repo.getId() : UUID.randomUUID();
-                RepositoryConnectedEvent event = RepositoryConnectedEvent.builder()
-                        .repositoryId(repoId)
-                        .organizationId(targetOrg)
-                        .workspaceId(targetWs)
-                        .scope(targetScope)
-                        .githubRepoId(repo.getGithubRepoId())
-                        .fullName(repo.getFullName())
-                        .defaultBranch(repo.getDefaultBranch())
-                        .timestamp(Instant.now())
-                        .build();
-                outboxService.publish(event, UUID.randomUUID().toString(), "Repository", repoId.toString());
-            } else {
-                // Existing repo: update metadata and restore status if previously INACCESSIBLE
+            if (repo != null) {
+                // Existing connected repo: update metadata and restore status if previously INACCESSIBLE
                 repo.setName(ghRepo.name());
                 repo.setFullName(ghRepo.fullName());
                 repo.setDefaultBranch(ghRepo.defaultBranch());

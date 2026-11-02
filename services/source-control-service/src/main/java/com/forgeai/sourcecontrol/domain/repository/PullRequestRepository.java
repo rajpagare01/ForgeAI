@@ -12,4 +12,5 @@ public interface PullRequestRepository {
     Optional<PullRequest> findByGithubPrId(Long githubPrId);
     java.util.List<PullRequest> findAllByOrganizationId(UUID organizationId);
     java.util.List<PullRequest> findAllByRepositoryId(UUID repositoryId);
+    void deleteAllByRepositoryId(UUID repositoryId);
 }

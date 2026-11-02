@@ -406,16 +406,7 @@ public class GitHubInstallationDiscoveryService {
                     existing.setLastSyncedAt(Instant.now());
                     GitHubInstallation saved = installationRepository.save(existing);
                     if (metrics != null) metrics.recordInstallationSuccess();
-                    try {
-                        List<GitHubRepositoryMetadata> accessibleRepos = gitHubAppClient.listInstallationRepositories(installationId);
-                        for (GitHubRepositoryMetadata ghRepo : accessibleRepos) {
-                            syncRepositoryRecord(ghRepo, saved);
-                        }
-                        if (metrics != null) metrics.recordRepositoryDiscoverySuccess();
-                    } catch (Exception e) {
-                        log.warn("[GitHub] Could not sync repos during association: {}", e.getMessage());
-                        if (metrics != null) metrics.recordRepositoryDiscoveryFailure();
-                    }
+                    if (metrics != null) metrics.recordRepositoryDiscoverySuccess();
                     return saved;
                 }
 
@@ -483,15 +474,14 @@ public class GitHubInstallationDiscoveryService {
         log.info("[GitHub] Successfully associated installation {} with workspace {} (scope={})",
                 installationId, effectiveWsId, scope);
 
-        // 5. Automatic Repository Discovery and Staging
+        // 5. Automatic Repository Discovery verification
         try {
             List<GitHubRepositoryMetadata> accessibleRepos = gitHubAppClient.listInstallationRepositories(installationId);
-            for (GitHubRepositoryMetadata ghRepo : accessibleRepos) {
-                syncRepositoryRecord(ghRepo, savedInstallation);
-            }
             if (metrics != null) {
                 metrics.recordRepositoryDiscoverySuccess();
             }
+            log.info("[GitHub] Discovered {} accessible repositories for installation {} ready for import",
+                    accessibleRepos.size(), installationId);
         } catch (Exception e) {
             log.warn("[GitHub] Could not immediately discover repositories for installation {}: {}", installationId, e.getMessage());
             if (metrics != null) {

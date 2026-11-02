@@ -11,4 +11,5 @@ public interface CommitRepository {
     boolean existsByRepositoryIdAndSha(UUID repositoryId, String sha);
     java.util.List<Commit> findAllByRepositoryId(UUID repositoryId);
     java.util.List<Commit> findAllByOrganizationId(UUID organizationId);
+    void deleteAllByRepositoryId(UUID repositoryId);
 }

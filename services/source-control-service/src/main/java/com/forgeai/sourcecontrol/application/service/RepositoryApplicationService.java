@@ -696,18 +696,18 @@ public class RepositoryApplicationService {
      * organization or workspace.
      * All data comes from GitHub — no local cache.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId) {
         return listAvailableRepositories(organizationId, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId) {
         return listAvailableRepositories(organizationId, workspaceId,
                 com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<GitHubRepositoryMetadata> listAvailableRepositories(UUID organizationId, UUID workspaceId,
             UUID callerUserId) {
         requireTenantOrWorkspace(organizationId, workspaceId);
@@ -834,17 +834,30 @@ public class RepositoryApplicationService {
         return saved;
     }
 
+    @Transactional
+    public void disconnectRepository(UUID organizationId, UUID workspaceId, UUID repositoryId, UUID userId) {
+        Repository repo = getRepository(organizationId, workspaceId, repositoryId, userId);
+        if (repo == null) {
+            throw new ResourceNotFoundException("Repository not found: " + repositoryId);
+        }
+        commitRepository.deleteAllByRepositoryId(repo.getId());
+        pullRequestRepository.deleteAllByRepositoryId(repo.getId());
+        repositoryRepository.deleteById(repo.getId());
+        log.info("[GitHub] Disconnected repository: id={}, fullName={}, orgId={}, wsId={}",
+                repo.getId(), repo.getFullName(), organizationId, workspaceId);
+    }
+
     /**
      * Returns the active claimed installation for this organization or workspace,
      * or throws
      * {@link ResourceNotFoundException} if none exists.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public GitHubInstallation getClaimedInstallation(UUID organizationId) {
         return getClaimedInstallation(organizationId, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId) {
         return getClaimedInstallation(organizationId, workspaceId,
                 com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getUserId());
@@ -871,6 +884,14 @@ public class RepositoryApplicationService {
                     .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
                     .filter(i -> callerUserId != null && callerUserId.equals(i.getClaimedByUserId()))
                     .findFirst();
+            if (opt.isPresent() && organizationId == null && !"PERSONAL".equalsIgnoreCase(opt.get().getScope())) {
+                GitHubInstallation inst = opt.get();
+                inst.setWorkspaceId(effectiveWsId);
+                inst.setOrganizationId(null);
+                inst.setScope("PERSONAL");
+                inst.setUpdatedAt(Instant.now());
+                opt = Optional.of(installationRepository.save(inst));
+            }
             if (opt.isEmpty() && gitHubAppConfig.isConfigured()) {
                 try {
                     List<GitHubInstallationDetails> appInstalls = gitHubAppClient.listAppInstallations();

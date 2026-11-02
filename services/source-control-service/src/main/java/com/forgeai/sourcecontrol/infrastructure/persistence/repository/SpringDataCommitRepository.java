@@ -11,4 +11,8 @@ public interface SpringDataCommitRepository extends JpaRepository<CommitJpaEntit
     boolean existsByRepositoryIdAndSha(UUID repositoryId, String sha);
     java.util.List<CommitJpaEntity> findAllByRepositoryIdOrderByCommittedAtDesc(UUID repositoryId);
     java.util.List<CommitJpaEntity> findAllByOrganizationIdOrderByCommittedAtDesc(UUID organizationId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM CommitJpaEntity c WHERE c.repositoryId = :repositoryId")
+    void deleteAllByRepositoryId(@org.springframework.data.repository.query.Param("repositoryId") UUID repositoryId);
 }

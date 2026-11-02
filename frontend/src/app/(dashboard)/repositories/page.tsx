@@ -11,7 +11,7 @@ import {
   GitHubConnectionState,
 } from "@/types";
 import { useTenant } from "@/lib/tenant-context";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, formatUserError } from "@/lib/api-client";
 import {
   GitPullRequest,
   CheckCircle2,
@@ -34,6 +34,7 @@ import {
   CheckSquare,
   Square,
   ArrowRight,
+  Trash2,
 } from "lucide-react";
 
 const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
@@ -84,6 +85,7 @@ export default function RepositoriesPage() {
   const [isReconciling, setIsReconciling] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importingRepoName, setImportingRepoName] = useState<string | null>(null);
+  const [disconnectingRepoId, setDisconnectingRepoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -438,6 +440,24 @@ export default function RepositoriesPage() {
     }
   };
 
+  // Disconnect repository from workspace
+  const handleDisconnectRepository = async (repoId: string, fullName: string) => {
+    if (!activeWorkspace?.id) return;
+    setError(null);
+    setSuccess(null);
+    setDisconnectingRepoId(repoId);
+    try {
+      await apiClient.delete(`/api/v1/repositories/${repoId}?workspaceId=${activeWorkspace.id}`);
+      setSuccess(`Repository '${fullName}' disconnected successfully.`);
+      await fetchData();
+    } catch (err: any) {
+      console.error("Disconnect repository failed:", err);
+      setError(formatUserError(err, `Failed to disconnect repository '${fullName}'.`));
+    } finally {
+      setDisconnectingRepoId(null);
+    }
+  };
+
   // Header primary button text based on connection state
   const getPrimaryButtonText = () => {
     if (isConnecting) return "Connecting...";
@@ -720,6 +740,7 @@ export default function RepositoriesPage() {
                 <TableHead className="text-xs">Scope</TableHead>
                 <TableHead className="text-xs">Sync Status</TableHead>
                 <TableHead className="text-xs">Last Synchronized</TableHead>
+                <TableHead className="text-xs text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -772,6 +793,23 @@ export default function RepositoriesPage() {
                   </TableCell>
                   <TableCell className="text-xs text-slate-400 font-mono">
                     {repo.lastSyncAt ? formatDate(repo.lastSyncAt) : "Just now"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDisconnectRepository(repo.id, repo.fullName)}
+                      disabled={disconnectingRepoId === repo.id}
+                      className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 text-xs gap-1.5 h-8 px-2.5"
+                      title="Disconnect repository from workspace"
+                    >
+                      {disconnectingRepoId === repo.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                      Disconnect
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -871,10 +909,24 @@ export default function RepositoriesPage() {
 
                   <div>
                     {isAlreadyConnected ? (
-                      <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1.5 py-1 px-2.5">
-                        <Check className="h-3.5 w-3.5" />
-                        Connected
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1.5 py-1 px-2.5">
+                          <Check className="h-3.5 w-3.5" />
+                          Connected
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const match = repositories.find((r) => r.fullName.toLowerCase() === repo.fullName.toLowerCase());
+                            if (match) handleDisconnectRepository(match.id, match.fullName);
+                          }}
+                          disabled={disconnectingRepoId !== null}
+                          className="text-xs h-7 px-2 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20"
+                        >
+                          Disconnect
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         variant="glow"
@@ -922,21 +974,38 @@ export default function RepositoriesPage() {
             </div>
           ) : availableRepos.length > 0 ? (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
-                <button
-                  type="button"
-                  onClick={toggleSelectAll}
-                  className="flex items-center gap-2 hover:text-white transition-colors"
-                >
-                  {selectedRepoNames.length > 0 && selectedRepoNames.length === unimportedAvailable.length ? (
-                    <CheckSquare className="h-4 w-4 text-sky-400" />
-                  ) : (
-                    <Square className="h-4 w-4 text-slate-500" />
+              {unimportedAvailable.length === 0 ? (
+                <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-400 flex items-center justify-between">
+                  <span>All accessible repositories are currently imported into this workspace.</span>
+                  {connection?.installationId && (
+                    <a
+                      href={`https://github.com/settings/installations/${connection.installationId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sky-400 hover:text-sky-300 flex items-center gap-1 font-medium"
+                    >
+                      Add more on GitHub
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   )}
-                  <span>Select All Repositories ({unimportedAvailable.length})</span>
-                </button>
-                <span>{selectedRepoNames.length} selected</span>
-              </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="flex items-center gap-2 hover:text-white transition-colors"
+                  >
+                    {selectedRepoNames.length > 0 && selectedRepoNames.length === unimportedAvailable.length ? (
+                      <CheckSquare className="h-4 w-4 text-sky-400" />
+                    ) : (
+                      <Square className="h-4 w-4 text-slate-500" />
+                    )}
+                    <span>Select All Repositories ({unimportedAvailable.length})</span>
+                  </button>
+                  <span>{selectedRepoNames.length} selected</span>
+                </div>
+              )}
 
               <div className="max-h-64 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-800/40">
                 {availableRepos.map((repo) => {
@@ -947,12 +1016,12 @@ export default function RepositoriesPage() {
                     <div
                       key={repo.id}
                       onClick={() => !isConnected && toggleRepoSelection(repo.fullName)}
-                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
                         isConnected
-                          ? "border-transparent bg-slate-900/20 opacity-50 cursor-not-allowed"
+                          ? "border-transparent bg-slate-900/20"
                           : isChecked
-                          ? "border-sky-500/50 bg-sky-950/20"
-                          : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700"
+                          ? "border-sky-500/50 bg-sky-950/20 cursor-pointer"
+                          : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700 cursor-pointer"
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
@@ -985,10 +1054,45 @@ export default function RepositoriesPage() {
                         </div>
                       </div>
 
-                      {isConnected && (
-                        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
-                          Imported
-                        </Badge>
+                      {isConnected ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+                            Imported
+                          </Badge>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const match = repositories.find((r) => r.fullName.toLowerCase() === repo.fullName.toLowerCase());
+                              if (match) handleDisconnectRepository(match.id, match.fullName);
+                            }}
+                            disabled={disconnectingRepoId !== null}
+                            className="text-[10px] h-6 px-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20"
+                          >
+                            Disconnect
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="glow"
+                          size="sm"
+                          disabled={isImporting}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleConnectSingle(repo.fullName);
+                          }}
+                          className="text-[11px] h-6 px-2 gap-1"
+                        >
+                          {importingRepoName === repo.fullName ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Plus className="h-3 w-3" />
+                          )}
+                          Import
+                        </Button>
                       )}
                     </div>
                   );

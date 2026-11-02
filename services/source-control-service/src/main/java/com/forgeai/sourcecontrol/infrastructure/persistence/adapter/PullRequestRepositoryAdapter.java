@@ -66,4 +66,9 @@ public class PullRequestRepositoryAdapter implements PullRequestRepository {
                 .map(mapper::toDomain)
                 .toList();
     }
+
+    @Override
+    public void deleteAllByRepositoryId(UUID repositoryId) {
+        jpaRepository.deleteAllByRepositoryId(repositoryId);
+    }
 }
