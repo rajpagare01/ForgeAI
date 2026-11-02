@@ -109,7 +109,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(GitHubApiException.class)
     public ProblemDetail handleGitHubApiError(GitHubApiException ex) {
-        log.warn("GitHub API error ({}): {}", ex.getStatusCode(), ex.getMessage());
+        log.warn("GitHub API error: {}", ex.getMessage());
         String safeDetail = "Unable to communicate with GitHub right now. Please verify your GitHub connection and try again.";
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, safeDetail);
         problem.setTitle("GitHub API Error");

@@ -360,7 +360,7 @@ public class GitHubAppClient {
      * Uses GET /app/installations?per_page=30.
      */
     public List<GitHubInstallationDetails> listAppInstallations() {
-        if (!isConfigured()) return List.of();
+        if (!config.isConfigured()) return List.of();
         try {
             String appJwt = buildAppJwt();
             String url = GITHUB_API + "/app/installations?per_page=30";

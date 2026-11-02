@@ -12,6 +12,7 @@ import com.forgeai.sourcecontrol.domain.repository.RepositoryRepository;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubAccessDeniedException;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubAppClient;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubAppConfig;
+import com.forgeai.sourcecontrol.infrastructure.github.GitHubInstallationDetails;
 import com.forgeai.sourcecontrol.infrastructure.github.GitHubRepositoryMetadata;
 import com.forgeai.sourcecontrol.infrastructure.outbox.OutboxService;
 import lombok.RequiredArgsConstructor;
