@@ -148,3 +148,4 @@ Highlighting these specific engineering decisions will make you stand out from a
 | **AI Integration** | AST diffing, Google Gemini 1.5 Flash + Groq Llama 3.3 70B, 0–100 regression risk scoring, pgvector embeddings. |
 | **Resilience** | In-process Circuit Breakers (3-strike trip, 30s probe), graceful fallback to `UNAVAILABLE` status, W3C tracing. |
 | **Multi-Tenancy** | Dual-scope (`PERSONAL` vs `ORGANIZATION`) with database-enforced row isolation. |
+
