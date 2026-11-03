@@ -157,3 +157,4 @@ Every request generated at the API Gateway receives:
 * A standard **W3C `traceparent`** (`00-{traceId}-{spanId}-01`).
 
 Each microservice stores these identifiers in SLF4J's Mapped Diagnostic Context (`MDC`). When a service makes a downstream call, it passes the same `correlationId` and generates a child `spanId`. This allows engineers to grep a single correlation ID across all 5 Docker containers to see the complete distributed request lifecycle.
+
