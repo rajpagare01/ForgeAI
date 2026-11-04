@@ -13,6 +13,9 @@ public interface TaskRepository {
     Optional<Task> findByIdAndOrganizationId(UUID id, UUID organizationId);
     Optional<Task> findByProjectIdAndTaskKey(UUID projectId, String taskKey);
     Optional<Task> findByOrganizationIdAndTaskKey(UUID organizationId, String taskKey);
+    Optional<Task> findByOrganizationIdAndTaskKeyIgnoreCase(UUID organizationId, String taskKey);
+    Optional<Task> findByWorkspaceIdAndTaskKeyIgnoreCase(UUID workspaceId, String taskKey);
+    List<Task> findAllByTaskKeyIgnoreCase(String taskKey);
     List<Task> findAllByOrganizationIdAndProjectId(UUID organizationId, UUID projectId);
     List<Task> findAllByOrganizationIdAndProjectIdAndStatus(UUID organizationId, UUID projectId, TaskStatus status);
     List<Task> findAllByProjectId(UUID projectId);
@@ -20,4 +23,3 @@ public interface TaskRepository {
     List<Task> findAllByOrganizationIdAndAssigneeId(UUID organizationId, UUID assigneeId);
     boolean existsByProjectIdAndTaskKey(UUID projectId, String taskKey);
 }
-

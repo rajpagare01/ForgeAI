@@ -12,6 +12,9 @@ public interface SpringDataTaskRepository extends JpaRepository<TaskJpaEntity, U
     Optional<TaskJpaEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
     Optional<TaskJpaEntity> findByProjectIdAndTaskKey(UUID projectId, String taskKey);
     Optional<TaskJpaEntity> findByOrganizationIdAndTaskKey(UUID organizationId, String taskKey);
+    Optional<TaskJpaEntity> findByOrganizationIdAndTaskKeyIgnoreCase(UUID organizationId, String taskKey);
+    Optional<TaskJpaEntity> findByWorkspaceIdAndTaskKeyIgnoreCase(UUID workspaceId, String taskKey);
+    List<TaskJpaEntity> findAllByTaskKeyIgnoreCase(String taskKey);
     List<TaskJpaEntity> findAllByOrganizationIdAndProjectId(UUID organizationId, UUID projectId);
     List<TaskJpaEntity> findAllByOrganizationIdAndProjectIdAndStatus(UUID organizationId, UUID projectId, TaskStatus status);
     List<TaskJpaEntity> findAllByProjectId(UUID projectId);
@@ -19,4 +22,3 @@ public interface SpringDataTaskRepository extends JpaRepository<TaskJpaEntity, U
     List<TaskJpaEntity> findAllByOrganizationIdAndAssigneeId(UUID organizationId, UUID assigneeId);
     boolean existsByProjectIdAndTaskKey(UUID projectId, String taskKey);
 }
-

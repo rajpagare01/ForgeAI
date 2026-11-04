@@ -11,8 +11,14 @@ spring:
     show-sql: false
   flyway:
     enabled: false
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
 
 forgeai:
+  rabbitmq:
+    enabled: false
   security:
     enforce-internal-marker: false
   github:

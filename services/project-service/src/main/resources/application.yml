@@ -28,6 +28,18 @@ spring:
     baseline-on-migrate: false
     validate-on-migrate: true
 
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:${RABBITMQ_HOST:localhost}}
+    port: ${SPRING_RABBITMQ_PORT:${RABBITMQ_PORT:5672}}
+    username: ${SPRING_RABBITMQ_USERNAME:${RABBITMQ_USER:forgeai}}
+    password: ${SPRING_RABBITMQ_PASSWORD:${RABBITMQ_PASSWORD:password}}
+    connection-timeout: 5000
+    listener:
+      simple:
+        auto-startup: ${FORGEAI_RABBITMQ_ENABLED:true}
+        missing-queues-fatal: false
+        default-requeue-rejected: false
+
 server:
   port: ${SERVER_PORT:8085}
 
@@ -39,6 +51,9 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    rabbit:
+      enabled: false
 
 logging:
   level:
@@ -61,6 +76,11 @@ services:
     url: ${AI_SERVICE_URL:http://localhost:8084}
 
 forgeai:
+  rabbitmq:
+    enabled: ${FORGEAI_RABBITMQ_ENABLED:true}
+    exchange: forgeai.events.exchange
+    dlx: forgeai.events.dlx
+    dlq: forgeai.events.dlq
   security:
     enforce-internal-marker: ${ENFORCE_INTERNAL_MARKER:true}
 

@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -77,7 +78,7 @@ public class SourceControlEventConsumer {
         boolean hasFixKeyword = FIX_KEYWORD_PATTERN.matcher(event.getMessage()).find();
 
         for (String taskKey : matchedTaskKeys) {
-            Optional<Task> taskOpt = taskRepository.findByOrganizationIdAndTaskKey(event.getOrganizationId(), taskKey);
+            Optional<Task> taskOpt = resolveTask(event.getOrganizationId(), event.getWorkspaceId(), taskKey);
             if (taskOpt.isPresent()) {
                 Task task = taskOpt.get();
                 linkArtifact(task, CodeLinkType.COMMIT, event.getSha(), event.getRepositoryId(), "GIT_COMMIT_AUTO_LINK");
@@ -99,7 +100,7 @@ public class SourceControlEventConsumer {
                     log.info("Auto-progressed task {} to status {}", taskKey, task.getStatus());
                 }
             } else {
-                log.debug("No matching task found for key {} in org {}", taskKey, event.getOrganizationId());
+                log.debug("No matching task found for key {} in org {} ws {}", taskKey, event.getOrganizationId(), event.getWorkspaceId());
             }
         }
     }
@@ -120,7 +121,7 @@ public class SourceControlEventConsumer {
         String externalRef = "PR-#" + event.getNumber();
 
         for (String taskKey : matchedTaskKeys) {
-            Optional<Task> taskOpt = taskRepository.findByOrganizationIdAndTaskKey(event.getOrganizationId(), taskKey);
+            Optional<Task> taskOpt = resolveTask(event.getOrganizationId(), event.getWorkspaceId(), taskKey);
             if (taskOpt.isPresent()) {
                 Task task = taskOpt.get();
                 linkArtifact(task, CodeLinkType.PULL_REQUEST, externalRef, event.getRepositoryId(), "GIT_PR_AUTO_LINK");
@@ -142,6 +143,8 @@ public class SourceControlEventConsumer {
                     taskRepository.save(task);
                     log.info("Auto-progressed task {} to status {}", taskKey, task.getStatus());
                 }
+            } else {
+                log.debug("No matching task found for key {} in org {} ws {}", taskKey, event.getOrganizationId(), event.getWorkspaceId());
             }
         }
     }
@@ -155,7 +158,7 @@ public class SourceControlEventConsumer {
 
         Set<String> matchedTaskKeys = extractTaskKeys(event.getBranchName());
         for (String taskKey : matchedTaskKeys) {
-            Optional<Task> taskOpt = taskRepository.findByOrganizationIdAndTaskKey(event.getOrganizationId(), taskKey);
+            Optional<Task> taskOpt = resolveTask(event.getOrganizationId(), event.getWorkspaceId(), taskKey);
             if (taskOpt.isPresent()) {
                 Task task = taskOpt.get();
                 linkArtifact(task, CodeLinkType.BRANCH, event.getBranchName(), event.getRepositoryId(), "GIT_BRANCH_AUTO_LINK");
@@ -165,8 +168,43 @@ public class SourceControlEventConsumer {
                     taskRepository.save(task);
                     log.info("Auto-progressed task {} to status IN_PROGRESS from branch creation", taskKey);
                 }
+            } else {
+                log.debug("No matching task found for key {} in org {} ws {}", taskKey, event.getOrganizationId(), event.getWorkspaceId());
             }
         }
+    }
+
+    private Optional<Task> resolveTask(UUID organizationId, UUID workspaceId, String rawTaskKey) {
+        if (rawTaskKey == null || rawTaskKey.isBlank()) {
+            return Optional.empty();
+        }
+        String key = rawTaskKey.trim().toUpperCase();
+
+        if (organizationId != null) {
+            Optional<Task> orgOpt = taskRepository.findByOrganizationIdAndTaskKeyIgnoreCase(organizationId, key);
+            if (orgOpt.isPresent()) {
+                return orgOpt;
+            }
+            orgOpt = taskRepository.findByOrganizationIdAndTaskKey(organizationId, key);
+            if (orgOpt.isPresent()) {
+                return orgOpt;
+            }
+        }
+
+        if (workspaceId != null) {
+            Optional<Task> wsOpt = taskRepository.findByWorkspaceIdAndTaskKeyIgnoreCase(workspaceId, key);
+            if (wsOpt.isPresent()) {
+                return wsOpt;
+            }
+        }
+
+        if (organizationId == null) {
+            return taskRepository.findAllByTaskKeyIgnoreCase(key).stream()
+                    .filter(t -> t.getOrganizationId() == null && (workspaceId == null || workspaceId.equals(t.getWorkspaceId())))
+                    .findFirst();
+        }
+
+        return Optional.empty();
     }
 
     private void linkArtifact(Task task, CodeLinkType linkType, String externalRef, java.util.UUID repositoryId, String createdBy) {

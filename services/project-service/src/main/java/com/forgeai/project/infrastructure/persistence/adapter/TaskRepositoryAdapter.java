@@ -54,7 +54,6 @@ public class TaskRepositoryAdapter implements TaskRepository {
                 .map(EntityDomainMapper::toDomain);
     }
 
-
     @Override
     public Optional<Task> findByProjectIdAndTaskKey(UUID projectId, String taskKey) {
         return springDataRepository.findByProjectIdAndTaskKey(projectId, taskKey)
@@ -65,6 +64,25 @@ public class TaskRepositoryAdapter implements TaskRepository {
     public Optional<Task> findByOrganizationIdAndTaskKey(UUID organizationId, String taskKey) {
         return springDataRepository.findByOrganizationIdAndTaskKey(organizationId, taskKey)
                 .map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
+    public Optional<Task> findByOrganizationIdAndTaskKeyIgnoreCase(UUID organizationId, String taskKey) {
+        return springDataRepository.findByOrganizationIdAndTaskKeyIgnoreCase(organizationId, taskKey)
+                .map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
+    public Optional<Task> findByWorkspaceIdAndTaskKeyIgnoreCase(UUID workspaceId, String taskKey) {
+        return springDataRepository.findByWorkspaceIdAndTaskKeyIgnoreCase(workspaceId, taskKey)
+                .map(EntityDomainMapper::toDomain);
+    }
+
+    @Override
+    public List<Task> findAllByTaskKeyIgnoreCase(String taskKey) {
+        return springDataRepository.findAllByTaskKeyIgnoreCase(taskKey).stream()
+                .map(EntityDomainMapper::toDomain)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -94,7 +112,6 @@ public class TaskRepositoryAdapter implements TaskRepository {
                 .map(EntityDomainMapper::toDomain)
                 .collect(Collectors.toList());
     }
-
 
     @Override
     public List<Task> findAllByOrganizationIdAndAssigneeId(UUID organizationId, UUID assigneeId) {

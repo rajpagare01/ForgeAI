@@ -3,3 +3,11 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/forgeai_test}
     username: ${SPRING_DATASOURCE_USERNAME:forge}
     password: ${SPRING_DATASOURCE_PASSWORD:forge}
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+forgeai:
+  rabbitmq:
+    enabled: false

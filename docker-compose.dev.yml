@@ -53,6 +53,33 @@ services:
       - forgeai-network
 
   # ----------------------------------------------------------------------------
+  # Message Broker: RabbitMQ 3.13 with Management UI (AMQP 0-9-1 + DLQ Mesh)
+  # ----------------------------------------------------------------------------
+  rabbitmq:
+    init: true
+    hostname: rabbitmq
+    image: rabbitmq:3.13-management-alpine
+    container_name: forgeai-rabbitmq-dev
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-forgeai}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-password}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-forgeai_secret_cookie_2026}
+    volumes:
+      - rabbitmq_data_dev:/var/lib/rabbitmq/mnesia
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 15s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - forgeai-network
+
+  # ----------------------------------------------------------------------------
   # Core Domain: Identity Service (Java 21 / Spring Boot 3)
   # ----------------------------------------------------------------------------
   identity-service:
@@ -75,6 +102,11 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       SECURITY_JWT_RSA_PUBLIC_KEY_PATH: /app/secrets/jwt-rsa-public.pem
       SECURITY_JWT_RSA_PRIVATE_KEY_PATH: /app/secrets/jwt-rsa-private.pem
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-forgeai}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+      FORGEAI_RABBITMQ_ENABLED: "true"
       JAVA_TOOL_OPTIONS: "-Xmx512m -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     volumes:
       - ./secrets:/app/secrets:ro
@@ -82,6 +114,8 @@ services:
       postgres:
         condition: service_started
       redis:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
@@ -118,9 +152,16 @@ services:
       TESTING_SERVICE_URL: http://testing-service:8083
       AI_SERVICE_URL: http://ai-service:8084
       ENFORCE_INTERNAL_MARKER: "true"
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-forgeai}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+      FORGEAI_RABBITMQ_ENABLED: "true"
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     depends_on:
       postgres:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
@@ -160,6 +201,11 @@ services:
       GITHUB_PRIVATE_KEY_PATH: ${GITHUB_PRIVATE_KEY_PATH:-/app/secrets/github-app-private-key.pem}
       IDENTITY_SERVICE_URL: http://identity-service:8081
       ENFORCE_INTERNAL_MARKER: "true"
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-forgeai}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+      FORGEAI_RABBITMQ_ENABLED: "true"
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     volumes:
       - ./secrets:/app/secrets:ro
@@ -167,6 +213,8 @@ services:
       postgres:
         condition: service_started
       identity-service:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
@@ -199,9 +247,16 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-password}
       SERVER_PORT: 8083
       ENFORCE_INTERNAL_MARKER: "true"
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-forgeai}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+      FORGEAI_RABBITMQ_ENABLED: "true"
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     depends_on:
       postgres:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
@@ -355,6 +410,7 @@ services:
 volumes:
   pg_data_dev:
   redis_data_dev:
+  rabbitmq_data_dev:
 
 networks:
   forgeai-network:

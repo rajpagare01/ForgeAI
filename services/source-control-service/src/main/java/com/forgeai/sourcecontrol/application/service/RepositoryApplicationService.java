@@ -343,7 +343,25 @@ public class RepositoryApplicationService {
                         .committedAt(ghCommit.committedAt())
                         .createdAt(Instant.now())
                         .build();
-                savedList.add(commitRepository.save(c));
+                com.forgeai.sourcecontrol.domain.model.Commit savedCommit = commitRepository.save(c);
+                savedList.add(savedCommit);
+                if (outboxService != null) {
+                    com.forgeai.sourcecontrol.domain.event.CommitCreatedEvent commitEvent =
+                            com.forgeai.sourcecontrol.domain.event.CommitCreatedEvent.builder()
+                                    .commitId(savedCommit.getId())
+                                    .organizationId(repo.getOrganizationId())
+                                    .workspaceId(repo.getWorkspaceId())
+                                    .repositoryId(repo.getId())
+                                    .sha(savedCommit.getSha())
+                                    .message(savedCommit.getMessage())
+                                    .authorName(savedCommit.getAuthorName())
+                                    .authorEmail(savedCommit.getAuthorEmail())
+                                    .committedAt(savedCommit.getCommittedAt())
+                                    .timestamp(Instant.now())
+                                    .build();
+                    outboxService.publish(commitEvent, "sync-commit-" + savedCommit.getSha(), "Commit",
+                            savedCommit.getId() != null ? savedCommit.getId().toString() : savedCommit.getSha());
+                }
             }
         }
         log.info("[GitHub] Synchronized {} commits for repo: {} (branch: {})", savedList.size(), repo.getFullName(),
@@ -403,7 +421,27 @@ public class RepositoryApplicationService {
                         .createdAt(ghPr.createdAt() != null ? ghPr.createdAt() : Instant.now())
                         .updatedAt(ghPr.updatedAt() != null ? ghPr.updatedAt() : Instant.now())
                         .build();
-                savedList.add(pullRequestRepository.save(pr));
+                com.forgeai.sourcecontrol.domain.model.PullRequest savedPr = pullRequestRepository.save(pr);
+                savedList.add(savedPr);
+                if (outboxService != null && status == com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN) {
+                    com.forgeai.sourcecontrol.domain.event.PullRequestOpenedEvent prEvent =
+                            com.forgeai.sourcecontrol.domain.event.PullRequestOpenedEvent.builder()
+                                    .pullRequestId(savedPr.getId())
+                                    .organizationId(repo.getOrganizationId())
+                                    .workspaceId(repo.getWorkspaceId())
+                                    .repositoryId(repo.getId())
+                                    .githubPrId(savedPr.getGithubPrId())
+                                    .number(savedPr.getNumber())
+                                    .title(savedPr.getTitle())
+                                    .body(savedPr.getBody())
+                                    .sourceBranch(savedPr.getSourceBranch())
+                                    .targetBranch(savedPr.getTargetBranch())
+                                    .authorGithubId(savedPr.getAuthorGithubId())
+                                    .timestamp(Instant.now())
+                                    .build();
+                    outboxService.publish(prEvent, "sync-pr-" + savedPr.getId(), "PullRequest",
+                            savedPr.getId() != null ? savedPr.getId().toString() : String.valueOf(savedPr.getNumber()));
+                }
             }
         }
         log.info("[GitHub] Synchronized {} pull requests for repo: {}", savedList.size(), repo.getFullName());

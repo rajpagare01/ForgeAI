@@ -223,12 +223,6 @@ public class AutomaticInstallationDiscoveryAndOnboardingTest {
                 new GitHubRepositoryMetadata(101L, 889900L, "my-repo", "alice-dev/my-repo", false, "main", "alice-dev")
         ));
 
-        when(repositoryRepository.save(any(Repository.class))).thenAnswer(inv -> {
-            Repository r = inv.getArgument(0);
-            r.setId(UUID.randomUUID());
-            return r;
-        });
-
         // When setup callback is processed
         GitHubInstallation claimed = discoveryService.handleSetupCallback(USER_A, WS_A, null, 889900L);
 
@@ -240,9 +234,8 @@ public class AutomaticInstallationDiscoveryAndOnboardingTest {
         assertThat(claimed.getOrganizationId()).isNull();
         assertThat(claimed.getClaimedByUserId()).isEqualTo(USER_A);
 
-        // Repository was created and outbox event published
-        verify(repositoryRepository).save(any(Repository.class));
-        verify(outboxService).publish(any(), any(), eq("Repository"), any());
+        // Repositories are discovered on GitHub but not force-imported automatically
+        verify(repositoryRepository, never()).save(any(Repository.class));
     }
 
     @Test
@@ -392,7 +385,7 @@ public class AutomaticInstallationDiscoveryAndOnboardingTest {
 
         // Then
         assertThat(report.totalAccessible()).isEqualTo(1);
-        assertThat(report.newlyAdded()).isEqualTo(1);
+        assertThat(report.newlyAdded()).isEqualTo(0);
         assertThat(report.removedOrInaccessible()).isEqualTo(1);
         assertThat(repo1.getSyncStatus()).isEqualTo(RepositorySyncStatus.INACCESSIBLE);
     }

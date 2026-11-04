@@ -15,6 +15,11 @@ spring:
   flyway:
     enabled: false
 
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
 outbox:
   poll:
     interval-ms: 3600000
@@ -31,7 +36,7 @@ services:
     url: http://localhost:8084
 
 forgeai:
+  rabbitmq:
+    enabled: false
   security:
     enforce-internal-marker: false
-
-

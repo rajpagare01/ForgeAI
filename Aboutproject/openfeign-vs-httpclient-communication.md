@@ -153,3 +153,4 @@ public class SourceControlClient {
 > 2. *Deterministic, fail-closed header injection and correlation propagation.*
 > 3. *An in-process, lock-free `SimpleCircuitBreaker` that trips after 3 failures with a 30-second half-open probe and a 5-second per-call SLA.*
 > 4. *Clear domain degradation: our Traceability Spine can explicitly distinguish between a downstream service being UNAVAILABLE versus an entity actually having no records."*
+
