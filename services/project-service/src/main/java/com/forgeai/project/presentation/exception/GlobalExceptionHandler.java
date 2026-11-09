@@ -44,7 +44,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidTaskAssignmentException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidAssignment(InvalidTaskAssignmentException ex) {
         log.warn("Invalid task assignment: {}", ex.getMessage());
-        return buildErrorResponse(HttpStatus.UNPROCESSABLE_ENTITY, sanitizeClientMessage(ex.getMessage(), "The task could not be assigned to the specified user."));
+        String message = (ex.getMessage() != null && !ex.getMessage().isBlank())
+                ? ex.getMessage()
+                : "The task could not be assigned to the specified user.";
+        return buildErrorResponse(HttpStatus.UNPROCESSABLE_ENTITY, message);
     }
 
     @ExceptionHandler(InvalidTaskStatusTransitionException.class)
