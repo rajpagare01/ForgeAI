@@ -180,6 +180,19 @@ public class ProjectApplicationService {
     public List<Project> listProjects(UUID workspaceId, UUID organizationId, UUID callerUserId) {
         if (workspaceId != null) {
             Optional<WorkspaceJpaEntity> wsOpt = workspaceRepository.findById(workspaceId);
+            if (wsOpt.isEmpty()) {
+                if (organizationId != null) {
+                    Optional<WorkspaceJpaEntity> orgWs = workspaceRepository.findByTypeAndOrganizationId("ORGANIZATION", organizationId);
+                    if (orgWs.isPresent()) {
+                        wsOpt = orgWs;
+                    }
+                } else if (callerUserId != null) {
+                    Optional<WorkspaceJpaEntity> personalWs = workspaceRepository.findByTypeAndOwnerUserId("PERSONAL", callerUserId);
+                    if (personalWs.isPresent()) {
+                        wsOpt = personalWs;
+                    }
+                }
+            }
             if (wsOpt.isEmpty() && callerUserId != null) {
                 // Auto-provision workspace locally if provisioned in identity-service
                 WorkspaceJpaEntity autoWs = WorkspaceJpaEntity.builder()
@@ -208,7 +221,7 @@ public class ProjectApplicationService {
                     throw new AccessDeniedException("Access denied: Organization mismatch for workspace " + workspaceId);
                 }
             }
-            return projectRepository.findAllByWorkspaceId(workspaceId);
+            return projectRepository.findAllByWorkspaceId(workspace.getId());
         }
 
         if (organizationId != null) {
@@ -224,7 +237,7 @@ public class ProjectApplicationService {
             return Collections.emptyList();
         }
 
-        throw new IllegalArgumentException("Either workspaceId, organizationId, or callerUserId must be provided to list projects");
+        throw new IllegalArgumentException("Missing required X-Org-Id tenant context header");
     }
 
     private WorkspaceJpaEntity resolveWorkspace(UUID workspaceId, UUID organizationId, UUID callerUserId) {
@@ -233,9 +246,20 @@ public class ProjectApplicationService {
             if (ws.isPresent()) {
                 return ws.get();
             }
-            // If workspaceId was supplied but not found locally, see if it matches organizationId
-            if (organizationId != null && workspaceId.equals(organizationId)) {
-                return getOrCreateOrgWorkspace(organizationId, callerUserId);
+            // Check if organization or personal workspace already exists
+            if (organizationId != null) {
+                Optional<WorkspaceJpaEntity> orgWs = workspaceRepository.findByTypeAndOrganizationId("ORGANIZATION", organizationId);
+                if (orgWs.isPresent()) {
+                    return orgWs.get();
+                }
+                if (workspaceId.equals(organizationId)) {
+                    return getOrCreateOrgWorkspace(organizationId, callerUserId);
+                }
+            } else if (callerUserId != null) {
+                Optional<WorkspaceJpaEntity> personalWs = workspaceRepository.findByTypeAndOwnerUserId("PERSONAL", callerUserId);
+                if (personalWs.isPresent()) {
+                    return personalWs.get();
+                }
             }
             if (callerUserId != null) {
                 WorkspaceJpaEntity autoWs = WorkspaceJpaEntity.builder()

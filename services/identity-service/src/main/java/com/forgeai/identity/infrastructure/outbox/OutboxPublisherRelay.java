@@ -57,6 +57,9 @@ public class OutboxPublisherRelay {
         this.outboxEventRepository = outboxEventRepository;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        if (this.objectMapper != null) {
+            this.objectMapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        }
         this.identityMetrics = identityMetrics;
         this.structuredLogger = structuredLogger;
     }

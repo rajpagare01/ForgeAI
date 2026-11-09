@@ -11,6 +11,8 @@ public interface SpringDataAuditEventRepository extends JpaRepository<AuditEvent
 
     List<AuditEventEntity> findByOrganizationIdOrderByCreatedAtDesc(UUID organizationId, Pageable pageable);
 
+    List<AuditEventEntity> findByWorkspaceIdOrderByCreatedAtDesc(UUID workspaceId, Pageable pageable);
+
     List<AuditEventEntity> findByOrganizationIdAndEntityTypeOrderByCreatedAtDesc(
             UUID organizationId, String entityType, Pageable pageable);
 

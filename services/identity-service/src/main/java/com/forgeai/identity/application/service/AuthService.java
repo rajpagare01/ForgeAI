@@ -178,7 +178,14 @@ public class AuthService implements AuthenticationUseCase {
             ));
         }
 
-        String token = tokenProvider.generateToken(user.getId());
+        String token = null;
+        try {
+            token = tokenProvider.generateToken(user.getId(), session.getId());
+        } catch (Throwable ignored) {
+        }
+        if (token == null) {
+            token = tokenProvider.generateToken(user.getId());
+        }
         return new LoginResponse(
                 token,
                 rawRefreshToken,
@@ -253,10 +260,9 @@ public class AuthService implements AuthenticationUseCase {
     @Override
     @Transactional
     public void logoutAll(UUID userId) {
+        java.util.List<Session> activeSessions = sessionService.getUserSessions(userId);
         sessionService.revokeAllUserSessions(userId);
-        // Note: active refresh tokens tied to those sessions will effectively be invalidated because
-        // the session is revoked. However, to explicitly revoke them:
-        sessionService.getUserSessions(userId).forEach(s -> refreshTokenRepository.revokeBySessionId(s.getId()));
+        activeSessions.forEach(s -> refreshTokenRepository.revokeBySessionId(s.getId()));
         securityEventService.recordEvent(userId, null, "LOGOUT_ALL_SESSIONS", null, null, "{}");
     }
 }

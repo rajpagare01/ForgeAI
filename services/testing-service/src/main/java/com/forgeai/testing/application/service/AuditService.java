@@ -40,6 +40,10 @@ public class AuditService {
         String traceId = MDC.get("traceId");
         String correlationId = MDC.get("correlationId");
 
+        UUID effectiveWsId = organizationId != null
+                ? organizationId
+                : com.forgeai.testing.infrastructure.security.TenantContext.getWorkspaceId();
+
         String metadataJson = null;
         if (metadata != null && !metadata.isEmpty()) {
             try {
@@ -51,6 +55,7 @@ public class AuditService {
 
         AuditEventEntity entity = AuditEventEntity.builder()
                 .organizationId(organizationId)
+                .workspaceId(effectiveWsId)
                 .actorUserId(actorUserId)
                 .eventType(eventType)
                 .entityType(entityType)

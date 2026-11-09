@@ -117,7 +117,15 @@ public class RequirementApplicationService {
             if (organizationId != null && !organizationId.equals(project.getOrganizationId())) {
                 throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
             }
+            if (organizationId == null) {
+                if (userId != null || com.forgeai.project.infrastructure.security.TenantContext.getUserId() != null || com.forgeai.project.infrastructure.security.TenantContext.getWorkspaceId() != null) {
+                    throw new AccessDeniedException("Access denied: Project belongs to an organization");
+                }
+            }
         } else {
+            if (organizationId != null) {
+                throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
+            }
             verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
         }
         return project;

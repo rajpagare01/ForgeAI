@@ -84,6 +84,14 @@ export function evaluateSecurityStatus(
   dependencySecurityStatus?: string | null
 ): SecurityStatusResult {
   if (!securityAssessment) {
+    if (dependencySecurityStatus === "PARTIAL") {
+      return {
+        status: "PARTIAL EVIDENCE",
+        color: "blue",
+        bg: "bg-blue-950/20 border-blue-500/40 text-blue-300",
+        description: "Dependency CVE scanner database is unconfigured. Code-level analysis not performed.",
+      };
+    }
     return {
       status: "NOT_ANALYZED",
       color: "slate",

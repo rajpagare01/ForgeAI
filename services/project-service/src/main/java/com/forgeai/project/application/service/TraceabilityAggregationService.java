@@ -256,7 +256,7 @@ public class TraceabilityAggregationService {
                         List<CodeLink> clList = codeLinksByTaskId.getOrDefault(t.getId(), Collections.emptyList());
                         for (CodeLink cl : clList) {
                             if (cl.getLinkType() == CodeLinkType.PULL_REQUEST &&
-                                    cl.getExternalRef().equals(String.valueOf(pr.getPrNumber()))) {
+                                    matchesPrCodeLink(cl.getExternalRef(), pr.getPrNumber())) {
                                 prMatches = true;
                                 break;
                             }
@@ -305,6 +305,15 @@ public class TraceabilityAggregationService {
                 }
                 if (commitMatches) {
                     chainCommits.add(commit);
+                    if (commit.getCommitSha() != null && !testRunsBySha.containsKey(commit.getCommitSha())) {
+                        List<RemoteTestRunDto> runs = cache.testRunsByShaCache.computeIfAbsent(
+                                commit.getCommitSha(),
+                                sha -> effectiveOrgId != null
+                                        ? testingServiceClient.listTestRuns(effectiveOrgId, commit.getRepositoryId(), sha)
+                                        : testingServiceClient.listTestRuns(wsId, null, commit.getRepositoryId(), sha)
+                        );
+                        testRunsBySha.put(commit.getCommitSha(), runs);
+                    }
                     if (testRunsBySha.containsKey(commit.getCommitSha())) {
                         chainTestRuns.addAll(testRunsBySha.get(commit.getCommitSha()));
                     }
@@ -475,9 +484,10 @@ public class TraceabilityAggregationService {
         Set<Integer> prNumbers = new HashSet<>();
         for (CodeLinkResponse cl : codeLinks) {
             if (cl.linkType() == CodeLinkType.PULL_REQUEST && cl.externalRef() != null) {
-                try {
-                    prNumbers.add(Integer.parseInt(cl.externalRef()));
-                } catch (NumberFormatException ignored) {}
+                Integer parsedPr = parsePrNumberFromRef(cl.externalRef());
+                if (parsedPr != null) {
+                    prNumbers.add(parsedPr);
+                }
             }
         }
         for (TraceabilityLinkDto l : taskLinks) {
@@ -807,6 +817,7 @@ public class TraceabilityAggregationService {
             String actorStr = actor != null ? actor.toString() : "system";
             auditService.recordEvent(
                     organizationId,
+                    project.getWorkspaceId(),
                     actorStr,
                     "TRACEABILITY_LINK_CREATED",
                     "TRACEABILITY_LINK",
@@ -841,6 +852,7 @@ public class TraceabilityAggregationService {
             String actorStr = actor != null ? actor.toString() : "system";
             auditService.recordEvent(
                     organizationId,
+                    project.getWorkspaceId(),
                     actorStr,
                     "TRACEABILITY_LINK_DELETED",
                     "TRACEABILITY_LINK",
@@ -867,35 +879,24 @@ public class TraceabilityAggregationService {
                 ? projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(effectiveOrgId, projectId, repositoryId)
                 : projectRepositoryLinkRepository.existsByProjectIdAndRepositoryId(projectId, repositoryId);
         if (alreadyLinked) {
-            List<ProjectRepositoryLink> existingLinks = effectiveOrgId != null
-                    ? projectRepositoryLinkRepository.findByProjectId(effectiveOrgId, projectId)
-                    : projectRepositoryLinkRepository.findByProjectId(projectId);
-            for (ProjectRepositoryLink existingLink : existingLinks) {
-                if (repositoryId.equals(existingLink.getRepositoryId())) {
-                    log.info("Repository {} is already linked to project {}; returning existing link idempotently",
-                            repositoryId, projectId);
-                    return existingLink;
-                }
-            }
+            throw new DuplicateResourceException("Repository " + repositoryId + " is already linked to project " + projectId);
         }
 
         // 3. Resolve repository metadata with fast-path fallback
         String authoritativeName;
-        if (repositoryName != null && !repositoryName.isBlank()) {
+        Optional<RemoteRepositoryDto> repoDtoOpt = effectiveOrgId != null
+                ? sourceControlClient.getRepository(effectiveOrgId, repositoryId)
+                : sourceControlClient.getRepository(project.getWorkspaceId(), null, repositoryId);
+
+        if (repoDtoOpt.isPresent()) {
+            RemoteRepositoryDto repoDto = repoDtoOpt.get();
+            authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
+                    ? repoDto.getFullName()
+                    : (repoDto.getName() != null && !repoDto.getName().isBlank() ? repoDto.getName() : (repositoryName != null && !repositoryName.isBlank() ? repositoryName.trim() : "repository-" + repositoryId.toString().substring(0, 8)));
+        } else if (repositoryName != null && !repositoryName.isBlank()) {
             authoritativeName = repositoryName.trim();
         } else {
-            Optional<RemoteRepositoryDto> repoDtoOpt = effectiveOrgId != null
-                    ? sourceControlClient.getRepository(effectiveOrgId, repositoryId)
-                    : sourceControlClient.getRepository(project.getWorkspaceId(), null, repositoryId);
-
-            if (repoDtoOpt.isPresent()) {
-                RemoteRepositoryDto repoDto = repoDtoOpt.get();
-                authoritativeName = repoDto.getFullName() != null && !repoDto.getFullName().isBlank()
-                        ? repoDto.getFullName()
-                        : (repoDto.getName() != null ? repoDto.getName() : "repository-" + repositoryId.toString().substring(0, 8));
-            } else {
-                authoritativeName = "repository-" + repositoryId.toString().substring(0, 8);
-            }
+            throw new ResourceNotFoundException("Repository not found: " + repositoryId);
         }
 
         ProjectRepositoryLink link = ProjectRepositoryLink.builder()
@@ -934,14 +935,23 @@ public class TraceabilityAggregationService {
 
     @Transactional(readOnly = true)
     public List<ProjectRepositoryLinkDto> listProjectRepositories(UUID organizationId, UUID projectId, UUID userId) {
-        Project project = resolveProject(organizationId, projectId, userId);
-        UUID effectiveOrgId = project.getOrganizationId();
-        if (effectiveOrgId != null) {
-            return projectRepositoryLinkRepository.findByProjectId(effectiveOrgId, projectId).stream()
+        if (projectId == null) {
+            throw new IllegalArgumentException("Project ID is required");
+        }
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + projectId));
+        if (project.getOrganizationId() != null) {
+            if (organizationId == null) {
+                throw new AccessDeniedException("Access denied: Project belongs to an organization");
+            }
+            if (!organizationId.equals(project.getOrganizationId())) {
+                return Collections.emptyList();
+            }
+            return projectRepositoryLinkRepository.findByProjectId(organizationId, projectId).stream()
                     .map(ProjectRepositoryLinkDto::from)
                     .collect(Collectors.toList());
         }
-
+        verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
         return projectRepositoryLinkRepository.findByProjectId(projectId).stream()
                 .map(ProjectRepositoryLinkDto::from)
                 .collect(Collectors.toList());
@@ -958,7 +968,15 @@ public class TraceabilityAggregationService {
             if (organizationId != null && !organizationId.equals(project.getOrganizationId())) {
                 throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
             }
+            if (organizationId == null) {
+                if (userId != null || com.forgeai.project.infrastructure.security.TenantContext.getUserId() != null || com.forgeai.project.infrastructure.security.TenantContext.getWorkspaceId() != null) {
+                    throw new AccessDeniedException("Access denied: Project belongs to an organization");
+                }
+            }
         } else {
+            if (organizationId != null) {
+                throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
+            }
             verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
         }
         return project;
@@ -1020,6 +1038,7 @@ public class TraceabilityAggregationService {
         if (auditService != null) {
             auditService.recordEvent(
                     organizationId,
+                    project.getWorkspaceId(),
                     actorStr,
                     "TRACEABILITY_SNAPSHOT_CREATED",
                     "TRACEABILITY_SNAPSHOT",
@@ -1079,9 +1098,7 @@ public class TraceabilityAggregationService {
         } else {
             snapshot = traceabilitySnapshotRepository.findById(snapshotId)
                     .orElseThrow(() -> new ResourceNotFoundException("Snapshot not found: id=" + snapshotId));
-            Project project = projectRepository.findById(snapshot.getProjectId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Project not found: id=" + snapshot.getProjectId()));
-            verifyPersonalProjectOwnership(project, userId != null ? userId : com.forgeai.project.infrastructure.security.TenantContext.getUserId());
+            resolveProject(organizationId, snapshot.getProjectId(), userId);
         }
         if (projectId != null && !projectId.equals(snapshot.getProjectId())) {
             throw new ResourceNotFoundException("Snapshot not found for project: id=" + snapshotId);
@@ -1132,7 +1149,7 @@ public class TraceabilityAggregationService {
         }
 
         boolean hasPassingTests = testCases.stream().anyMatch(tc -> "PASSED".equalsIgnoreCase(tc.getLatestStatus())) ||
-                testRuns.stream().anyMatch(tr -> "COMPLETED".equalsIgnoreCase(tr.getStatus()) && (tr.getFailedTests() == null || tr.getFailedTests() == 0));
+                testRuns.stream().anyMatch(this::isPassingTestRun);
         if (!hasPassingTests && (testCases.isEmpty() && testRuns.isEmpty())) {
             gaps.add(TraceabilityGap.builder()
                     .gapType(GapType.REQUIREMENT_WITHOUT_TEST)
@@ -1145,7 +1162,7 @@ public class TraceabilityAggregationService {
         }
 
         for (RemotePullRequestDto pr : prs) {
-            boolean hasEvidence = testRuns.stream().anyMatch(tr -> "COMPLETED".equalsIgnoreCase(tr.getStatus()));
+            boolean hasEvidence = testRuns.stream().anyMatch(this::isCompletedTestRun);
             if (!hasEvidence && Boolean.FALSE.equals(pr.getIsMerged())) {
                 gaps.add(TraceabilityGap.builder()
                         .gapType(GapType.PR_WITHOUT_TEST_EVIDENCE)
@@ -1273,7 +1290,7 @@ public class TraceabilityAggregationService {
             for (List<CodeLink> clList : codeLinksByTaskId.values()) {
                 for (CodeLink cl : clList) {
                     if (cl.getLinkType() == CodeLinkType.PULL_REQUEST &&
-                            cl.getExternalRef().equals(String.valueOf(pr.getPrNumber()))) {
+                            matchesPrCodeLink(cl.getExternalRef(), pr.getPrNumber())) {
                         associatedWithTask = true;
                         break;
                     }
@@ -1559,7 +1576,7 @@ public class TraceabilityAggregationService {
         long mergedPrs = prs.stream().filter(pr -> Boolean.TRUE.equals(pr.getIsMerged())).count();
         int testsCount = testCases.size();
         long passingTests = testCases.stream().filter(tc -> "PASSED".equalsIgnoreCase(tc.getLatestStatus())).count();
-        boolean hasPassingTestRun = testRuns.stream().anyMatch(tr -> "COMPLETED".equalsIgnoreCase(tr.getStatus()) && (tr.getFailedTests() == null || tr.getFailedTests() == 0));
+        boolean hasPassingTestRun = testRuns.stream().anyMatch(this::isPassingTestRun);
         boolean hasFailingTestRun = testRuns.stream().anyMatch(tr -> "FAILED".equalsIgnoreCase(tr.getStatus()) || (tr.getFailedTests() != null && tr.getFailedTests() > 0));
         boolean hasFailingTestCase = testCases.stream().anyMatch(tc -> "FAILED".equalsIgnoreCase(tc.getLatestStatus()));
 
@@ -1640,6 +1657,46 @@ public class TraceabilityAggregationService {
         String h = haystack.toLowerCase();
         String n = needle.toLowerCase();
         return h.contains(n) || h.contains(n.replace("-", "")) || h.contains(n.replace("_", ""));
+    }
+
+    private Integer parsePrNumberFromRef(String externalRef) {
+        if (externalRef == null || externalRef.isBlank()) return null;
+        String trimmed = externalRef.trim();
+        try {
+            return Integer.parseInt(trimmed);
+        } catch (NumberFormatException ignored) {}
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:PR-#?|pull/|#)(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(trimmed);
+        if (m.find()) {
+            try {
+                return Integer.parseInt(m.group(1));
+            } catch (NumberFormatException ignored) {}
+        }
+        String digits = trimmed.replaceAll("[^0-9]", "");
+        if (!digits.isBlank()) {
+            try {
+                return Integer.parseInt(digits);
+            } catch (NumberFormatException ignored) {}
+        }
+        return null;
+    }
+
+    private boolean matchesPrCodeLink(String externalRef, Integer prNumber) {
+        if (prNumber == null || externalRef == null) return false;
+        Integer parsed = parsePrNumberFromRef(externalRef);
+        return prNumber.equals(parsed);
+    }
+
+    private boolean isPassingTestRun(RemoteTestRunDto tr) {
+        if (tr == null || tr.getStatus() == null) return false;
+        boolean completedOrPassed = "COMPLETED".equalsIgnoreCase(tr.getStatus()) || "PASSED".equalsIgnoreCase(tr.getStatus());
+        return completedOrPassed && (tr.getFailedTests() == null || tr.getFailedTests() == 0);
+    }
+
+    private boolean isCompletedTestRun(RemoteTestRunDto tr) {
+        if (tr == null || tr.getStatus() == null) return false;
+        return "COMPLETED".equalsIgnoreCase(tr.getStatus())
+                || "PASSED".equalsIgnoreCase(tr.getStatus())
+                || "FAILED".equalsIgnoreCase(tr.getStatus());
     }
 
     private void validateTenant(UUID organizationId) {

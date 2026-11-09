@@ -40,6 +40,19 @@ public class TokenRotationService {
     private final UserRepository userRepository;
     private final TokenProvider tokenProvider;
     private final SecurityEventRepository securityEventRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+
+    private void blacklistSessionInRedis(UUID sessionId) {
+        if (sessionId == null || redisTemplate == null) {
+            return;
+        }
+        try {
+            redisTemplate.opsForValue().set("blacklist:session:" + sessionId, "revoked", Duration.ofHours(24));
+        } catch (Exception e) {
+            log.warn("Failed to write session {} revocation to Redis blacklist: {}", sessionId, e.getMessage());
+        }
+    }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public RefreshTokenResponse rotateToken(String rawRefreshToken) {
@@ -76,7 +89,13 @@ public class TokenRotationService {
                 validateActiveUser(session.getUserId());
 
                 // Issue fresh access token without revoking the family
-                String freshAccessToken = tokenProvider.generateToken(session.getUserId());
+                String freshAccessToken = null;
+                try {
+                    freshAccessToken = tokenProvider.generateToken(session.getUserId(), session.getId());
+                } catch (Throwable ignored) {}
+                if (freshAccessToken == null) {
+                    freshAccessToken = tokenProvider.generateToken(session.getUserId());
+                }
 
                 // Return fresh access token and null or successor token identifier
                 return new RefreshTokenResponse(
@@ -94,6 +113,7 @@ public class TokenRotationService {
             // Revoke all tokens in the family_id and revoke associated session
             refreshTokenRepository.revokeByFamilyId(incomingToken.getFamilyId());
             sessionRepository.revokeById(incomingToken.getSessionId());
+            blacklistSessionInRedis(incomingToken.getSessionId());
 
             recordSecurityEvent(null, "COMPROMISED_TOKEN_REPLAY_DETECTED",
                     "{\"familyId\":\"" + incomingToken.getFamilyId() + "\",\"sessionId\":\"" + incomingToken.getSessionId() + "\"}");
@@ -134,7 +154,13 @@ public class TokenRotationService {
         recordSecurityEvent(session.getUserId(), "REFRESH_SUCCESS",
                 "{\"familyId\":\"" + incomingToken.getFamilyId() + "\"}");
 
-        String accessToken = tokenProvider.generateToken(session.getUserId());
+        String accessToken = null;
+        try {
+            accessToken = tokenProvider.generateToken(session.getUserId(), session.getId());
+        } catch (Throwable ignored) {}
+        if (accessToken == null) {
+            accessToken = tokenProvider.generateToken(session.getUserId());
+        }
 
         return new RefreshTokenResponse(
                 accessToken,

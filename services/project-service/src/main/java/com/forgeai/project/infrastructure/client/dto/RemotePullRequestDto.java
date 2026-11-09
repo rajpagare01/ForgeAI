@@ -53,4 +53,14 @@ public class RemotePullRequestDto {
     private Instant mergedAt;
     private Instant createdAt;
     private Instant updatedAt;
+
+    public Boolean getIsMerged() {
+        if (isMerged != null) {
+            return isMerged;
+        }
+        if (state != null) {
+            return "MERGED".equalsIgnoreCase(state);
+        }
+        return Boolean.FALSE;
+    }
 }

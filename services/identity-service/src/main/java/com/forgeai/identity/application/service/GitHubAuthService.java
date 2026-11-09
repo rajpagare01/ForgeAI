@@ -67,6 +67,8 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
     private final SecurityEventService securityEventService;
     private final PasswordHasher passwordHasher;
     private final TransactionTemplate transactionTemplate;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.identity.infrastructure.outbox.OutboxService outboxService;
 
     private final String clientId;
     private final String clientSecret;
@@ -291,6 +293,17 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
                 newUser.setCreatedAt(Instant.now());
                 newUser.setUpdatedAt(Instant.now());
                 user = userRepository.save(newUser);
+
+                if (outboxService != null) {
+                    outboxService.publish(com.forgeai.identity.domain.event.UserCreatedEvent.builder()
+                            .userId(user.getId())
+                            .email(user.getEmail().value())
+                            .username(user.getUsername().value())
+                            .firstName(user.getFirstName())
+                            .lastName(user.getLastName())
+                            .timestamp(Instant.now())
+                            .build(), null);
+                }
 
                 GitHubIdentity identity = GitHubIdentity.builder()
                         .userId(user.getId())
@@ -537,7 +550,13 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
         refreshToken.setCreatedAt(Instant.now());
         refreshTokenRepository.save(refreshToken);
 
-        String token = tokenProvider.generateToken(user.getId());
+        String token = null;
+        try {
+            token = tokenProvider.generateToken(user.getId(), session.getId());
+        } catch (Throwable ignored) {}
+        if (token == null) {
+            token = tokenProvider.generateToken(user.getId());
+        }
 
         return new LoginResponse(
                 token,

@@ -79,20 +79,30 @@ public class ProjectOperationsController {
     public ResponseEntity<List<AuditEventEntity>> getRecentAuditEvents(
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
+            @RequestHeader(value = "X-Workspace-Id", required = false) String wsHeader,
             @RequestParam(defaultValue = "50") int limit) {
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
-        if (rawOrg == null || rawOrg.isBlank()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-        UUID organizationId;
-        try {
-            organizationId = UUID.fromString(rawOrg.trim());
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        if (rawOrg != null && !rawOrg.isBlank()) {
+            try {
+                UUID organizationId = UUID.fromString(rawOrg.trim());
+                List<AuditEventEntity> events = auditService.getRecentEventsForTenant(organizationId, limit);
+                return ResponseEntity.ok(events);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
         }
 
-        List<AuditEventEntity> events = auditService.getRecentEventsForTenant(organizationId, limit);
-        return ResponseEntity.ok(events);
+        if (wsHeader != null && !wsHeader.isBlank()) {
+            try {
+                UUID workspaceId = UUID.fromString(wsHeader.trim());
+                List<AuditEventEntity> events = auditService.getRecentEventsForWorkspace(workspaceId, limit);
+                return ResponseEntity.ok(events);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+        }
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 }

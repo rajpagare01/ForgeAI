@@ -1507,19 +1507,28 @@ function AiInsightsContent() {
 
     const connectStream = async () => {
       try {
-        const token = localStorage.getItem("forgeai_token");
-        const orgId = localStorage.getItem("forgeai_org_id") || localStorage.getItem("forgeai_workspace_id") || "00000000-0000-0000-0000-000000000001";
+        const token = apiClient.getAccessToken() || localStorage.getItem("forgeai_access_token");
+        const activeOrgId = apiClient.getActiveWorkspaceType() === "ORGANIZATION"
+          ? apiClient.getActiveOrgId()
+          : null;
+        const activeWsId = apiClient.getActiveWorkspaceId() || activeOrgId || "00000000-0000-0000-0000-000000000001";
         const baseUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        const streamHeaders: Record<string, string> = {
+          Accept: "text/event-stream",
+          "X-Workspace-Id": activeWsId,
+          "X-Workspace-Scope": apiClient.getActiveWorkspaceType(),
+        };
+        if (token) {
+          streamHeaders["Authorization"] = `Bearer ${token}`;
+        }
+        if (activeOrgId) {
+          streamHeaders["X-Org-Id"] = activeOrgId;
+        }
         const res = await fetch(
-          `${baseUrl}/api/v1/ai/events/stream?repository_id=${encodeURIComponent(selectedRepoId)}`,
+          `${baseUrl}/api/v1/ai/events/stream?repository_id=${encodeURIComponent(selectedRepoId)}&workspaceId=${encodeURIComponent(activeWsId)}`,
           {
             method: "GET",
-            headers: {
-              Accept: "text/event-stream",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              "X-Org-Id": orgId,
-              "X-Workspace-Id": orgId,
-            },
+            headers: streamHeaders,
             signal: controller.signal,
           }
         );

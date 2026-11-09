@@ -19,7 +19,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({UserAlreadyExistsException.class, org.springframework.dao.DataIntegrityViolationException.class})
     public ResponseEntity<ApiErrorResponse> handleUserAlreadyExists(Exception ex, WebRequest request) {
         log.warn("Identity conflict / integrity violation: {}", ex.getMessage());
-        return buildErrorResponse(HttpStatus.CONFLICT, "CONFLICT", "An account or workspace with this identifier already exists.", request);
+        String msg = (ex instanceof org.springframework.dao.DataIntegrityViolationException)
+                ? "A record with this identifier already exists"
+                : "An account or workspace with this identifier already exists.";
+        return buildErrorResponse(HttpStatus.CONFLICT, "CONFLICT", msg, request);
     }
 
     @ExceptionHandler(org.springframework.dao.DataAccessException.class)

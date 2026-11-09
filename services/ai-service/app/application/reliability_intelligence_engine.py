@@ -103,7 +103,7 @@ class ReliabilityIntelligenceEngine:
             "confidence": "HIGH",
             "detection_status": "LIKELY",
             "title": "Unchecked Optional Dereference Pattern",
-            "pattern": re.compile(r"""(?<!queue\.)(?<!_cv\.)(?<!isPresent\(\)\s&&\s)(?<!isPresent\(\)\s\?\s)\b(?:opt|optional|[a-zA-Z0-9_]*Opt|[a-zA-Z0-9_]*Optional)\.get\(\)"""),
+            "pattern": re.compile(r"""(?<!queue\.)(?<!_cv\.)(?<!isPresent\(\)\s&&\s)(?<!isPresent\(\)\s\?\s)\b[a-zA-Z0-9_]*(?:opt|optional)[a-zA-Z0-9_]*\.get\(\)""", re.IGNORECASE),
             "description": "Calling .get() directly on an Optional or container without verifying presence triggers runtime NoSuchElementException if value is absent.",
             "remediation": "Use .orElse(...), .orElseGet(...), or check .isPresent() before calling .get().",
             "is_blocker": False,

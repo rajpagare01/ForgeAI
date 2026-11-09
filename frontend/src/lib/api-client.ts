@@ -336,7 +336,7 @@ class ApiClient {
       if (process.env.NODE_ENV !== "production") {
         console.warn(`Gateway fetch failed for ${url}:`, networkError);
       }
-      const netErr: ApiError = new Error("Unable to reach the ForgeAI server. Please check your connection and try again.") as ApiError;
+      const netErr: ApiError = new Error(networkError?.message || "Unable to reach the ForgeAI server. Please check your connection and try again.") as ApiError;
       netErr.status = 0;
       netErr.isNetworkError = true;
       throw netErr;
@@ -365,12 +365,12 @@ class ApiClient {
         console.warn(`[ApiClient] Request to ${endpoint} failed (${response.status}):`, errorData);
       }
       const rawErrorMessage =
-        errorData?.message || errorData?.detail || errorData?.error || response.statusText || "";
+        errorData?.detail || errorData?.message || errorData?.error || response.statusText || "";
       const safeMessage = sanitizeUserFacingError(
         response.status,
         typeof rawErrorMessage === "string" ? rawErrorMessage : ""
       );
-      const apiError: ApiError = new Error(safeMessage) as ApiError;
+      const apiError: ApiError = new Error(rawErrorMessage || safeMessage) as ApiError;
       apiError.status = response.status;
       apiError.statusText = response.statusText;
       apiError.data = errorData;

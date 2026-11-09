@@ -12,10 +12,12 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class UserCreatedEvent implements DomainEvent {
 
     private UUID userId;
     private String email;
+    private String username;
     private String firstName;
     private String lastName;
 

@@ -43,7 +43,7 @@ function convertChainToNode(chain: TraceabilitySpineChain): TraceabilityNode {
   if (testRun) {
     totalTests = testRun.totalTests || totalTests;
     passedTests = testRun.passedTests || passedTests;
-    testStatus = testRun.status === "COMPLETED"
+    testStatus = (testRun.status === "COMPLETED" || testRun.status === "PASSED")
       ? (testRun.failedTests && testRun.failedTests > 0 ? "FAILED" : "PASSED")
       : (testRun.status === "FAILED" ? "FAILED" : "RUNNING");
   } else if (totalTests === 0) {

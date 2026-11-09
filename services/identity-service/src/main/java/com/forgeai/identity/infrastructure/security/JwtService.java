@@ -33,11 +33,21 @@ public class JwtService implements TokenProvider {
 
     @Override
     public String generateToken(UUID userId) {
-        return generateToken(userId, null, null, Collections.emptyList());
+        return generateToken(userId, null, null, null, Collections.emptyList());
+    }
+
+    @Override
+    public String generateToken(UUID userId, UUID sessionId) {
+        return generateToken(userId, sessionId, null, null, Collections.emptyList());
     }
 
     @Override
     public String generateToken(UUID userId, UUID orgId, String role, List<String> permissions) {
+        return generateToken(userId, null, orgId, role, permissions);
+    }
+
+    @Override
+    public String generateToken(UUID userId, UUID sessionId, UUID orgId, String role, List<String> permissions) {
         Instant now = Instant.now();
         Instant expiresAt = now.plusMillis(expirationMs);
 
@@ -51,6 +61,10 @@ public class JwtService implements TokenProvider {
                 .issuedAt(now)
                 .expiresAt(expiresAt)
                 .id(UUID.randomUUID().toString());
+
+        if (sessionId != null) {
+            claimsBuilder.claim("session_id", sessionId.toString());
+        }
 
         if (orgId != null) {
             claimsBuilder.claim("org_id", orgId.toString());

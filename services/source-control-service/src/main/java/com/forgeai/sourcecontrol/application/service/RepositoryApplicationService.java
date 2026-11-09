@@ -131,13 +131,13 @@ public class RepositoryApplicationService {
     // Reads
     // -------------------------------------------------------------------------
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
             UUID organizationId, UUID repositoryId) {
         return listPullRequests(organizationId, null, repositoryId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.PullRequest> listPullRequests(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
         return listPullRequests(organizationId, workspaceId, repositoryId,
@@ -244,6 +244,9 @@ public class RepositoryApplicationService {
                         ? repositoryRepository.findByIdAndOrganizationId(repositoryId, organizationId)
                         : java.util.Optional.empty())
                 .orElseThrow(() -> new ResourceNotFoundException("Repository not found: " + repositoryId));
+        if (organizationId == null && (repo.getOrganizationId() != null || !"PERSONAL".equalsIgnoreCase(repo.getScope()))) {
+            throw new ResourceNotFoundException("Repository not found: " + repositoryId);
+        }
         if (repo.getOrganizationId() == null && !"PERSONAL".equalsIgnoreCase(repo.getScope())) {
             throw new ResourceNotFoundException("Repository not found: " + repositoryId);
         }
@@ -251,18 +254,18 @@ public class RepositoryApplicationService {
         return repo;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(UUID organizationId, UUID repositoryId) {
         return listCommits(organizationId, null, repositoryId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(
             UUID organizationId, UUID workspaceId, UUID repositoryId) {
         return listCommits(organizationId, workspaceId, repositoryId, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<com.forgeai.sourcecontrol.domain.model.Commit> listCommits(
             UUID organizationId, UUID workspaceId, UUID repositoryId, String branch) {
         requireTenantOrWorkspace(organizationId, workspaceId);
@@ -1298,20 +1301,30 @@ public class RepositoryApplicationService {
     private UUID resolveEffectiveWorkspaceId(UUID organizationId, UUID workspaceId) {
         String scope = com.forgeai.sourcecontrol.infrastructure.security.TenantContext.getWorkspaceScope();
         if (organizationId != null) {
-            if (workspaceId != null && workspaceRepository != null) {
-                var wsOpt = workspaceRepository.findById(workspaceId);
-                if (wsOpt.isPresent()) {
-                    var ws = wsOpt.get();
-                    if (ws.getOrganizationId() != null && !organizationId.equals(ws.getOrganizationId())) {
+            if (workspaceId != null) {
+                if (workspaceRepository != null) {
+                    var wsOpt = workspaceRepository.findById(workspaceId);
+                    if (wsOpt.isPresent()) {
+                        var ws = wsOpt.get();
+                        if (ws.getOrganizationId() != null && !organizationId.equals(ws.getOrganizationId())) {
+                            throw new IllegalArgumentException(
+                                    "Organization context " + organizationId + " does not match workspace context "
+                                            + workspaceId);
+                        }
+                        if ("PERSONAL".equalsIgnoreCase(ws.getType()) && !organizationId.equals(workspaceId)) {
+                            throw new IllegalArgumentException(
+                                    "Organization context " + organizationId + " does not match workspace context "
+                                            + workspaceId);
+                        }
+                    } else if (!organizationId.equals(workspaceId)) {
                         throw new IllegalArgumentException(
                                 "Organization context " + organizationId + " does not match workspace context "
                                         + workspaceId);
                     }
-                    if ("PERSONAL".equalsIgnoreCase(ws.getType()) && !organizationId.equals(workspaceId)) {
-                        throw new IllegalArgumentException(
-                                "Organization context " + organizationId + " does not match workspace context "
-                                        + workspaceId);
-                    }
+                } else if (!organizationId.equals(workspaceId)) {
+                    throw new IllegalArgumentException(
+                            "Organization context " + organizationId + " does not match workspace context "
+                                    + workspaceId);
                 }
             }
             if (!isPersonalWorkspace(workspaceId) || "ORGANIZATION".equalsIgnoreCase(scope)) {
