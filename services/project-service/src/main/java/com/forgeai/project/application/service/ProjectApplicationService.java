@@ -144,6 +144,10 @@ public class ProjectApplicationService {
         WorkspaceJpaEntity workspace = workspaceRepository.findById(project.getWorkspaceId())
                 .orElse(null);
 
+        if (project.getOrganizationId() == null && callerOrgId != null && !callerOrgId.equals(project.getWorkspaceId())) {
+            throw new ResourceNotFoundException("Project not found: id=" + projectId);
+        }
+
         if (workspace != null && "PERSONAL".equalsIgnoreCase(workspace.getType())) {
             if (callerUserId == null || !callerUserId.equals(workspace.getOwnerUserId())) {
                 log.warn("Access denied: User {} does not own personal project {}", callerUserId, projectId);
@@ -213,12 +217,15 @@ public class ProjectApplicationService {
             WorkspaceJpaEntity workspace = wsOpt
                     .orElseThrow(() -> new ResourceNotFoundException("Workspace not found: " + workspaceId));
             if ("PERSONAL".equalsIgnoreCase(workspace.getType())) {
+                if (organizationId != null && !organizationId.equals(workspaceId)) {
+                    throw new AccessDeniedException("Access denied: Cannot query personal workspace under organization context");
+                }
                 if (callerUserId == null || !callerUserId.equals(workspace.getOwnerUserId())) {
-                    throw new AccessDeniedException("Access denied: You do not own this personal workspace");
+                    throw new AccessDeniedException("Access denied: Personal workspace belongs to another user");
                 }
             } else if ("ORGANIZATION".equalsIgnoreCase(workspace.getType())) {
-                if (organizationId != null && !organizationId.equals(workspace.getOrganizationId())) {
-                    throw new AccessDeniedException("Access denied: Organization mismatch for workspace " + workspaceId);
+                if (organizationId == null || !organizationId.equals(workspace.getOrganizationId())) {
+                    throw new AccessDeniedException("Access denied: Organization context required for workspace " + workspaceId);
                 }
             }
             return projectRepository.findAllByWorkspaceId(workspace.getId());

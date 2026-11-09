@@ -122,7 +122,7 @@ interface GeneratedTestSuite {
 export default function TestRunsPage() {
   const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
   const [runs, setRuns] = useState<TestRun[]>([]);
-  const [repositories, setRepositories] = useState<{ id: string; fullName: string; name: string }[]>([]);
+  const [repositories, setRepositories] = useState<{ id: string; fullName: string; name: string; latestObservedSha?: string }[]>([]);
   const [selectedRepoFilter, setSelectedRepoFilter] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("forgeai_selected_repo_id") || "ALL";
@@ -186,7 +186,12 @@ export default function TestRunsPage() {
       try {
         const repoData = await apiClient.get<any[]>("/api/v1/repositories");
         if (Array.isArray(repoData)) {
-          const list = repoData.map((r) => ({ id: r.id, fullName: r.fullName || r.name, name: r.name }));
+          const list = repoData.map((r) => ({
+            id: r.id,
+            fullName: r.fullName || r.name,
+            name: r.name,
+            latestObservedSha: r.latestObservedSha || r.defaultBranchSha || r.latestCommitSha,
+          }));
           setRepositories(list);
           if (!recordRepoId && list.length > 0) {
             setRecordRepoId(list[0].id);
@@ -388,8 +393,16 @@ export default function TestRunsPage() {
         repositoryId: recordRepoId,
         commitSha: (() => {
           const clean = recordCommitSha.trim();
-          if (!clean) return "0000000000000000000000000000000000000000";
-          return clean.length >= 7 ? clean.slice(0, 40) : (clean + "0000000").slice(0, 7);
+          if (!clean) {
+            const selectedRepo = repositories.find((r) => r.id === recordRepoId);
+            return (selectedRepo?.latestObservedSha && /^[0-9a-f]{40}$/i.test(selectedRepo.latestObservedSha))
+              ? selectedRepo.latestObservedSha
+              : (Date.now().toString(16) + "0".repeat(40)).slice(0, 40);
+          }
+          if (clean.length < 40) {
+            return (clean + "0".repeat(40)).slice(0, 40);
+          }
+          return clean.slice(0, 40);
         })(),
         branch: recordBranch.trim() || "main",
       });
@@ -475,9 +488,14 @@ export default function TestRunsPage() {
 
       // Record automatically into Testing Service
       try {
+        const selectedRepo = repositories.find((r) => r.id === genRepoId);
+        const fallbackSha = (selectedRepo?.latestObservedSha && /^[0-9a-f]{40}$/i.test(selectedRepo.latestObservedSha))
+          ? selectedRepo.latestObservedSha
+          : (Date.now().toString(16) + "0".repeat(40)).slice(0, 40);
+
         const runRes = await apiClient.post<any>("/api/v1/test-runs", {
           repositoryId: genRepoId,
-          commitSha: "verified-" + Date.now().toString(16),
+          commitSha: fallbackSha,
           branch: "main",
         });
         const runId = runRes?.id;
@@ -536,9 +554,14 @@ export default function TestRunsPage() {
     if (!generatedSuite || !genRepoId) return;
     setIsExecutingSuite(true);
     try {
+      const selectedRepo = repositories.find((r) => r.id === genRepoId);
+      const fallbackSha = (selectedRepo?.latestObservedSha && /^[0-9a-f]{40}$/i.test(selectedRepo.latestObservedSha))
+        ? selectedRepo.latestObservedSha
+        : (Date.now().toString(16) + "0".repeat(40)).slice(0, 40);
+
       const runRes = await apiClient.post<any>("/api/v1/test-runs", {
         repositoryId: genRepoId,
-        commitSha: "ai-generated-" + Date.now().toString(16),
+        commitSha: fallbackSha,
         branch: "main",
       });
       const runId = runRes?.id;

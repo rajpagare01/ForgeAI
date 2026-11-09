@@ -157,15 +157,20 @@ public class PushEventHandler {
                     }
 
                     List<AiServiceClient.ChangedFilePayload> changedFiles = new ArrayList<>();
+                    int syncFileFetches = 0;
+                    final int MAX_SYNC_FILE_FETCH = 15;
                     for (Map.Entry<String, String> entry : fileStatusMap.entrySet()) {
                         String path = entry.getKey();
                         String status = entry.getValue();
                         String content = null;
                         if (!"removed".equals(status) && gitHubAppClient != null && repository.getInstallationId() != null && repository.getInstallationId() > 0) {
-                            try {
-                                content = gitHubAppClient.getFileContent(repository.getInstallationId(), repository.getFullName(), path, afterSha).orElse(null);
-                            } catch (Exception e) {
-                                log.debug("Could not fetch file content for {}@{}: {}", path, afterSha, e.getMessage());
+                            if (syncFileFetches < MAX_SYNC_FILE_FETCH) {
+                                try {
+                                    content = gitHubAppClient.getFileContent(repository.getInstallationId(), repository.getFullName(), path, afterSha).orElse(null);
+                                    syncFileFetches++;
+                                } catch (Exception e) {
+                                    log.debug("Could not fetch file content for {}@{}: {}", path, afterSha, e.getMessage());
+                                }
                             }
                         }
                         changedFiles.add(new AiServiceClient.ChangedFilePayload(path, status, content));

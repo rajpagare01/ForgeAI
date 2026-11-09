@@ -29,6 +29,7 @@ public class WebhookIngestionService {
     private final InstallationEventHandler installationEventHandler;
     private final WorkflowRunEventHandler workflowRunEventHandler;
     private final ObjectMapper objectMapper;
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     public WebhookIngestionService(
             GitHubSignatureVerifier signatureVerifier,
@@ -37,6 +38,20 @@ public class WebhookIngestionService {
             PullRequestEventHandler pullRequestEventHandler,
             InstallationEventHandler installationEventHandler,
             WorkflowRunEventHandler workflowRunEventHandler) {
+        this(signatureVerifier, webhookDeliveryRepository, pushEventHandler, pullRequestEventHandler,
+                installationEventHandler, workflowRunEventHandler, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WebhookIngestionService(
+            GitHubSignatureVerifier signatureVerifier,
+            WebhookDeliveryRepository webhookDeliveryRepository,
+            PushEventHandler pushEventHandler,
+            PullRequestEventHandler pullRequestEventHandler,
+            InstallationEventHandler installationEventHandler,
+            WorkflowRunEventHandler workflowRunEventHandler,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            org.springframework.transaction.PlatformTransactionManager transactionManager) {
         this.signatureVerifier = signatureVerifier;
         this.webhookDeliveryRepository = webhookDeliveryRepository;
         this.pushEventHandler = pushEventHandler;
@@ -44,9 +59,9 @@ public class WebhookIngestionService {
         this.installationEventHandler = installationEventHandler;
         this.workflowRunEventHandler = workflowRunEventHandler;
         this.objectMapper = new ObjectMapper();
+        this.transactionManager = transactionManager;
     }
 
-    @Transactional
     public WebhookIngestionResult ingestWebhook(String deliveryId,
                                                 String eventType,
                                                 String signatureHeader,
@@ -75,7 +90,7 @@ public class WebhookIngestionService {
                 .createdAt(Instant.now())
                 .build();
 
-        WebhookDelivery savedDelivery = webhookDeliveryRepository.save(delivery);
+        WebhookDelivery savedDelivery = saveDeliveryRequiresNew(delivery);
 
         // 4. Process event downstream
         try {
@@ -84,7 +99,7 @@ public class WebhookIngestionService {
 
             savedDelivery.setStatus(WebhookDeliveryStatus.PROCESSED);
             savedDelivery.setProcessedAt(Instant.now());
-            webhookDeliveryRepository.save(savedDelivery);
+            saveDeliveryRequiresNew(savedDelivery);
 
             return WebhookIngestionResult.builder()
                     .deliveryId(deliveryId)
@@ -97,9 +112,19 @@ public class WebhookIngestionService {
         } catch (Exception e) {
             log.error("Failed to process webhook delivery {}: {}", deliveryId, e.getMessage(), e);
             savedDelivery.setStatus(WebhookDeliveryStatus.FAILED);
-            webhookDeliveryRepository.save(savedDelivery);
+            saveDeliveryRequiresNew(savedDelivery);
             throw new RuntimeException("Error processing webhook payload", e);
         }
+    }
+
+    private WebhookDelivery saveDeliveryRequiresNew(WebhookDelivery delivery) {
+        if (transactionManager != null) {
+            org.springframework.transaction.support.TransactionTemplate tx =
+                    new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            tx.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            return tx.execute(statusTx -> webhookDeliveryRepository.save(delivery));
+        }
+        return webhookDeliveryRepository.save(delivery);
     }
 
     private void processEvent(String eventType, JsonNode rootNode, String deliveryId) {

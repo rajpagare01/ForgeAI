@@ -13,6 +13,7 @@ public interface CodeLinkRepository {
     Optional<CodeLink> findByIdAndOrganizationId(UUID id, UUID organizationId);
     List<CodeLink> findAllByOrganizationIdAndTaskId(UUID organizationId, UUID taskId);
     List<CodeLink> findAllByTaskId(UUID taskId);
+    List<CodeLink> findAllByLinkTypeAndExternalRef(CodeLinkType linkType, String externalRef);
     boolean existsByTaskIdAndLinkTypeAndExternalRef(UUID taskId, CodeLinkType linkType, String externalRef);
 }
 

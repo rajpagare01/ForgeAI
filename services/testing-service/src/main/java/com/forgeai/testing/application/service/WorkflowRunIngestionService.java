@@ -53,18 +53,27 @@ public class WorkflowRunIngestionService {
     private final TestRunRepository testRunRepository;
     private final TestingMetrics testingMetrics;
     private final StructuredLogger structuredLogger;
+    private final com.forgeai.testing.infrastructure.outbox.OutboxService outboxService;
 
     public WorkflowRunIngestionService(TestRunRepository testRunRepository) {
-        this(testRunRepository, null, null);
+        this(testRunRepository, null, null, null);
+    }
+
+    public WorkflowRunIngestionService(TestRunRepository testRunRepository,
+            TestingMetrics testingMetrics,
+            StructuredLogger structuredLogger) {
+        this(testRunRepository, testingMetrics, structuredLogger, null);
     }
 
     @Autowired
     public WorkflowRunIngestionService(TestRunRepository testRunRepository,
             @Autowired(required = false) TestingMetrics testingMetrics,
-            @Autowired(required = false) StructuredLogger structuredLogger) {
+            @Autowired(required = false) StructuredLogger structuredLogger,
+            @Autowired(required = false) com.forgeai.testing.infrastructure.outbox.OutboxService outboxService) {
         this.testRunRepository = testRunRepository;
         this.testingMetrics = testingMetrics;
         this.structuredLogger = structuredLogger;
+        this.outboxService = outboxService;
     }
 
     /**
@@ -158,6 +167,8 @@ public class WorkflowRunIngestionService {
                     "Created TestRun for workflow_run: id={}, orgId={}, repoId={}, workflowRunId={}, status={}, conclusion={}",
                     saved.getId(), request.getOrganizationId(), request.getRepositoryId(),
                     request.getWorkflowRunId(), request.getStatus(), request.getConclusion());
+
+            publishWorkflowRunOutboxEvent(saved, request.getWorkflowRunId());
 
             if (domainStatus == TestRunStatus.PASSED) {
                 if (testingMetrics != null)
@@ -253,6 +264,8 @@ public class WorkflowRunIngestionService {
                     updated.getId(), request.getOrganizationId(), request.getWorkflowRunId(),
                     currentGithubStatus, incomingStatus, updated.getConclusion());
 
+            publishWorkflowRunOutboxEvent(updated, request.getWorkflowRunId());
+
             if (domainStatus == TestRunStatus.PASSED) {
                 if (testingMetrics != null)
                     testingMetrics.recordWorkflowRunCompleted();
@@ -310,5 +323,44 @@ public class WorkflowRunIngestionService {
             }
             default -> TestRunStatus.RUNNING;
         };
+    }
+
+    private void publishWorkflowRunOutboxEvent(TestRun run, Long workflowRunId) {
+        if (outboxService == null || run == null || workflowRunId == null) {
+            return;
+        }
+        String idempotencyKey = "wf-run-complete-" + workflowRunId;
+        if (run.getStatus() == TestRunStatus.PASSED) {
+            com.forgeai.testing.domain.event.TestRunCompletedEvent completedEvent =
+                    com.forgeai.testing.domain.event.TestRunCompletedEvent.builder()
+                            .testRunId(run.getId())
+                            .organizationId(run.getOrganizationId())
+                            .workspaceId(run.getWorkspaceId())
+                            .scope(run.getScope())
+                            .repositoryId(run.getRepositoryId())
+                            .commitSha(run.getCommitSha())
+                            .totalTests(run.getTotalTests())
+                            .passedTests(run.getPassedTests())
+                            .failedTests(run.getFailedTests())
+                            .skippedTests(run.getSkippedTests())
+                            .durationMs(run.getDurationMs())
+                            .timestamp(Instant.now())
+                            .build();
+            outboxService.publish(completedEvent, idempotencyKey);
+        } else if (run.getStatus() == TestRunStatus.FAILED) {
+            com.forgeai.testing.domain.event.TestRunFailedEvent failedEvent =
+                    com.forgeai.testing.domain.event.TestRunFailedEvent.builder()
+                            .testRunId(run.getId())
+                            .organizationId(run.getOrganizationId())
+                            .workspaceId(run.getWorkspaceId())
+                            .scope(run.getScope())
+                            .repositoryId(run.getRepositoryId())
+                            .commitSha(run.getCommitSha())
+                            .totalTests(run.getTotalTests())
+                            .failedTests(run.getFailedTests())
+                            .timestamp(Instant.now())
+                            .build();
+            outboxService.publish(failedEvent, idempotencyKey);
+        }
     }
 }

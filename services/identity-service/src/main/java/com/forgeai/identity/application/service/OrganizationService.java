@@ -13,6 +13,8 @@ import com.forgeai.identity.domain.event.OrganizationCreatedEvent;
 import com.forgeai.identity.infrastructure.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,9 +37,15 @@ public class OrganizationService {
     private final OutboxService outboxService;
     private final AuditService auditService;
     private WorkspaceService workspaceService;
+    @Autowired(required = false)
+    private StringRedisTemplate redisTemplate;
 
     public void setWorkspaceService(WorkspaceService workspaceService) {
         this.workspaceService = workspaceService;
+    }
+
+    public void setRedisTemplate(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
     }
 
     public OrganizationService(OrganizationRepository organizationRepository,
@@ -47,7 +55,7 @@ public class OrganizationService {
                                SecurityEventService securityEventService,
                                OutboxService outboxService) {
         this(organizationRepository, membershipRepository, roleRepository, userRepository,
-                securityEventService, outboxService, null, null);
+                securityEventService, outboxService, null, null, null);
     }
 
     public OrganizationService(OrganizationRepository organizationRepository,
@@ -58,18 +66,31 @@ public class OrganizationService {
                                OutboxService outboxService,
                                AuditService auditService) {
         this(organizationRepository, membershipRepository, roleRepository, userRepository,
-                securityEventService, outboxService, auditService, null);
+                securityEventService, outboxService, auditService, null, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public OrganizationService(OrganizationRepository organizationRepository,
                                OrganizationMembershipRepository membershipRepository,
                                RoleRepository roleRepository,
                                UserRepository userRepository,
                                SecurityEventService securityEventService,
                                OutboxService outboxService,
-                               @org.springframework.beans.factory.annotation.Autowired(required = false) AuditService auditService,
-                               @org.springframework.beans.factory.annotation.Autowired(required = false) WorkspaceService workspaceService) {
+                               AuditService auditService,
+                               WorkspaceService workspaceService) {
+        this(organizationRepository, membershipRepository, roleRepository, userRepository,
+                securityEventService, outboxService, auditService, workspaceService, null);
+    }
+
+    @Autowired
+    public OrganizationService(OrganizationRepository organizationRepository,
+                               OrganizationMembershipRepository membershipRepository,
+                               RoleRepository roleRepository,
+                               UserRepository userRepository,
+                               SecurityEventService securityEventService,
+                               OutboxService outboxService,
+                               @Autowired(required = false) AuditService auditService,
+                               @Autowired(required = false) WorkspaceService workspaceService,
+                               @Autowired(required = false) StringRedisTemplate redisTemplate) {
         this.organizationRepository = organizationRepository;
         this.membershipRepository = membershipRepository;
         this.roleRepository = roleRepository;
@@ -78,6 +99,7 @@ public class OrganizationService {
         this.outboxService = outboxService;
         this.auditService = auditService;
         this.workspaceService = workspaceService;
+        this.redisTemplate = redisTemplate;
     }
 
     @Transactional
@@ -259,6 +281,7 @@ public class OrganizationService {
 
         OrganizationMembership saved = membershipRepository.save(membership);
 
+        evictRoleCache(targetUserId, organizationId);
         securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_ADDED", null, null, "{\"targetUserId\": \"" + targetUserId + "\"}");
         return saved;
     }
@@ -284,6 +307,7 @@ public class OrganizationService {
         membership.setUpdatedAt(Instant.now());
         membershipRepository.save(membership);
 
+        evictRoleCache(targetUserId, organizationId);
         securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_REMOVED", null, null, "{\"targetUserId\": \"" + targetUserId + "\"}");
     }
 
@@ -313,6 +337,7 @@ public class OrganizationService {
         membership.setUpdatedAt(Instant.now());
         OrganizationMembership saved = membershipRepository.save(membership);
 
+        evictRoleCache(targetUserId, organizationId);
         securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_ROLE_CHANGED", null, null, "{\"targetUserId\": \"" + targetUserId + "\", \"newRole\": \"" + newRoleName + "\"}");
 
         if (auditService != null) {
@@ -371,6 +396,8 @@ public class OrganizationService {
         currentOwnerMembership.setUpdatedAt(Instant.now());
         membershipRepository.save(currentOwnerMembership);
 
+        evictRoleCache(currentOwnerId, organizationId);
+        evictRoleCache(newOwnerId, organizationId);
         securityEventService.recordEvent(currentOwnerId, organizationId, "ORGANIZATION_OWNERSHIP_TRANSFERRED", null, null, "{\"newOwnerUserId\": \"" + newOwnerId + "\"}");
     }
 
@@ -394,7 +421,18 @@ public class OrganizationService {
         membership.setUpdatedAt(Instant.now());
         membershipRepository.save(membership);
 
+        evictRoleCache(currentUserId, organizationId);
         securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_MEMBER_LEFT", null, null, "{}");
+    }
+
+    private void evictRoleCache(UUID userId, UUID orgId) {
+        if (redisTemplate != null && userId != null && orgId != null) {
+            try {
+                redisTemplate.delete("user:role:" + userId + ":" + orgId);
+            } catch (Exception e) {
+                log.warn("Failed to evict Redis role cache for user={} org={}: {}", userId, orgId, e.getMessage());
+            }
+        }
     }
 
     private Organization findActiveOrganization(UUID organizationId) {

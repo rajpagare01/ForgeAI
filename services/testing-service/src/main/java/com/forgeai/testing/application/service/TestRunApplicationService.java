@@ -58,7 +58,7 @@ public class TestRunApplicationService {
                 .organizationId(organizationId)
                 .scope(effectiveScope)
                 .repositoryId(command.repositoryId())
-                .commitSha(command.commitSha())
+                .commitSha(command.commitSha() != null ? command.commitSha().trim() : null)
                 .pullRequestNumber(command.pullRequestNumber())
                 .workflowRunId(command.workflowRunId())
                 .status(TestRunStatus.RUNNING)
@@ -169,7 +169,7 @@ public class TestRunApplicationService {
     public List<TestRun> listTestRuns(UUID workspaceId, UUID organizationId, UUID repositoryId, String commitSha) {
         UUID effectiveWsId = resolveWorkspace(workspaceId, organizationId);
         if (commitSha != null && !commitSha.isBlank()) {
-            return testRunRepository.findAllByWorkspaceIdAndCommitSha(effectiveWsId, commitSha);
+            return testRunRepository.findAllByWorkspaceIdAndCommitSha(effectiveWsId, commitSha.trim());
         }
         if (repositoryId != null) {
             return testRunRepository.findAllByWorkspaceIdAndRepositoryId(effectiveWsId, repositoryId);

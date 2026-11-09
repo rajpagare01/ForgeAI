@@ -12,6 +12,7 @@ public interface SpringDataCodeLinkRepository extends JpaRepository<CodeLinkJpaE
     Optional<CodeLinkJpaEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
     List<CodeLinkJpaEntity> findAllByOrganizationIdAndTaskId(UUID organizationId, UUID taskId);
     List<CodeLinkJpaEntity> findAllByTaskId(UUID taskId);
+    List<CodeLinkJpaEntity> findAllByLinkTypeAndExternalRef(CodeLinkType linkType, String externalRef);
     boolean existsByTaskIdAndLinkTypeAndExternalRef(UUID taskId, CodeLinkType linkType, String externalRef);
 }
 

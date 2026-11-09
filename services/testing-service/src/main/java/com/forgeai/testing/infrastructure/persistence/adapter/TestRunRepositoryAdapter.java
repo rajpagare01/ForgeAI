@@ -94,14 +94,16 @@ public class TestRunRepositoryAdapter implements TestRunRepository {
 
     @Override
     public List<TestRun> findAllByOrganizationIdAndCommitSha(UUID organizationId, String commitSha) {
-        return jpaRepository.findAllByOrganizationIdAndCommitSha(organizationId, commitSha).stream()
+        String trimmedSha = commitSha != null ? commitSha.trim() : null;
+        return jpaRepository.findAllByOrganizationIdAndCommitSha(organizationId, trimmedSha).stream()
                 .map(mapper::toDomain)
                 .toList();
     }
 
     @Override
     public List<TestRun> findAllByWorkspaceIdAndCommitSha(UUID workspaceId, String commitSha) {
-        return jpaRepository.findAllByWorkspaceIdAndCommitSha(workspaceId, commitSha).stream()
+        String trimmedSha = commitSha != null ? commitSha.trim() : null;
+        return jpaRepository.findAllByWorkspaceIdAndCommitSha(workspaceId, trimmedSha).stream()
                 .map(mapper::toDomain)
                 .toList();
     }

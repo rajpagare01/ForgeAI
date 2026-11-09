@@ -86,6 +86,10 @@ public class RabbitMqEventConsumer {
             } else if ("BRANCH_CREATED".equalsIgnoreCase(eventType)) {
                 BranchCreatedEvent event = objectMapper.treeToValue(payloadNode, BranchCreatedEvent.class);
                 sourceControlEventConsumer.onBranchCreated(event);
+            } else if ("PULL_REQUEST_MERGED".equalsIgnoreCase(eventType)) {
+                java.util.Map<String, Object> payload = objectMapper.convertValue(
+                        payloadNode, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+                sourceControlEventConsumer.onPullRequestMerged(payload);
             }
         } catch (Exception e) {
             log.error("[RabbitMQ Consumer] Failed to process source-control event: {}", e.getMessage(), e);

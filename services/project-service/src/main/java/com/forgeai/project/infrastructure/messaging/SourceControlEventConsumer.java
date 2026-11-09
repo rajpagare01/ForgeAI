@@ -59,6 +59,10 @@ public class SourceControlEventConsumer {
                 onPullRequestOpened(prEvent);
             } else if (payload instanceof BranchCreatedEvent branchEvent) {
                 onBranchCreated(branchEvent);
+            } else if (payload instanceof java.util.Map<?, ?> mapPayload) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> typedMap = (java.util.Map<String, Object>) mapPayload;
+                onPullRequestMerged(typedMap);
             }
         } finally {
             if (traceId != null) {
@@ -145,6 +149,62 @@ public class SourceControlEventConsumer {
                 }
             } else {
                 log.debug("No matching task found for key {} in org {} ws {}", taskKey, event.getOrganizationId(), event.getWorkspaceId());
+            }
+        }
+    }
+
+    @EventListener
+    @Transactional
+    public void onPullRequestMerged(java.util.Map<String, Object> eventPayload) {
+        if (eventPayload == null || eventPayload.isEmpty()) {
+            return;
+        }
+
+        String title = eventPayload.get("title") != null ? String.valueOf(eventPayload.get("title")) : "";
+        String sourceBranch = eventPayload.get("sourceBranch") != null ? String.valueOf(eventPayload.get("sourceBranch")) : "";
+        String body = eventPayload.get("body") != null ? String.valueOf(eventPayload.get("body")) : "";
+        String combinedText = title + " " + sourceBranch + " " + body;
+
+        UUID organizationId = null;
+        if (eventPayload.get("organizationId") != null) {
+            try {
+                organizationId = UUID.fromString(String.valueOf(eventPayload.get("organizationId")));
+            } catch (Exception ignored) {}
+        }
+        UUID workspaceId = null;
+        if (eventPayload.get("workspaceId") != null) {
+            try {
+                workspaceId = UUID.fromString(String.valueOf(eventPayload.get("workspaceId")));
+            } catch (Exception ignored) {}
+        }
+
+        Set<String> matchedTaskKeys = extractTaskKeys(combinedText);
+        for (String taskKey : matchedTaskKeys) {
+            Optional<Task> taskOpt = resolveTask(organizationId, workspaceId, taskKey);
+            if (taskOpt.isPresent()) {
+                Task task = taskOpt.get();
+                if (task.getStatus() != com.forgeai.project.domain.model.TaskStatus.DONE) {
+                    task.setStatus(com.forgeai.project.domain.model.TaskStatus.DONE);
+                    task.setUpdatedAt(Instant.now());
+                    taskRepository.save(task);
+                    log.info("Auto-progressed task {} to DONE on PR merge", taskKey);
+                }
+            }
+        }
+
+        Object prNumber = eventPayload.get("number");
+        if (prNumber != null) {
+            String externalRef = "PR-#" + prNumber;
+            List<CodeLink> links = codeLinkRepository.findAllByLinkTypeAndExternalRef(CodeLinkType.PULL_REQUEST, externalRef);
+            for (CodeLink link : links) {
+                taskRepository.findById(link.getTaskId()).ifPresent(task -> {
+                    if (task.getStatus() != com.forgeai.project.domain.model.TaskStatus.DONE) {
+                        task.setStatus(com.forgeai.project.domain.model.TaskStatus.DONE);
+                        task.setUpdatedAt(Instant.now());
+                        taskRepository.save(task);
+                        log.info("Auto-progressed task {} ({}) to DONE via linked PR {}", task.getTaskKey(), task.getId(), externalRef);
+                    }
+                });
             }
         }
     }

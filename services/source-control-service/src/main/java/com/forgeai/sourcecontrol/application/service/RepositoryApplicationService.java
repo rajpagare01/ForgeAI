@@ -401,13 +401,33 @@ public class RepositoryApplicationService {
 
             if (existing.isPresent()) {
                 var pr = existing.get();
+                var oldStatus = pr.getStatus();
                 pr.setTitle(ghPr.title());
                 pr.setBody(ghPr.body());
                 pr.setSourceBranch(ghPr.sourceBranch());
                 pr.setTargetBranch(ghPr.targetBranch());
                 pr.setStatus(status);
                 pr.setUpdatedAt(Instant.now());
-                savedList.add(pullRequestRepository.save(pr));
+                var savedPr = pullRequestRepository.save(pr);
+                savedList.add(savedPr);
+                if (outboxService != null && status == com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED
+                        && oldStatus != com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED) {
+                    com.forgeai.sourcecontrol.domain.event.PullRequestMergedEvent mergedEvent =
+                            com.forgeai.sourcecontrol.domain.event.PullRequestMergedEvent.builder()
+                                    .pullRequestId(savedPr.getId())
+                                    .organizationId(repo.getOrganizationId())
+                                    .workspaceId(repo.getWorkspaceId())
+                                    .repositoryId(repo.getId())
+                                    .githubPrId(savedPr.getGithubPrId())
+                                    .number(savedPr.getNumber())
+                                    .title(savedPr.getTitle())
+                                    .mergedBy(ghPr.authorLogin())
+                                    .mergedAt(ghPr.mergedAt() != null ? ghPr.mergedAt() : Instant.now())
+                                    .timestamp(Instant.now())
+                                    .build();
+                    outboxService.publish(mergedEvent, "sync-pr-merged-" + savedPr.getId(), "PullRequest",
+                            savedPr.getId() != null ? savedPr.getId().toString() : String.valueOf(savedPr.getNumber()));
+                }
             } else {
                 var pr = com.forgeai.sourcecontrol.domain.model.PullRequest.builder()
                         .organizationId(repo.getOrganizationId())
@@ -426,24 +446,42 @@ public class RepositoryApplicationService {
                         .build();
                 com.forgeai.sourcecontrol.domain.model.PullRequest savedPr = pullRequestRepository.save(pr);
                 savedList.add(savedPr);
-                if (outboxService != null && status == com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN) {
-                    com.forgeai.sourcecontrol.domain.event.PullRequestOpenedEvent prEvent =
-                            com.forgeai.sourcecontrol.domain.event.PullRequestOpenedEvent.builder()
-                                    .pullRequestId(savedPr.getId())
-                                    .organizationId(repo.getOrganizationId())
-                                    .workspaceId(repo.getWorkspaceId())
-                                    .repositoryId(repo.getId())
-                                    .githubPrId(savedPr.getGithubPrId())
-                                    .number(savedPr.getNumber())
-                                    .title(savedPr.getTitle())
-                                    .body(savedPr.getBody())
-                                    .sourceBranch(savedPr.getSourceBranch())
-                                    .targetBranch(savedPr.getTargetBranch())
-                                    .authorGithubId(savedPr.getAuthorGithubId())
-                                    .timestamp(Instant.now())
-                                    .build();
-                    outboxService.publish(prEvent, "sync-pr-" + savedPr.getId(), "PullRequest",
-                            savedPr.getId() != null ? savedPr.getId().toString() : String.valueOf(savedPr.getNumber()));
+                if (outboxService != null) {
+                    if (status == com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN) {
+                        com.forgeai.sourcecontrol.domain.event.PullRequestOpenedEvent prEvent =
+                                com.forgeai.sourcecontrol.domain.event.PullRequestOpenedEvent.builder()
+                                        .pullRequestId(savedPr.getId())
+                                        .organizationId(repo.getOrganizationId())
+                                        .workspaceId(repo.getWorkspaceId())
+                                        .repositoryId(repo.getId())
+                                        .githubPrId(savedPr.getGithubPrId())
+                                        .number(savedPr.getNumber())
+                                        .title(savedPr.getTitle())
+                                        .body(savedPr.getBody())
+                                        .sourceBranch(savedPr.getSourceBranch())
+                                        .targetBranch(savedPr.getTargetBranch())
+                                        .authorGithubId(savedPr.getAuthorGithubId())
+                                        .timestamp(Instant.now())
+                                        .build();
+                        outboxService.publish(prEvent, "sync-pr-" + savedPr.getId(), "PullRequest",
+                                savedPr.getId() != null ? savedPr.getId().toString() : String.valueOf(savedPr.getNumber()));
+                    } else if (status == com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED) {
+                        com.forgeai.sourcecontrol.domain.event.PullRequestMergedEvent mergedEvent =
+                                com.forgeai.sourcecontrol.domain.event.PullRequestMergedEvent.builder()
+                                        .pullRequestId(savedPr.getId())
+                                        .organizationId(repo.getOrganizationId())
+                                        .workspaceId(repo.getWorkspaceId())
+                                        .repositoryId(repo.getId())
+                                        .githubPrId(savedPr.getGithubPrId())
+                                        .number(savedPr.getNumber())
+                                        .title(savedPr.getTitle())
+                                        .mergedBy(ghPr.authorLogin())
+                                        .mergedAt(ghPr.mergedAt() != null ? ghPr.mergedAt() : Instant.now())
+                                        .timestamp(Instant.now())
+                                        .build();
+                        outboxService.publish(mergedEvent, "sync-pr-merged-" + savedPr.getId(), "PullRequest",
+                                savedPr.getId() != null ? savedPr.getId().toString() : String.valueOf(savedPr.getNumber()));
+                    }
                 }
             }
         }
@@ -469,13 +507,18 @@ public class RepositoryApplicationService {
                         prNumber);
                 List<com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestFile> enrichedFiles = new java.util.ArrayList<>();
                 if (detail.files() != null) {
+                    int syncFileFetches = 0;
+                    final int MAX_SYNC_FILE_FETCH = 15;
                     for (var f : detail.files()) {
                         String content = null;
                         if (!"removed".equalsIgnoreCase(f.status())) {
-                            content = gitHubAppClient
-                                    .getFileContent(repo.getInstallationId(), repo.getFullName(), f.filename(),
-                                            detail.headSha())
-                                    .orElse(null);
+                            if (syncFileFetches < MAX_SYNC_FILE_FETCH) {
+                                content = gitHubAppClient
+                                        .getFileContent(repo.getInstallationId(), repo.getFullName(), f.filename(),
+                                                detail.headSha())
+                                        .orElse(null);
+                                syncFileFetches++;
+                            }
                         }
                         enrichedFiles.add(new com.forgeai.sourcecontrol.infrastructure.github.GitHubPullRequestFile(
                                 f.filename(), f.status(), f.additions(), f.deletions(), f.changes(),
@@ -486,10 +529,14 @@ public class RepositoryApplicationService {
                 // Update or save local pull request record
                 Optional<com.forgeai.sourcecontrol.domain.model.PullRequest> existing = pullRequestRepository
                         .findByRepositoryIdAndNumber(repo.getId(), prNumber);
-                com.forgeai.sourcecontrol.domain.model.PullRequestStatus status = "closed"
-                        .equalsIgnoreCase(detail.state())
-                                ? com.forgeai.sourcecontrol.domain.model.PullRequestStatus.CLOSED
-                                : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN;
+                com.forgeai.sourcecontrol.domain.model.PullRequestStatus status;
+                if (existing.isPresent() && existing.get().getStatus() == com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED) {
+                    status = com.forgeai.sourcecontrol.domain.model.PullRequestStatus.MERGED;
+                } else {
+                    status = "closed".equalsIgnoreCase(detail.state())
+                            ? com.forgeai.sourcecontrol.domain.model.PullRequestStatus.CLOSED
+                            : com.forgeai.sourcecontrol.domain.model.PullRequestStatus.OPEN;
+                }
 
                 if (existing.isPresent()) {
                     var pr = existing.get();

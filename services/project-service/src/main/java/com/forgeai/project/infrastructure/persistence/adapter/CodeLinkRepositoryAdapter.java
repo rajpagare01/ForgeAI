@@ -53,6 +53,13 @@ public class CodeLinkRepositoryAdapter implements CodeLinkRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<CodeLink> findAllByLinkTypeAndExternalRef(CodeLinkType linkType, String externalRef) {
+        return springDataRepository.findAllByLinkTypeAndExternalRef(linkType, externalRef).stream()
+                .map(EntityDomainMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
 
     @Override
     public boolean existsByTaskIdAndLinkTypeAndExternalRef(UUID taskId, CodeLinkType linkType, String externalRef) {

@@ -40,9 +40,14 @@ public class AuditService {
         String traceId = MDC.get("traceId");
         String correlationId = MDC.get("correlationId");
 
-        UUID effectiveWsId = organizationId != null
-                ? organizationId
-                : com.forgeai.testing.infrastructure.security.TenantContext.getWorkspaceId();
+        UUID effectiveWsId = com.forgeai.testing.infrastructure.security.TenantContext.getWorkspaceId() != null
+                ? com.forgeai.testing.infrastructure.security.TenantContext.getWorkspaceId()
+                : organizationId;
+
+        if (organizationId == null && effectiveWsId == null) {
+            log.debug("Skipping testing audit event {} because both organizationId and workspaceId are null", action);
+            return null;
+        }
 
         String metadataJson = null;
         if (metadata != null && !metadata.isEmpty()) {
