@@ -1,7 +1,14 @@
 package com.forgeai.identity.infrastructure.outbox;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.forgeai.identity.domain.event.DomainEvent;
+import com.forgeai.identity.domain.event.EmailVerificationRequestedEvent;
 import com.forgeai.identity.domain.event.EventEnvelope;
+import com.forgeai.identity.domain.event.MemberRoleChangedEvent;
+import com.forgeai.identity.domain.event.OrganizationCreatedEvent;
+import com.forgeai.identity.domain.event.UserCreatedEvent;
+import com.forgeai.identity.domain.event.UserUpdatedEvent;
 import com.forgeai.identity.infrastructure.adapter.out.persistence.entity.OutboxEventEntity;
 import com.forgeai.identity.infrastructure.adapter.out.persistence.repository.OutboxEventRepository;
 import com.forgeai.identity.infrastructure.logging.StructuredLogger;
@@ -17,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -101,7 +109,39 @@ public class OutboxPublisherRelay {
         long start = System.currentTimeMillis();
 
         try {
-            EventEnvelope<?> envelope = objectMapper.readValue(entity.getPayload(), EventEnvelope.class);
+            JsonNode rootNode = objectMapper.readTree(entity.getPayload());
+            while (rootNode != null && rootNode.isTextual()) {
+                rootNode = objectMapper.readTree(rootNode.asText());
+            }
+            String eventType = entity.getEventType();
+            JsonNode payloadNode = rootNode != null && rootNode.has("payload") ? rootNode.get("payload") : rootNode;
+
+            DomainEvent domainEvent = switch (eventType) {
+                case "USER_CREATED" -> objectMapper.treeToValue(payloadNode, UserCreatedEvent.class);
+                case "USER_UPDATED" -> objectMapper.treeToValue(payloadNode, UserUpdatedEvent.class);
+                case "ORGANIZATION_CREATED" -> objectMapper.treeToValue(payloadNode, OrganizationCreatedEvent.class);
+                case "MEMBER_ROLE_CHANGED" -> objectMapper.treeToValue(payloadNode, MemberRoleChangedEvent.class);
+                case "EMAIL_VERIFICATION_REQUESTED" -> objectMapper.treeToValue(payloadNode, EmailVerificationRequestedEvent.class);
+                default -> null;
+            };
+
+            EventEnvelope<?> envelope;
+            if (domainEvent != null) {
+                UUID eventId = (rootNode != null && rootNode.has("eventId") && !rootNode.get("eventId").isNull())
+                        ? UUID.fromString(rootNode.get("eventId").asText())
+                        : entity.getId();
+                envelope = EventEnvelope.builder()
+                        .eventId(eventId != null ? eventId : UUID.randomUUID())
+                        .eventType(domainEvent.getEventType())
+                        .aggregateType(domainEvent.getAggregateType())
+                        .aggregateId(domainEvent.getAggregateId())
+                        .timestamp(domainEvent.getTimestamp() != null ? domainEvent.getTimestamp() : Instant.now())
+                        .traceId(entity.getTraceId())
+                        .payload(domainEvent)
+                        .build();
+            } else {
+                envelope = objectMapper.readValue(entity.getPayload(), EventEnvelope.class);
+            }
 
             eventPublisher.publish(envelope);
 

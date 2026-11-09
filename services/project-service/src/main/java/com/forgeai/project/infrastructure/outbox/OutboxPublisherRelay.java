@@ -1,7 +1,18 @@
 package com.forgeai.project.infrastructure.outbox;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.forgeai.project.domain.event.BranchCreatedEvent;
+import com.forgeai.project.domain.event.CodeLinkedEvent;
+import com.forgeai.project.domain.event.CommitCreatedEvent;
+import com.forgeai.project.domain.event.DomainEvent;
 import com.forgeai.project.domain.event.EventEnvelope;
+import com.forgeai.project.domain.event.ProjectCreatedEvent;
+import com.forgeai.project.domain.event.PullRequestOpenedEvent;
+import com.forgeai.project.domain.event.TaskCreatedEvent;
+import com.forgeai.project.domain.event.TaskStatusChangedEvent;
+import com.forgeai.project.domain.event.UserCreatedEvent;
+import com.forgeai.project.domain.event.UserUpdatedEvent;
 import com.forgeai.project.infrastructure.logging.StructuredLogger;
 import com.forgeai.project.infrastructure.metrics.ProjectMetrics;
 import com.forgeai.project.infrastructure.persistence.entity.OutboxEventEntity;
@@ -18,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -97,7 +109,43 @@ public class OutboxPublisherRelay {
         long start = System.currentTimeMillis();
 
         try {
-            EventEnvelope<?> envelope = objectMapper.readValue(eventEntity.getPayload(), EventEnvelope.class);
+            JsonNode rootNode = objectMapper.readTree(eventEntity.getPayload());
+            while (rootNode != null && rootNode.isTextual()) {
+                rootNode = objectMapper.readTree(rootNode.asText());
+            }
+            String eventType = eventEntity.getEventType();
+            JsonNode payloadNode = rootNode != null && rootNode.has("payload") ? rootNode.get("payload") : rootNode;
+
+            DomainEvent domainEvent = switch (eventType) {
+                case "PROJECT_CREATED" -> objectMapper.treeToValue(payloadNode, ProjectCreatedEvent.class);
+                case "TASK_CREATED" -> objectMapper.treeToValue(payloadNode, TaskCreatedEvent.class);
+                case "TASK_STATUS_CHANGED" -> objectMapper.treeToValue(payloadNode, TaskStatusChangedEvent.class);
+                case "CODE_LINKED" -> objectMapper.treeToValue(payloadNode, CodeLinkedEvent.class);
+                case "COMMIT_CREATED" -> objectMapper.treeToValue(payloadNode, CommitCreatedEvent.class);
+                case "BRANCH_CREATED" -> objectMapper.treeToValue(payloadNode, BranchCreatedEvent.class);
+                case "PULL_REQUEST_OPENED" -> objectMapper.treeToValue(payloadNode, PullRequestOpenedEvent.class);
+                case "USER_CREATED" -> objectMapper.treeToValue(payloadNode, UserCreatedEvent.class);
+                case "USER_UPDATED" -> objectMapper.treeToValue(payloadNode, UserUpdatedEvent.class);
+                default -> null;
+            };
+
+            EventEnvelope<?> envelope;
+            if (domainEvent != null) {
+                UUID eventId = (rootNode != null && rootNode.has("eventId") && !rootNode.get("eventId").isNull())
+                        ? UUID.fromString(rootNode.get("eventId").asText())
+                        : eventEntity.getId();
+                envelope = EventEnvelope.builder()
+                        .eventId(eventId != null ? eventId : UUID.randomUUID())
+                        .eventType(domainEvent.getEventType())
+                        .aggregateType(domainEvent.getAggregateType())
+                        .aggregateId(domainEvent.getAggregateId())
+                        .timestamp(domainEvent.getTimestamp() != null ? domainEvent.getTimestamp() : Instant.now())
+                        .traceId(eventEntity.getTraceId())
+                        .payload(domainEvent)
+                        .build();
+            } else {
+                envelope = objectMapper.readValue(eventEntity.getPayload(), EventEnvelope.class);
+            }
 
             eventPublisher.publish(envelope);
 

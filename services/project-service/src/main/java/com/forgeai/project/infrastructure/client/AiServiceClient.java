@@ -96,6 +96,12 @@ public class AiServiceClient {
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteAiAnalysisDto>>() {});
             }
+            if (response.statusCode() == 404) {
+                return Collections.emptyList();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream ai-service returned HTTP " + response.statusCode());
+            }
             log.warn("AI-service getAnalysesForPullRequest returned status {}", response.statusCode());
             return Collections.<RemoteAiAnalysisDto>emptyList();
         }, Collections.emptyList());
@@ -115,6 +121,12 @@ public class AiServiceClient {
             if (response.statusCode() == 200) {
                 return Optional.of(objectMapper.readValue(response.body(), RemoteMergeReadinessDto.class));
             }
+            if (response.statusCode() == 404) {
+                return Optional.empty();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream ai-service returned HTTP " + response.statusCode());
+            }
             log.warn("AI-service getMergeReadiness returned status {}", response.statusCode());
             return Optional.<RemoteMergeReadinessDto>empty();
         }, Optional.empty());
@@ -133,6 +145,12 @@ public class AiServiceClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteEngineeringActionDto>>() {});
+            }
+            if (response.statusCode() == 404) {
+                return Collections.emptyList();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream ai-service returned HTTP " + response.statusCode());
             }
             log.warn("AI-service getEngineeringActions returned status {}", response.statusCode());
             return Collections.<RemoteEngineeringActionDto>emptyList();

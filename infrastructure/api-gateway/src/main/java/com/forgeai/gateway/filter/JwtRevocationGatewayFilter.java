@@ -24,8 +24,8 @@ public class JwtRevocationGatewayFilter implements GlobalFilter, Ordered {
     private final ReactiveJwtDecoder jwtDecoder;
     private final ReactiveRedisOperations<String, String> redisOperations;
 
-    @org.springframework.beans.factory.annotation.Value("${security.revocation.fail-closed:false}")
-    private boolean failClosed = false;
+    @org.springframework.beans.factory.annotation.Value("${security.revocation.fail-closed:true}")
+    private boolean failClosed = true;
 
     public void setFailClosed(boolean failClosed) {
         this.failClosed = failClosed;

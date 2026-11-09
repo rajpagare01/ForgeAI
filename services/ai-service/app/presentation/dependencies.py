@@ -13,26 +13,35 @@ ai_rate_limiter = RedisAiRateLimiter()
 
 def get_tenant_org_id(request: Request) -> UUID:
     """
-    Extracts mandatory X-Org-Id or X-Workspace-Id header from request.
+    Extracts mandatory X-Org-Id or X-Workspace-Id header from request,
+    or falls back to workspaceId / organizationId query parameters for SSE streams.
     Raises HTTP 400 Bad Request if missing or invalid UUID.
     """
-    header_val = request.headers.get(settings.ORG_HEADER_NAME) or request.headers.get("X-Workspace-Id")
+    header_val = (
+        request.headers.get(settings.ORG_HEADER_NAME)
+        or request.headers.get("X-Workspace-Id")
+        or request.query_params.get("workspaceId")
+        or request.query_params.get("organizationId")
+    )
     if not header_val:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing mandatory tenant header '{settings.ORG_HEADER_NAME}' or 'X-Workspace-Id'",
+            detail=f"Missing mandatory tenant header '{settings.ORG_HEADER_NAME}', 'X-Workspace-Id', or query parameter 'workspaceId' / 'organizationId'",
         )
     try:
         return UUID(header_val)
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid UUID format in tenant header: {header_val}",
+            detail=f"Invalid UUID format in tenant identifier: {header_val}",
         )
 
 
 def get_tenant_user_id(request: Request) -> Optional[UUID]:
-    header_val = request.headers.get(settings.USER_HEADER_NAME)
+    header_val = (
+        request.headers.get(settings.USER_HEADER_NAME)
+        or request.query_params.get("userId")
+    )
     if not header_val:
         return None
     try:

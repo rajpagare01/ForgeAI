@@ -97,6 +97,12 @@ public class SourceControlClient {
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteRepositoryDto>>() {});
             }
+            if (response.statusCode() == 404) {
+                return Collections.emptyList();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream source-control returned HTTP " + response.statusCode());
+            }
             log.warn("Source-control listRepositories returned status {}", response.statusCode());
             return Collections.<RemoteRepositoryDto>emptyList();
         }, Collections.emptyList());
@@ -119,6 +125,12 @@ public class SourceControlClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return Optional.of(objectMapper.readValue(response.body(), RemoteRepositoryDto.class));
+            }
+            if (response.statusCode() == 404) {
+                return Optional.empty();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream source-control returned HTTP " + response.statusCode());
             }
             log.warn("Source-control getRepository returned status {}", response.statusCode());
             return Optional.<RemoteRepositoryDto>empty();
@@ -151,6 +163,12 @@ public class SourceControlClient {
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemotePullRequestDto>>() {});
             }
+            if (response.statusCode() == 404) {
+                return Collections.emptyList();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream source-control returned HTTP " + response.statusCode());
+            }
             log.warn("Source-control listPullRequests returned status {}", response.statusCode());
             return Collections.<RemotePullRequestDto>emptyList();
         }, Collections.emptyList());
@@ -173,6 +191,12 @@ public class SourceControlClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteCommitDto>>() {});
+            }
+            if (response.statusCode() == 404) {
+                return Collections.emptyList();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream source-control returned HTTP " + response.statusCode());
             }
             log.warn("Source-control listCommits returned status {}", response.statusCode());
             return Collections.<RemoteCommitDto>emptyList();

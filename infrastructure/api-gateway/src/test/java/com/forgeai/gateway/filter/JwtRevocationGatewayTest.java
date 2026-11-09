@@ -104,8 +104,9 @@ class JwtRevocationGatewayTest {
     }
 
     @Test
-    @DisplayName("Fail-open: If Redis is partitioned or throws an exception, user traffic is allowed through")
+    @DisplayName("Fail-open: If Redis is partitioned or throws an exception, user traffic is allowed through when failClosed is false")
     void redisErrorFailsOpen() {
+        filter.setFailClosed(false);
         String token = "valid-active-token";
         String sessionId = "sess-error-555";
 
@@ -152,6 +153,35 @@ class JwtRevocationGatewayTest {
                 .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
 
         MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/operations/outbox/events/11111111-1111-1111-1111-111111111111/replay")
+                .header("Authorization", "Bearer " + token)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    @Test
+    @DisplayName("Fail-closed: If Redis is partitioned, user traffic fails closed by default with 503")
+    void redisErrorFailsClosedByDefault() {
+        String token = "valid-active-token";
+        String sessionId = "sess-error-default";
+
+        Jwt jwt = new Jwt(
+                token,
+                Instant.now(),
+                Instant.now().plusSeconds(3600),
+                Map.of("alg", "RS256"),
+                Map.of("sub", "user-1", "session_id", sessionId)
+        );
+
+        when(jwtDecoder.decode(token)).thenReturn(Mono.just(jwt));
+        when(redisOperations.hasKey("blacklist:session:" + sessionId))
+                .thenReturn(Mono.error(new RuntimeException("Redis cluster timeout")));
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/projects")
                 .header("Authorization", "Bearer " + token)
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);

@@ -71,6 +71,7 @@ public class LocalSpringEventPublisher implements EventPublisher {
                         exchangeName, routingKey, envelope.getEventId(), envelope.getAggregateId());
             } catch (Exception ex) {
                 log.error("[RabbitMQ] Failed to publish event to exchange={}: {}", exchangeName, ex.getMessage(), ex);
+                throw new IllegalStateException("RabbitMQ publish failed for event " + envelope.getEventType() + ": " + ex.getMessage(), ex);
             }
         }
     }

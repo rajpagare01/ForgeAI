@@ -1166,15 +1166,20 @@ public class RepositoryApplicationService {
                         List<AiServiceClient.ChangedFilePayload> changedFiles = new ArrayList<>();
                         int count = 0;
                         for (var file : commitDetail.files()) {
-                            if (count >= 30)
+                            if (count >= 15)
                                 break;
                             String status = file.status() != null ? file.status() : "modified";
                             String content = "";
                             if (!"removed".equalsIgnoreCase(status)) {
-                                content = gitHubAppClient
-                                        .getFileContent(repo.getInstallationId(), repo.getFullName(), file.filename(),
-                                                finalHead)
-                                        .orElse(file.patch() != null ? file.patch() : "");
+                                try {
+                                    content = gitHubAppClient
+                                            .getFileContent(repo.getInstallationId(), repo.getFullName(), file.filename(),
+                                                    finalHead)
+                                            .orElse(file.patch() != null ? file.patch() : "");
+                                } catch (Exception ex) {
+                                    log.debug("[Reconcile] Could not fetch raw content for file {}, using patch fallback: {}", file.filename(), ex.getMessage());
+                                    content = file.patch() != null ? file.patch() : "";
+                                }
                             }
                             changedFiles.add(new AiServiceClient.ChangedFilePayload(file.filename(), status, content));
                             count++;

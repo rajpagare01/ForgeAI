@@ -6,6 +6,8 @@ import com.forgeai.project.application.command.CreateTaskCommand;
 import com.forgeai.project.application.service.ProjectApplicationService;
 import com.forgeai.project.application.service.RequirementApplicationService;
 import com.forgeai.project.application.service.TaskApplicationService;
+import com.forgeai.project.domain.model.CodeLink;
+import com.forgeai.project.domain.model.CodeLinkType;
 import com.forgeai.project.domain.model.Project;
 import com.forgeai.project.domain.model.ProjectRepositoryLink;
 import com.forgeai.project.domain.model.Requirement;
@@ -159,7 +161,35 @@ public class ProjectController {
         List<TaskResponse> list = tasks.stream()
                 .map(t -> {
                     String reqKey = t.getRequirementId() != null ? reqKeyMap.get(t.getRequirementId()) : null;
-                    return TaskResponse.from(t, reqKey, null, null);
+                    String branchName = null;
+                    Integer linkedPrNumber = null;
+
+                    if (codeLinkRepository != null) {
+                        try {
+                            List<CodeLink> links = orgId != null
+                                    ? codeLinkRepository.findAllByOrganizationIdAndTaskId(orgId, t.getId())
+                                    : codeLinkRepository.findAllByTaskId(t.getId());
+                            if (links != null) {
+                                for (CodeLink link : links) {
+                                    if (link.getLinkType() == CodeLinkType.BRANCH && link.getExternalRef() != null) {
+                                        branchName = link.getExternalRef();
+                                    } else if (link.getLinkType() == CodeLinkType.PULL_REQUEST && link.getExternalRef() != null) {
+                                        String ref = link.getExternalRef();
+                                        String digits = ref.replaceAll("[^0-9]", "");
+                                        if (!digits.isBlank()) {
+                                            try {
+                                                linkedPrNumber = Integer.parseInt(digits);
+                                            } catch (NumberFormatException ignored) {}
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (Exception ex) {
+                            log.debug("Optional code link lookup skipped for task {}: {}", t.getId(), ex.getMessage());
+                        }
+                    }
+
+                    return TaskResponse.from(t, reqKey, linkedPrNumber, branchName);
                 })
                 .collect(Collectors.toList());
         return ResponseEntity.ok(list);

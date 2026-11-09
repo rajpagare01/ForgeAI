@@ -99,6 +99,12 @@ public class TestingServiceClient {
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteTestRunDto>>() {});
             }
+            if (response.statusCode() == 404) {
+                return Collections.emptyList();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream testing-service returned HTTP " + response.statusCode());
+            }
             log.warn("Testing-service listTestRuns returned status {}", response.statusCode());
             return Collections.<RemoteTestRunDto>emptyList();
         }, Collections.emptyList());
@@ -117,6 +123,12 @@ public class TestingServiceClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return objectMapper.readValue(response.body(), new TypeReference<List<RemoteTestResultDto>>() {});
+            }
+            if (response.statusCode() == 404) {
+                return Collections.emptyList();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream testing-service returned HTTP " + response.statusCode());
             }
             log.warn("Testing-service getTestResults returned status {}", response.statusCode());
             return Collections.<RemoteTestResultDto>emptyList();
@@ -137,6 +149,12 @@ public class TestingServiceClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return Optional.of(objectMapper.readValue(response.body(), RemoteRequirementTestTraceDto.class));
+            }
+            if (response.statusCode() == 404) {
+                return Optional.empty();
+            }
+            if (response.statusCode() >= 500 || response.statusCode() == 429) {
+                throw new RuntimeException("Downstream testing-service returned HTTP " + response.statusCode());
             }
             log.warn("Testing-service getTraceabilityForRequirement returned status {}", response.statusCode());
             return Optional.<RemoteRequirementTestTraceDto>empty();

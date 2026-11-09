@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useTenant } from "@/lib/tenant-context";
 import { useAuth } from "@/lib/auth-context";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, formatUserError } from "@/lib/api-client";
 import {
   Activity,
   ShieldCheck,
@@ -191,7 +191,7 @@ export default function OperationsDashboardPage() {
       setReplaySuccess(`Successfully scheduled replay for outbox event ${eventId}.`);
       await fetchData();
     } catch (err: any) {
-      alert(`Replay failed: ${err.message || "Unknown error"}`);
+      setErrorMsg(formatUserError(err, "Unable to replay the outbox event right now."));
     } finally {
       setReplayingId(null);
     }
@@ -217,7 +217,7 @@ export default function OperationsDashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="default" className="bg-slate-800 text-slate-200 border border-slate-700">
-            Tenant: {currentOrg?.name || "Global Scope"}
+            Workspace: {currentOrg?.name || activeWorkspace?.name || "Personal Workspace"}
           </Badge>
           <Button
             size="sm"
