@@ -14,21 +14,13 @@ import {
   CheckCircle2,
   Layers,
   Sparkles,
-  ExternalLink,
   Loader2,
   AlertCircle,
-  Clock,
   Check,
   Tag,
   GitCommit,
-  GitBranch,
-  RefreshCw,
   ArrowLeft,
-  ChevronRight,
-  ShieldCheck,
   Link2,
-  FileCode,
-  Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,12 +36,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 
-const KANBAN_COLUMNS: { id: TaskStatus; label: string; color: string; badgeColor: string }[] = [
-  { id: "TODO", label: "To Do", color: "border-slate-800 bg-slate-900/30", badgeColor: "bg-slate-800 text-slate-300" },
-  { id: "IN_PROGRESS", label: "In Progress", color: "border-sky-500/30 bg-sky-950/10", badgeColor: "bg-sky-950 text-sky-400 border border-sky-500/30" },
-  { id: "IN_REVIEW", label: "In Review", color: "border-purple-500/30 bg-purple-950/10", badgeColor: "bg-purple-950 text-purple-400 border border-purple-500/30" },
-  { id: "DONE", label: "Verified & Done", color: "border-emerald-500/30 bg-emerald-950/10", badgeColor: "bg-emerald-950 text-emerald-400 border border-emerald-500/30" },
-  { id: "BLOCKED", label: "Blocked", color: "border-rose-500/30 bg-rose-950/10", badgeColor: "bg-rose-950 text-rose-400 border border-rose-500/30" },
+const KANBAN_COLUMNS: { id: TaskStatus; label: string; dotColor: string }[] = [
+  { id: "TODO", label: "To Do", dotColor: "bg-zinc-500" },
+  { id: "IN_PROGRESS", label: "In Progress", dotColor: "bg-sky-400" },
+  { id: "IN_REVIEW", label: "In Review", dotColor: "bg-amber-400" },
+  { id: "DONE", label: "Verified & Done", dotColor: "bg-emerald-400" },
+  { id: "BLOCKED", label: "Blocked", dotColor: "bg-rose-400" },
 ];
 
 interface GeneratedBacklogDraft {
@@ -590,121 +582,130 @@ function ProjectsPageContent() {
     : currentOrg?.name || "Organization Workspace";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Success Notification Toast */}
+      {successToast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-md border border-[#26262C] bg-[#141418] px-3.5 py-2 text-xs text-emerald-400 shadow-lg flex items-center gap-2">
+          <Check className="h-4 w-4" />
+          <span>{successToast}</span>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* VIEW A: PROJECT ENGINEERING WORKSPACE (KANBAN BOARD & BACKLOG)            */}
       {/* ========================================================================= */}
       {selectedProject ? (
-        <div className="space-y-6">
-          {/* Workspace Top Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-            <div>
-              <div className="flex items-center gap-3">
+        <div className="space-y-5">
+          {/* Workspace Top Header Toolbar */}
+          <div className="relative rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-4 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.06]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={closeProjectWorkspace}
+                    className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                    All Projects
+                  </Button>
+                  <div className="h-3.5 w-px bg-[#26262C]" />
+                  <Badge variant="outline" className="font-mono font-semibold text-[11px] text-zinc-200 border-[#26262C]">
+                    {selectedProject.key}
+                  </Badge>
+                  <h1 className="text-base font-semibold tracking-tight text-zinc-100">
+                    {selectedProject.name}
+                  </h1>
+                </div>
+                <p className="text-xs text-zinc-400 mt-1 pl-1">
+                  {selectedProject.description || "Project engineering backlog and interactive delivery board."}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedProject.healthScore !== null && selectedProject.healthScore !== undefined && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-emerald-900/60 bg-emerald-950/20 text-xs font-mono font-medium text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span>{selectedProject.healthScore}% Lineage</span>
+                  </div>
+                )}
+
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setBacklogPrompt(`Design full microservice delivery for ${selectedProject.name}`);
+                    setShowAiBacklogModal(true);
+                  }}
+                  className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Sprint Planner
+                </Button>
+
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={closeProjectWorkspace}
-                  className="h-8 px-2.5 text-xs text-slate-400 hover:text-white"
+                  onClick={() => setShowAddReqModal(true)}
+                  className="h-8 text-xs gap-1 border-[#26262C] bg-[#141418] text-zinc-300 hover:text-zinc-100"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                  All Projects
+                  <Plus className="h-3.5 w-3.5" />
+                  Requirement
                 </Button>
-                <div className="h-4 w-px bg-slate-800" />
-                <Badge variant="default" className="font-mono font-bold text-xs bg-indigo-600 text-white">
-                  {selectedProject.key}
-                </Badge>
-                <h1 className="text-xl font-bold tracking-tight text-white">
-                  {selectedProject.name}
-                </h1>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddTaskModal(true)}
+                  className="h-8 text-xs gap-1 border-[#26262C] bg-[#141418] text-zinc-300 hover:text-zinc-100"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Task
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncGitActivity}
+                  disabled={isSyncingGit}
+                  className="h-8 text-xs gap-1.5 border-[#26262C] bg-[#141418] text-zinc-300 hover:text-zinc-100"
+                >
+                  {isSyncingGit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitCommit className="h-3.5 w-3.5 text-zinc-400" />}
+                  Sync Commits
+                </Button>
+
+                <Link href={`/projects/${selectedProject.id}/traceability`}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1 border-[#26262C] text-zinc-200">
+                    <Layers className="h-3.5 w-3.5" />
+                    Trace Spine
+                  </Button>
+                </Link>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                {selectedProject.description || "Project engineering backlog and interactive delivery board."}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Dynamic Health Score Pill */}
-              {selectedProject.healthScore !== null && selectedProject.healthScore !== undefined && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-950/30 text-xs font-semibold text-emerald-300">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>{selectedProject.healthScore}% Traceability Health</span>
-                </div>
-              )}
-
-              <Button
-                variant="glow"
-                size="sm"
-                onClick={() => {
-                  setBacklogPrompt(`Design full microservice delivery for ${selectedProject.name}`);
-                  setShowAiBacklogModal(true);
-                }}
-                className="text-xs gap-1.5"
-              >
-                Sprint Planner
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddReqModal(true)}
-                className="text-xs gap-1 border-slate-700 bg-slate-900/60"
-              >
-                <Plus className="h-3.5 w-3.5 text-indigo-400" />
-                Add Requirement
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddTaskModal(true)}
-                className="text-xs gap-1 border-slate-700 bg-slate-900/60"
-              >
-                <Plus className="h-3.5 w-3.5 text-sky-400" />
-                Add Task
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSyncGitActivity}
-                disabled={isSyncingGit}
-                className="text-xs gap-1.5 border-slate-700 bg-slate-900/60"
-              >
-                {isSyncingGit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitCommit className="h-3.5 w-3.5 text-purple-400" />}
-                Sync Git Commits
-              </Button>
-
-              <Link href={`/projects/${selectedProject.id}/traceability`}>
-                <Button variant="secondary" size="sm" className="text-xs gap-1">
-                  <Layers className="h-3.5 w-3.5" />
-                  Trace Spine
-                </Button>
-              </Link>
             </div>
           </div>
 
-          {/* Project Metadata Banner */}
+          {/* Project Metadata Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 space-y-0.5">
-              <span className="text-[10px] uppercase font-bold text-slate-500 font-mono">Linked Repository</span>
-              <div className="text-xs font-mono font-medium text-indigo-300 truncate">
+            <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-0.5">
+              <span className="text-[10px] uppercase font-medium text-zinc-500 font-mono">Linked Repository</span>
+              <div className="text-xs font-mono font-medium text-zinc-200 truncate">
                 {selectedProject.repositoryName || "Unlinked"}
               </div>
             </div>
-            <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 space-y-0.5">
-              <span className="text-[10px] uppercase font-bold text-slate-500 font-mono">Active Requirements</span>
-              <div className="text-xs font-mono font-bold text-white">
+            <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-0.5">
+              <span className="text-[10px] uppercase font-medium text-zinc-500 font-mono">Active Requirements</span>
+              <div className="text-xs font-mono font-semibold text-zinc-100">
                 {requirements.length} Requirements
               </div>
             </div>
-            <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 space-y-0.5">
-              <span className="text-[10px] uppercase font-bold text-slate-500 font-mono">Total Tasks</span>
-              <div className="text-xs font-mono font-bold text-white">
+            <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-0.5">
+              <span className="text-[10px] uppercase font-medium text-zinc-500 font-mono">Total Tasks</span>
+              <div className="text-xs font-mono font-semibold text-zinc-100">
                 {tasks.length} Tasks ({tasks.filter((t) => t.status === "DONE").length} completed)
               </div>
             </div>
-            <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 space-y-0.5">
-              <span className="text-[10px] uppercase font-bold text-slate-500 font-mono">Sprint Status</span>
+            <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-0.5">
+              <span className="text-[10px] uppercase font-medium text-zinc-500 font-mono">Sprint Status</span>
               <div className="text-xs font-mono font-semibold text-emerald-400">
                 ACTIVE CYCLE
               </div>
@@ -713,10 +714,10 @@ function ProjectsPageContent() {
 
           {/* Active Search Filter Indicator */}
           {rawSearchQuery && (
-            <div className="flex items-center justify-between px-3.5 py-2 rounded-lg border border-[#27272c] bg-[#141418] text-xs text-zinc-300">
+            <div className="flex items-center justify-between px-3.5 py-2 rounded-md border border-[#26262C] bg-[#141418] text-xs text-zinc-300">
               <span className="flex items-center gap-2">
                 <span>Filtering tasks by:</span>
-                <span className="font-mono font-medium text-white bg-[#1f1f25] px-2 py-0.5 rounded border border-[#27272c]">
+                <span className="font-mono font-medium text-zinc-100 bg-[#0E0E11] px-2 py-0.5 rounded border border-[#26262C]">
                   &quot;{rawSearchQuery}&quot;
                 </span>
                 <span className="text-zinc-500 font-mono text-[11px]">({tasks.filter((t) => {
@@ -740,12 +741,12 @@ function ProjectsPageContent() {
 
           {/* Kanban Board */}
           {isLoadingTasks ? (
-            <div className="flex flex-col items-center justify-center p-16 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-400 mb-2" />
-              <p className="text-xs">Loading Kanban Board & Tasks...</p>
+            <div className="flex flex-col items-center justify-center p-16 text-zinc-400">
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mb-2" />
+              <p className="text-xs font-mono">Loading Kanban Board & Tasks...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               {KANBAN_COLUMNS.map((col) => {
                 const colTasks = tasks
                   .filter((t) => {
@@ -758,37 +759,40 @@ function ProjectsPageContent() {
                   })
                   .filter((t) => t.status === col.id);
                 return (
-                  <div key={col.id} className={`rounded-2xl border ${col.color} p-3.5 space-y-3 min-h-[500px] flex flex-col`}>
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                      <span className="text-xs font-bold text-white tracking-wide">{col.label}</span>
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${col.badgeColor}`}>
+                  <div key={col.id} className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3 space-y-2.5 min-h-[520px] flex flex-col">
+                    <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${col.dotColor}`} />
+                        <span className="text-xs font-semibold text-zinc-200 tracking-tight">{col.label}</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#141418] text-zinc-400 border border-[#26262C]">
                         {colTasks.length}
                       </span>
                     </div>
 
-                    <div className="space-y-3 flex-1 overflow-y-auto">
+                    <div className="space-y-2 flex-1 overflow-y-auto">
                       {colTasks.length === 0 ? (
-                        <div className="h-28 flex items-center justify-center rounded-xl border border-dashed border-slate-800/60 text-[11px] text-slate-500">
+                        <div className="h-24 flex items-center justify-center rounded-md border border-dashed border-[#1C1C21] text-[11px] text-zinc-600">
                           Empty
                         </div>
                       ) : (
                         colTasks.map((t) => (
                           <div
                             key={t.id}
-                            className="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-all space-y-2.5 shadow-sm group"
+                            className="p-3 rounded-md bg-[#141418] border border-[#1C1C21] hover:border-[#26262C] transition-all space-y-2 group shadow-xs"
                           >
                             <div className="flex items-center justify-between">
-                              <Badge variant="outline" className="text-[10px] font-mono font-bold text-indigo-300 border-indigo-500/40">
+                              <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C]">
                                 {t.taskKey}
                               </Badge>
                               <Badge
                                 variant="outline"
                                 className={`text-[9px] font-mono ${
                                   t.priority === "CRITICAL"
-                                    ? "text-rose-400 border-rose-500/40"
+                                    ? "text-rose-400 border-rose-900"
                                     : t.priority === "HIGH"
-                                    ? "text-amber-400 border-amber-500/40"
-                                    : "text-slate-400 border-slate-700"
+                                    ? "text-amber-400 border-amber-900"
+                                    : "text-zinc-400 border-[#26262C]"
                                 }`}
                               >
                                 {t.priority}
@@ -796,11 +800,11 @@ function ProjectsPageContent() {
                             </div>
 
                             <div>
-                              <h4 className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors leading-snug">
+                              <h4 className="text-xs font-semibold text-zinc-200 group-hover:text-zinc-100 transition-colors leading-snug">
                                 {t.title}
                               </h4>
                               {t.description && (
-                                <p className="text-[11px] text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+                                <p className="text-[11px] text-zinc-400 line-clamp-2 mt-1 leading-relaxed">
                                   {t.description}
                                 </p>
                               )}
@@ -808,30 +812,30 @@ function ProjectsPageContent() {
 
                             {/* Linked requirement badge */}
                             {t.requirementKey && (
-                              <div className="text-[10px] font-mono text-slate-500 flex items-center gap-1">
-                                <Tag className="h-3 w-3 text-slate-500" />
+                              <div className="text-[10px] font-mono text-zinc-500 flex items-center gap-1">
+                                <Tag className="h-3 w-3 text-zinc-500" />
                                 <span>{t.requirementKey}</span>
                               </div>
                             )}
 
                             {/* Task Actions & Status Progression */}
-                            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-1">
+                            <div className="pt-2 border-t border-[#1C1C21] flex items-center justify-between gap-1">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openLinkDialog(t)}
-                                className="text-[10px] h-6 px-1.5 border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-white"
+                                className="text-[10px] h-6 px-1.5 border-[#26262C] hover:bg-[#1C1C21] text-zinc-400 hover:text-zinc-200"
                                 title="Attach Git commit, PR or branch"
                               >
                                 <Link2 className="h-3 w-3 mr-0.5" />
-                                Code Link
+                                Link
                               </Button>
 
                               <div className="flex items-center gap-1">
                                 {t.status === "TODO" && (
                                   <button
                                     onClick={() => handleTransitionTask(t, "IN_PROGRESS")}
-                                    className="text-[10px] px-2 py-0.5 rounded bg-sky-950/60 border border-sky-500/40 text-sky-300 hover:bg-sky-900/60 font-semibold"
+                                    className="text-[10px] px-2 py-0.5 rounded bg-sky-950/40 border border-sky-800 text-sky-300 hover:bg-sky-900/50 font-medium font-mono"
                                   >
                                     → In Prog
                                   </button>
@@ -840,13 +844,13 @@ function ProjectsPageContent() {
                                   <>
                                     <button
                                       onClick={() => handleTransitionTask(t, "IN_REVIEW")}
-                                      className="text-[10px] px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/40 text-purple-300 hover:bg-purple-900/60 font-semibold"
+                                      className="text-[10px] px-2 py-0.5 rounded bg-amber-950/40 border border-amber-800 text-amber-300 hover:bg-amber-900/50 font-medium font-mono"
                                     >
                                       → Review
                                     </button>
                                     <button
                                       onClick={() => handleTransitionTask(t, "BLOCKED")}
-                                      className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-rose-300 hover:bg-rose-900/60"
+                                      className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-800 text-rose-300 hover:bg-rose-900/50 font-medium font-mono"
                                       title="Mark Blocked"
                                     >
                                       Block
@@ -856,7 +860,7 @@ function ProjectsPageContent() {
                                 {t.status === "IN_REVIEW" && (
                                   <button
                                     onClick={() => handleTransitionTask(t, "DONE")}
-                                    className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 font-bold"
+                                    className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800 text-emerald-300 hover:bg-emerald-900/50 font-medium font-mono"
                                   >
                                     ✓ Done
                                   </button>
@@ -864,7 +868,7 @@ function ProjectsPageContent() {
                                 {t.status === "BLOCKED" && (
                                   <button
                                     onClick={() => handleTransitionTask(t, "IN_PROGRESS")}
-                                    className="text-[10px] px-2 py-0.5 rounded bg-sky-950/60 border border-sky-500/40 text-sky-300 hover:bg-sky-900/60"
+                                    className="text-[10px] px-2 py-0.5 rounded bg-sky-950/40 border border-sky-800 text-sky-300 hover:bg-sky-900/50 font-medium font-mono"
                                   >
                                     Unblock
                                   </button>
@@ -890,34 +894,35 @@ function ProjectsPageContent() {
         /* ========================================================================= */
         /* VIEW B: ALL GOVERNED PROJECTS OVERVIEW                                    */
         /* ========================================================================= */
-        <div className="space-y-8">
+        <div className="space-y-6">
           {/* Page Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-            <div>
-              <div className="flex items-center gap-2">
-                <FolderGit2 className="h-6 w-6 text-indigo-400" />
-                <h1 className="text-2xl font-bold tracking-tight text-white">
-                  Governed Projects
-                </h1>
+          <div className="relative rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.06]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <FolderGit2 className="h-5 w-5 text-zinc-300" />
+                  <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
+                    Governed Projects
+                  </h1>
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Manage projects, sprint requirements, and audit end-to-end code delivery spines for{" "}
+                  <span className="text-zinc-200 font-medium">{workspaceDisplayName}</span>.
+                </p>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Manage projects, sprint requirements, and audit end-to-end code delivery spines for{" "}
-                <span className="text-indigo-300 font-medium">{workspaceDisplayName}</span>.
-              </p>
-            </div>
 
-            <Button
-              variant="glow"
-              onClick={() => setShowCreateModal(true)}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Create Project
-            </Button>
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create Project
+              </Button>
+            </div>
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+            <div className="flex items-center gap-2 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-xs text-rose-300">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -925,22 +930,22 @@ function ProjectsPageContent() {
 
           {/* Loading state */}
           {isLoading && (
-            <div className="flex flex-col items-center justify-center p-16 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-400 mb-2" />
-              <p className="text-xs">Fetching governed projects from Gateway...</p>
+            <div className="flex flex-col items-center justify-center p-16 text-zinc-400">
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mb-2" />
+              <p className="text-xs font-mono">Fetching governed projects from Gateway...</p>
             </div>
           )}
 
           {/* Empty State */}
           {!isLoading && projects.length === 0 && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 p-16 text-center">
-              <FolderGit2 className="h-12 w-12 text-slate-600 mb-4" />
-              <h3 className="text-sm font-semibold text-white">No projects found</h3>
-              <p className="text-xs text-slate-400 max-w-sm mt-1 mb-6">
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#26262C] p-16 text-center">
+              <FolderGit2 className="h-10 w-10 text-zinc-600 mb-3" />
+              <h3 className="text-sm font-semibold text-zinc-200">No projects found</h3>
+              <p className="text-xs text-zinc-400 max-w-sm mt-1 mb-5">
                 Get started by creating your first governed project to link requirements, tasks, and pull requests.
               </p>
-              <Button variant="glow" onClick={() => setShowCreateModal(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
+              <Button onClick={() => setShowCreateModal(true)} className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
+                <Plus className="h-3.5 w-3.5" />
                 Create Project
               </Button>
             </div>
@@ -948,78 +953,79 @@ function ProjectsPageContent() {
 
           {/* Projects Grid */}
           {!isLoading && projects.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {projects.map((project) => (
                 <Card
                   key={project.id}
-                  className="flex flex-col justify-between hover:border-indigo-500/50 transition-all group"
+                  className="p-4 border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C] transition-all flex flex-col justify-between"
                 >
-                  <CardHeader className="space-y-3">
+                  <CardHeader className="p-0 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <Badge variant="default" className="font-mono font-bold text-xs">
+                      <Badge variant="outline" className="font-mono font-semibold text-xs text-zinc-200 border-[#26262C]">
                         {project.key}
                       </Badge>
                       {project.healthScore !== null && project.healthScore !== undefined ? (
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                          {project.healthScore}% Traceability
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                          {project.healthScore}% Lineage
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-500 font-medium">
-                          Traceability calculating...
+                        <span className="text-[11px] text-zinc-500 font-mono">
+                          Trace calculating...
                         </span>
                       )}
                     </div>
                     <div>
-                      <CardTitle className="text-base group-hover:text-indigo-300 transition-colors">
+                      <CardTitle className="text-sm font-semibold text-zinc-100">
                         {project.name}
                       </CardTitle>
-                      <CardDescription className="line-clamp-2 mt-1">
+                      <CardDescription className="text-xs text-zinc-400 line-clamp-2 mt-1">
                         {project.description || "No project description provided."}
                       </CardDescription>
                     </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-4 pt-2">
-                    <div className="flex items-center justify-between text-xs text-slate-400 py-2 border-y border-slate-800/80">
+                  <CardContent className="p-0 space-y-3 pt-3 mt-3 border-t border-[#1C1C21]">
+                    <div className="flex items-center justify-between text-xs text-zinc-400">
                       <div className="flex items-center gap-1">
-                        <span className="font-bold text-white">{project.requirementCount}</span>
+                        <span className="font-mono font-semibold text-zinc-200">{project.requirementCount}</span>
                         <span>Requirements</span>
                       </div>
-                      <div className="h-3 w-px bg-slate-800" />
+                      <div className="h-3 w-px bg-[#26262C]" />
                       <div className="flex items-center gap-1">
-                        <span className="font-bold text-white">{project.taskCount}</span>
+                        <span className="font-mono font-semibold text-zinc-200">{project.taskCount}</span>
                         <span>Tasks</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 font-mono">
                       <span className="truncate max-w-[180px]">
                         {project.repositoryName || "No repository linked"}
                       </span>
                       {project.repositoryName ? (
-                        <span className="text-indigo-400 flex items-center gap-0.5">
+                        <span className="text-emerald-400 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                           Connected
                         </span>
                       ) : (
-                        <span className="text-slate-600">Unlinked</span>
+                        <span className="text-zinc-600">Unlinked</span>
                       )}
                     </div>
 
                     <div className="pt-2 flex items-center gap-2">
                       <Button
-                        variant="secondary"
+                        variant="outline"
                         size="sm"
                         onClick={() => openProjectWorkspace(project)}
-                        className="flex-1 text-xs"
+                        className="flex-1 h-8 text-xs border-[#26262C] bg-[#141418] text-zinc-200 hover:text-white"
                       >
-                        Open Kanban & Backlog
+                        Kanban & Backlog
                       </Button>
                       <Link
                         href={`/projects/${project.id}/traceability`}
                         className="flex-1"
                       >
-                        <Button variant="glow" size="sm" className="w-full text-xs gap-1">
+                        <Button size="sm" className="w-full h-8 text-xs gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
                           <Layers className="h-3.5 w-3.5" />
                           Trace Spine
                         </Button>
@@ -1049,19 +1055,15 @@ function ProjectsPageContent() {
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleCreate} className="space-y-4 mt-4">
-          <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-slate-400">
-              <span className="text-slate-500 font-mono uppercase text-[10px]">Target Workspace:</span>
-              <span className="font-semibold text-white">{workspaceDisplayName}</span>
+        <form onSubmit={handleCreate} className="space-y-3.5 mt-3">
+          <div className="rounded-md border border-[#1C1C21] bg-[#141418] p-2.5 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-zinc-400">
+              <span className="text-zinc-500 font-mono uppercase text-[10px]">Target Workspace:</span>
+              <span className="font-semibold text-zinc-200">{workspaceDisplayName}</span>
             </div>
             <Badge
               variant="outline"
-              className={
-                isPersonalWorkspace
-                  ? "text-violet-400 border-violet-500/30 font-mono text-[10px]"
-                  : "text-indigo-400 border-indigo-500/30 font-mono text-[10px]"
-              }
+              className="text-zinc-300 border-[#26262C] font-mono text-[10px]"
             >
               {isPersonalWorkspace ? "PERSONAL" : "ORGANIZATION"}
             </Badge>
@@ -1069,7 +1071,7 @@ function ProjectsPageContent() {
 
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-1 space-y-1">
-              <label className="text-xs font-medium text-slate-300">Project Key</label>
+              <label className="text-xs font-medium text-zinc-300">Project Key</label>
               <Input
                 placeholder="e.g. CORE"
                 value={key}
@@ -1080,7 +1082,7 @@ function ProjectsPageContent() {
               />
             </div>
             <div className="col-span-2 space-y-1">
-              <label className="text-xs font-medium text-slate-300">Project Name</label>
+              <label className="text-xs font-medium text-zinc-300">Project Name</label>
               <Input
                 placeholder="e.g. Identity & Security Core"
                 value={name}
@@ -1091,22 +1093,22 @@ function ProjectsPageContent() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Description</label>
+            <label className="text-xs font-medium text-zinc-300">Description</label>
             <textarea
               placeholder="High-level architecture and scope description..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="h-20 w-full rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="h-20 w-full rounded-md border border-[#26262C] bg-[#09090B] p-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-400"
             />
           </div>
 
           {/* Repository Selector Dropdown */}
-          <div className="space-y-1.5">
-            <label className="font-medium text-slate-300 text-xs">Associated Repository</label>
+          <div className="space-y-1">
+            <label className="font-medium text-zinc-300 text-xs">Associated Repository</label>
             {availableRepositories.length === 0 ? (
-              <div className="rounded-lg border border-slate-800 bg-slate-950 p-2.5 text-xs text-slate-400">
+              <div className="rounded-md border border-[#26262C] bg-[#09090B] p-2.5 text-xs text-zinc-400">
                 No connected repositories found.{" "}
-                <Link href="/repositories" className="text-sky-400 hover:underline">
+                <Link href="/repositories" className="text-zinc-200 underline">
                   Connect a repository
                 </Link>{" "}
                 first.
@@ -1116,7 +1118,7 @@ function ProjectsPageContent() {
                 aria-label="Associated Repository"
                 value={selectedRepoId}
                 onChange={(e) => setSelectedRepoId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none"
+                className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2 text-xs text-zinc-200 focus:outline-none"
               >
                 <option value="">None (Link later)</option>
                 {availableRepositories.map((repo) => (
@@ -1134,10 +1136,11 @@ function ProjectsPageContent() {
               variant="outline"
               size="sm"
               onClick={() => setShowCreateModal(false)}
+              className="h-8 text-xs border-[#26262C]"
             >
               Cancel
             </Button>
-            <Button type="submit" variant="glow" size="sm" disabled={!name || !key || isSubmitting}>
+            <Button type="submit" size="sm" disabled={!name || !key || isSubmitting} className="h-8 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
               {isSubmitting ? "Creating..." : "Create Project"}
             </Button>
           </DialogFooter>
@@ -1163,23 +1166,22 @@ function ProjectsPageContent() {
         <div className="space-y-4 my-3 max-h-[70vh] overflow-y-auto pr-1">
           <form onSubmit={handleGenerateBacklog} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Feature or Sprint Goal</label>
+              <label className="text-xs font-medium text-zinc-300">Feature or Sprint Goal</label>
               <textarea
                 value={backlogPrompt}
                 onChange={(e) => setBacklogPrompt(e.target.value)}
                 rows={3}
                 placeholder="e.g. Build real-time webhook retry queue with dead-letter alerting and tenant isolation."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none"
+                className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-400"
                 required
               />
             </div>
 
             <Button
               type="submit"
-              variant="glow"
               size="sm"
               disabled={isGeneratingBacklog || !backlogPrompt.trim()}
-              className="w-full text-xs gap-1.5"
+              className="w-full h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
             >
               {isGeneratingBacklog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Generate Sprint Backlog
@@ -1188,49 +1190,49 @@ function ProjectsPageContent() {
 
           {/* Generated Backlog Preview */}
           {generatedBacklog && (
-            <div className="p-4 rounded-xl border border-indigo-500/40 bg-indigo-950/20 space-y-4">
-              <div className="flex items-center justify-between border-b border-indigo-500/30 pb-2">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4 text-indigo-400" />
+            <div className="p-4 rounded-md border border-[#26262C] bg-[#141418] space-y-3.5">
+              <div className="flex items-center justify-between border-b border-[#26262C] pb-2">
+                <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-zinc-400" />
                   Generated Backlog ({generatedBacklog.requirements.length} Reqs, {generatedBacklog.tasks.length} Tasks)
                 </span>
-                <Badge variant="outline" className="text-[10px] font-mono text-indigo-300">
+                <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C]">
                   Key: {generatedBacklog.project_key}
                 </Badge>
               </div>
 
               {/* Requirements Preview */}
-              <div className="space-y-2">
-                <span className="text-xs font-semibold text-slate-300">Requirements:</span>
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-300">Requirements:</span>
                 <div className="space-y-1.5">
                   {generatedBacklog.requirements.map((r, rIdx) => (
-                    <div key={rIdx} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1">
+                    <div key={rIdx} className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21] text-xs space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold font-mono text-indigo-300">{r.identifier}</span>
-                        <span className="text-white font-medium">{r.title}</span>
+                        <span className="font-semibold font-mono text-zinc-200">{r.identifier}</span>
+                        <span className="text-zinc-300 font-medium">{r.title}</span>
                       </div>
-                      <p className="text-[11px] text-slate-400">{r.description}</p>
+                      <p className="text-[11px] text-zinc-400">{r.description}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Tasks Preview */}
-              <div className="space-y-2">
-                <span className="text-xs font-semibold text-slate-300">Tasks:</span>
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium text-zinc-300">Tasks:</span>
                 <div className="space-y-1.5">
                   {generatedBacklog.tasks.map((t, tIdx) => (
-                    <div key={tIdx} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs flex items-center justify-between">
+                    <div key={tIdx} className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21] text-xs flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold font-mono text-sky-300">{t.task_key}</span>
-                          <span className="text-white font-medium">{t.title}</span>
+                          <span className="font-semibold font-mono text-zinc-200">{t.task_key}</span>
+                          <span className="text-zinc-300 font-medium">{t.title}</span>
                         </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          Mapped to: <strong className="text-indigo-400">{t.requirement_identifier}</strong>
+                        <div className="text-[11px] text-zinc-500 mt-0.5">
+                          Mapped to: <strong className="text-zinc-400">{t.requirement_identifier}</strong>
                         </div>
                       </div>
-                      <Badge variant="outline" className="text-[9px] font-mono text-amber-400 border-amber-500/40">
+                      <Badge variant="outline" className="text-[9px] font-mono text-zinc-300 border-[#26262C]">
                         {t.priority}
                       </Badge>
                     </div>
@@ -1238,13 +1240,12 @@ function ProjectsPageContent() {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-indigo-500/30 flex justify-end">
+              <div className="pt-2 border-t border-[#26262C] flex justify-end">
                 <Button
-                  variant="glow"
                   size="sm"
                   onClick={handleImportBacklog}
                   disabled={isImportingBacklog}
-                  className="text-xs gap-1.5"
+                  className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                 >
                   {isImportingBacklog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   Import Backlog
@@ -1255,7 +1256,7 @@ function ProjectsPageContent() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setShowAiBacklogModal(false)}>
+          <Button variant="outline" size="sm" onClick={() => setShowAiBacklogModal(false)} className="h-8 text-xs border-[#26262C]">
             Close
           </Button>
         </DialogFooter>
@@ -1279,7 +1280,7 @@ function ProjectsPageContent() {
 
         <form onSubmit={handleAddRequirement} className="space-y-3 my-3">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Requirement Identifier</label>
+            <label className="text-xs font-medium text-zinc-300">Requirement Identifier</label>
             <Input
               value={reqIdentifier}
               onChange={(e) => setReqIdentifier(e.target.value.toUpperCase())}
@@ -1288,7 +1289,7 @@ function ProjectsPageContent() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Title</label>
+            <label className="text-xs font-medium text-zinc-300">Title</label>
             <Input
               value={reqTitle}
               onChange={(e) => setReqTitle(e.target.value)}
@@ -1297,20 +1298,20 @@ function ProjectsPageContent() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Description</label>
+            <label className="text-xs font-medium text-zinc-300">Description</label>
             <textarea
               value={reqDescription}
               onChange={(e) => setReqDescription(e.target.value)}
               rows={3}
               placeholder="Detailed acceptance criteria..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none"
+              className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-400"
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowAddReqModal(false)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowAddReqModal(false)} className="h-8 text-xs border-[#26262C]">
               Cancel
             </Button>
-            <Button type="submit" variant="glow" size="sm" disabled={isSubmittingReq || !reqIdentifier || !reqTitle}>
+            <Button type="submit" size="sm" disabled={isSubmittingReq || !reqIdentifier || !reqTitle} className="h-8 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
               {isSubmittingReq ? "Creating..." : "Save Requirement"}
             </Button>
           </DialogFooter>
@@ -1336,7 +1337,7 @@ function ProjectsPageContent() {
         <form onSubmit={handleAddTask} className="space-y-3 my-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Task Key</label>
+              <label className="text-xs font-medium text-zinc-300">Task Key</label>
               <Input
                 value={taskKey}
                 onChange={(e) => setTaskKey(e.target.value.toUpperCase())}
@@ -1345,12 +1346,12 @@ function ProjectsPageContent() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Priority</label>
+              <label className="text-xs font-medium text-zinc-300">Priority</label>
               <select
                 aria-label="Priority"
                 value={taskPriority}
                 onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none"
+                className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2 text-xs text-zinc-200 focus:outline-none"
               >
                 <option value="CRITICAL">CRITICAL</option>
                 <option value="HIGH">HIGH</option>
@@ -1361,7 +1362,7 @@ function ProjectsPageContent() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Title</label>
+            <label className="text-xs font-medium text-zinc-300">Title</label>
             <Input
               value={taskTitle}
               onChange={(e) => setTaskTitle(e.target.value)}
@@ -1371,12 +1372,12 @@ function ProjectsPageContent() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Mapped Requirement</label>
+            <label className="text-xs font-medium text-zinc-300">Mapped Requirement</label>
             <select
               aria-label="Mapped Requirement"
               value={taskReqId}
               onChange={(e) => setTaskReqId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none"
+              className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2 text-xs text-zinc-200 focus:outline-none"
             >
               <option value="">No linked requirement (Standalone)</option>
               {requirements.map((r) => (
@@ -1388,21 +1389,21 @@ function ProjectsPageContent() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Description</label>
+            <label className="text-xs font-medium text-zinc-300">Description</label>
             <textarea
               value={taskDesc}
               onChange={(e) => setTaskDesc(e.target.value)}
               rows={3}
               placeholder="Technical implementation instructions..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none"
+              className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-400"
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowAddTaskModal(false)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowAddTaskModal(false)} className="h-8 text-xs border-[#26262C]">
               Cancel
             </Button>
-            <Button type="submit" variant="glow" size="sm" disabled={isSubmittingTask || !taskKey || !taskTitle}>
+            <Button type="submit" size="sm" disabled={isSubmittingTask || !taskKey || !taskTitle} className="h-8 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
               {isSubmittingTask ? "Creating..." : "Save Task"}
             </Button>
           </DialogFooter>
@@ -1428,12 +1429,12 @@ function ProjectsPageContent() {
 
           <div className="space-y-4 my-3 max-h-[60vh] overflow-y-auto pr-1">
             {/* Existing Links */}
-            <div className="space-y-2">
-              <span className="text-xs font-semibold text-slate-300">Existing Linked Artifacts:</span>
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium text-zinc-300">Existing Linked Artifacts:</span>
               {isLoadingLinks ? (
-                <div className="p-4 text-center text-xs text-slate-400">Loading links...</div>
+                <div className="p-4 text-center text-xs text-zinc-400">Loading links...</div>
               ) : taskLinks.length === 0 ? (
-                <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
+                <div className="p-4 rounded-md bg-[#09090B] border border-[#26262C] text-center text-xs text-zinc-500">
                   No code artifacts attached yet.
                 </div>
               ) : (
@@ -1441,15 +1442,15 @@ function ProjectsPageContent() {
                   {taskLinks.map((lk) => (
                     <div
                       key={lk.id}
-                      className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                      className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21] flex items-center justify-between text-xs"
                     >
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] font-mono text-purple-300 border-purple-500/30">
+                        <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C]">
                           {lk.linkType}
                         </Badge>
-                        <span className="font-mono text-white">{lk.externalRef}</span>
+                        <span className="font-mono text-zinc-200">{lk.externalRef}</span>
                       </div>
-                      <span className="text-[10px] text-slate-500 font-mono">
+                      <span className="text-[10px] text-zinc-500 font-mono">
                         {formatDate(lk.createdAt)}
                       </span>
                     </div>
@@ -1459,16 +1460,16 @@ function ProjectsPageContent() {
             </div>
 
             {/* Attach Form */}
-            <form onSubmit={handleAddCodeLink} className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 space-y-3">
-              <span className="text-xs font-semibold text-white">Attach New Code Reference:</span>
+            <form onSubmit={handleAddCodeLink} className="p-3.5 rounded-md border border-[#26262C] bg-[#141418] space-y-3">
+              <span className="text-xs font-semibold text-zinc-200">Attach New Code Reference:</span>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-1 space-y-1">
-                  <label className="text-[11px] font-medium text-slate-300">Type</label>
+                  <label className="text-[11px] font-medium text-zinc-300">Type</label>
                   <select
                     aria-label="Link Type"
                     value={linkType}
                     onChange={(e) => setLinkType(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-white focus:outline-none"
+                    className="w-full bg-[#09090B] border border-[#26262C] rounded p-2 text-xs text-zinc-200 focus:outline-none"
                   >
                     <option value="COMMIT">Commit SHA</option>
                     <option value="PULL_REQUEST">Pull Request</option>
@@ -1476,7 +1477,7 @@ function ProjectsPageContent() {
                   </select>
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <label className="text-[11px] font-medium text-slate-300">Reference</label>
+                  <label className="text-[11px] font-medium text-zinc-300">Reference</label>
                   <Input
                     value={linkExternalRef}
                     onChange={(e) => setLinkExternalRef(e.target.value)}
@@ -1493,7 +1494,7 @@ function ProjectsPageContent() {
               </div>
 
               <div className="flex justify-end pt-1">
-                <Button type="submit" variant="glow" size="sm" disabled={isSubmittingLink || !linkExternalRef.trim()} className="text-xs">
+                <Button type="submit" size="sm" disabled={isSubmittingLink || !linkExternalRef.trim()} className="h-7 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
                   {isSubmittingLink ? "Attaching..." : "Attach Link"}
                 </Button>
               </div>
@@ -1501,7 +1502,7 @@ function ProjectsPageContent() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setLinkTask(null)}>
+            <Button variant="outline" size="sm" onClick={() => setLinkTask(null)} className="h-8 text-xs border-[#26262C]">
               Close
             </Button>
           </DialogFooter>

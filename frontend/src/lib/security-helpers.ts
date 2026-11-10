@@ -15,7 +15,7 @@ export interface CodeContextLine {
 
 export interface SecurityStatusResult {
   status: "CLEAN" | "WARNINGS" | "HIGH RISK" | "CRITICAL / BLOCKED" | "PARTIAL EVIDENCE" | "NOT_ANALYZED";
-  color: "emerald" | "yellow" | "amber" | "rose" | "blue" | "slate";
+  color: "emerald" | "yellow" | "amber" | "rose" | "blue" | "zinc";
   bg: string;
   description: string;
 }
@@ -88,14 +88,14 @@ export function evaluateSecurityStatus(
       return {
         status: "PARTIAL EVIDENCE",
         color: "blue",
-        bg: "bg-blue-950/20 border-blue-500/40 text-blue-300",
+        bg: "bg-sky-950/20 border-sky-900/60 text-sky-300",
         description: "Dependency CVE scanner database is unconfigured. Code-level analysis not performed.",
       };
     }
     return {
       status: "NOT_ANALYZED",
-      color: "slate",
-      bg: "bg-slate-900/60 border-slate-800 text-slate-400",
+      color: "zinc",
+      bg: "bg-[#141418] border-[#26262C] text-zinc-400",
       description: "No security assessment performed yet for this pull request.",
     };
   }
@@ -104,7 +104,7 @@ export function evaluateSecurityStatus(
     return {
       status: "CRITICAL / BLOCKED",
       color: "rose",
-      bg: "bg-rose-950/30 border-rose-500/50 text-rose-300",
+      bg: "bg-rose-950/20 border-rose-900/60 text-rose-300",
       description: `${securityAssessment.critical_count || 1} critical security finding(s) detected. Merge is blocked. Immediate remediation required.`,
     };
   }
@@ -113,7 +113,7 @@ export function evaluateSecurityStatus(
     return {
       status: "HIGH RISK",
       color: "amber",
-      bg: "bg-amber-950/30 border-amber-500/50 text-amber-300",
+      bg: "bg-amber-950/20 border-amber-900/60 text-amber-300",
       description: `${securityAssessment.high_count} high-severity finding(s) present. Review and security fix required.`,
     };
   }
@@ -122,7 +122,7 @@ export function evaluateSecurityStatus(
     return {
       status: "PARTIAL EVIDENCE",
       color: "blue",
-      bg: "bg-blue-950/20 border-blue-500/40 text-blue-300",
+      bg: "bg-sky-950/20 border-sky-900/60 text-sky-300",
       description: "Dependency CVE database unconfigured. Code-level and secret scanning is fully verified.",
     };
   }
@@ -136,7 +136,7 @@ export function evaluateSecurityStatus(
     return {
       status: "WARNINGS",
       color: "yellow",
-      bg: "bg-yellow-950/20 border-yellow-500/40 text-yellow-300",
+      bg: "bg-amber-950/15 border-amber-900/50 text-amber-300",
       description: `${totalWarn} security warning(s) detected. Review recommended.`,
     };
   }
@@ -144,7 +144,7 @@ export function evaluateSecurityStatus(
   return {
     status: "CLEAN",
     color: "emerald",
-    bg: "bg-emerald-950/20 border-emerald-500/40 text-emerald-300",
+    bg: "bg-emerald-950/20 border-emerald-900/60 text-emerald-300",
     description: "Zero security vulnerabilities or secret exposures detected.",
   };
 }

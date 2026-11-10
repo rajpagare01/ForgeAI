@@ -137,21 +137,17 @@ function GitHubCallbackContent() {
   }, [searchParams, router, loginWithGitHub, linkGitHubAccount, isAuthenticated, isLoading, retryTrigger]);
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 bg-[#090d16] overflow-hidden">
-      {/* Background neon blur */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-600/20 rounded-full blur-[128px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-600/15 rounded-full blur-[128px] pointer-events-none" />
-
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-2xl text-center">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#09090B]">
+      <div className="w-full max-w-md rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-6 text-center">
         {/* Brand */}
         <div className="flex flex-col items-center space-y-2 mb-6">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-lg shadow-indigo-500/30 border border-indigo-400/30">
-            <Cpu className="h-6 w-6 text-white" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[#141418] border border-[#26262C]">
+            <Cpu className="h-5 w-5 text-zinc-200" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-white">
+          <h1 className="text-lg font-semibold tracking-tight text-zinc-100">
             ForgeAI Identity Integration
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-zinc-400">
             Secure GitHub OAuth & Workspace Authentication
           </p>
         </div>
@@ -159,25 +155,22 @@ function GitHubCallbackContent() {
         {/* Processing State */}
         {status === "processing" && (
           <div className="flex flex-col items-center py-6 space-y-4">
-            <div className="relative flex h-10 w-10">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-10 w-10 bg-indigo-600/50 border border-indigo-400/40 items-center justify-center">
-                <svg className="animate-spin h-5 w-5 text-indigo-200" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-              </span>
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-full border border-[#26262C] bg-[#141418]">
+              <svg className="animate-spin h-4 w-4 text-zinc-200" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
             </div>
-            <div className="text-sm font-medium text-slate-200 animate-pulse">
+            <div className="text-xs font-medium text-zinc-200">
               {stepMessage}
             </div>
-            <p className="text-xs text-slate-500 max-w-xs">
+            <p className="text-xs text-zinc-500 max-w-xs">
               Exchanging cryptographically verified OAuth state and provisioning identity invariants.
             </p>
             <div className="pt-2">
               <Link
                 href="/"
-                className="text-xs text-indigo-400 hover:text-indigo-300 underline transition-colors"
+                className="text-xs font-mono text-zinc-300 hover:text-zinc-100 underline transition-colors"
               >
                 Proceed to Dashboard &rarr;
               </Link>
@@ -188,10 +181,10 @@ function GitHubCallbackContent() {
         {/* Success State */}
         {status === "success" && (
           <div className="flex flex-col items-center py-6 space-y-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              <CheckCircle2 className="h-6 w-6" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <CheckCircle2 className="h-5 w-5" />
             </div>
-            <div className="text-sm font-semibold text-emerald-400">
+            <div className="text-xs font-medium text-emerald-400">
               {stepMessage}
             </div>
           </div>
@@ -200,8 +193,8 @@ function GitHubCallbackContent() {
         {/* Error State */}
         {status === "error" && (
           <div className="py-4 space-y-4 text-left">
-            <div className="flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-950/40 p-4 text-xs text-rose-300">
-              <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 rounded-md border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300">
+              <AlertCircle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <div className="font-semibold text-rose-200">Authentication Failed</div>
                 <div className="text-rose-300/90 leading-relaxed">{errorMessage}</div>
@@ -212,14 +205,14 @@ function GitHubCallbackContent() {
               <button
                 type="button"
                 onClick={handleRetry}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 px-4 py-2.5 text-xs font-semibold text-white transition-all shadow-lg shadow-indigo-500/25 active:scale-95 cursor-pointer"
+                className="flex flex-1 h-8 items-center justify-center gap-1.5 rounded-md bg-zinc-100 hover:bg-white px-3 text-xs font-medium text-zinc-950 transition-colors cursor-pointer"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Try Again
               </button>
               <Link
                 href="/login"
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-4 py-2.5 text-xs font-semibold text-white transition-colors"
+                className="flex flex-1 h-8 items-center justify-center gap-1.5 rounded-md border border-[#26262C] bg-[#141418] hover:bg-[#1C1C22] px-3 text-xs font-medium text-zinc-200 transition-colors"
               >
                 Return to Sign In
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -236,7 +229,7 @@ export default function GitHubCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[#090d16] text-slate-400 text-xs">
+        <div className="min-h-screen flex items-center justify-center bg-[#09090B] text-zinc-500 font-mono text-xs">
           Loading OAuth context...
         </div>
       }

@@ -9,17 +9,25 @@ import {
   FolderGit2,
   GitPullRequest,
   CheckCircle2,
-  Sparkles,
-  ArrowRight,
-  TrendingUp,
-  ShieldCheck,
-  Layers,
-  Plus,
   Radio,
+  ArrowRight,
+  ShieldCheck,
+  Plus,
+  GitCommit,
+  Layers,
+  Activity,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+
+interface InsightItem {
+  pr: string;
+  title: string;
+  risk: string;
+  score: number;
+  symbols: number;
+}
 
 export default function OverviewDashboardPage() {
   const { currentOrg, activeWorkspace } = useTenant();
@@ -29,7 +37,7 @@ export default function OverviewDashboardPage() {
   const [repoCount, setRepoCount] = useState<number>(0);
   const [testRunCount, setTestRunCount] = useState<number>(0);
   const [prCount, setPrCount] = useState<number>(0);
-  const [recentInsights, setRecentInsights] = useState<any[]>([]);
+  const [recentInsights, setRecentInsights] = useState<InsightItem[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -49,7 +57,7 @@ export default function OverviewDashboardPage() {
         if (repos.status === "fulfilled" && Array.isArray(repos.value)) {
           setRepoCount(repos.value.length);
           let totalOpenPrs = 0;
-          const insightsList: any[] = [];
+          const insightsList: InsightItem[] = [];
           for (const r of repos.value) {
             try {
               const prs = await apiClient.get<any[]>(`/api/v1/repositories/${r.id}/pull-requests`);
@@ -108,234 +116,247 @@ export default function OverviewDashboardPage() {
 
   const metrics = [
     {
-      title: "Active Governed Projects",
+      title: "Governed Projects",
       value: projectCount.toString(),
-      subtext: "Live Tenant Projects",
-      change: projectCount > 0 ? "Active in workspace" : "Ready to initialize",
+      subtext: "Active in current tenant",
+      indicator: projectCount > 0 ? "Synchronized" : "None initialized",
       icon: FolderGit2,
-      color: "text-indigo-400",
-      border: "border-indigo-500/20",
     },
     {
-      title: "Tracked Repositories",
+      title: "Connected Repositories",
       value: repoCount.toString(),
-      subtext: "GitHub App Connected",
-      change: repoCount > 0 ? "Webhook delivery active" : "Connect repo to sync",
+      subtext: "GitHub App webhooks active",
+      indicator: repoCount > 0 ? "Real-time delivery" : "Pending setup",
       icon: Radio,
-      color: "text-sky-400",
-      border: "border-sky-500/20",
     },
     {
-      title: "CI Verification Runs",
+      title: "Test Ingestions",
       value: testRunCount.toString(),
-      subtext: "Deterministic Staging Suites",
-      change: testRunCount > 0 ? "100% Ingestion Integrity" : "Awaiting first run",
+      subtext: "Deterministic verification runs",
+      indicator: testRunCount > 0 ? "Automated pass" : "Awaiting suites",
       icon: CheckCircle2,
-      color: "text-emerald-400",
-      border: "border-emerald-500/20",
     },
     {
       title: "Open Pull Requests",
       value: prCount.toString(),
-      subtext: "AST Blast Radius Monitored",
-      change: "Zero regressions in prod",
+      subtext: "Blast radius monitored",
+      indicator: "Zero unreviewed regressions",
       icon: GitPullRequest,
-      color: "text-amber-400",
-      border: "border-amber-500/20",
     },
   ];
 
-  return (
-    <div className="space-y-8">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900/90 via-indigo-950/20 to-slate-900/90 p-6 backdrop-blur-xl">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Badge variant="default" className="font-mono text-[10px]">
-              TENANT: {currentOrg?.slug || activeWorkspace?.name || "PERSONAL"}
-            </Badge>
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> Enterprise Policy Enforced
-            </span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            Welcome back, {user?.fullName || "Lead Architect"}
-          </h1>
-          <p className="text-xs text-slate-400 max-w-xl">
-            Autonomous governance matrix is monitoring requirements, commits, automated JUnit suites, and AST blast radii across <strong>{currentOrg?.name || activeWorkspace?.name || "Workspace"}</strong>.
-          </p>
-        </div>
+  const microservices = [
+    { name: "API Gateway", port: ":8080", status: "HEALTHY", role: "Ingress & Revocation Filter" },
+    { name: "Identity Service", port: ":8081", status: "HEALTHY", role: "RS256 JWKS & Multi-Tenant RBAC" },
+    { name: "Source Control", port: ":8082", status: "HEALTHY", role: "GitHub Webhooks & PR Ingestion" },
+    { name: "Testing Service", port: ":8083", status: "HEALTHY", role: "JUnit XML & Flaky Detection" },
+    { name: "AI Service", port: ":8084", status: "HEALTHY", role: "Tree-sitter AST & Blast Radius" },
+    { name: "Project Service", port: ":8085", status: "HEALTHY", role: "Kanban, Outbox & Traceability" },
+  ];
 
-        <div className="flex items-center gap-3">
-          <Link href="/projects">
-            <Button variant="glow" size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              New Project
-            </Button>
-          </Link>
+  return (
+    <div className="space-y-6">
+      {/* Context Top Bar */}
+      <div className="relative rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.06]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="font-mono text-[11px] text-zinc-300 border-[#26262C]">
+                TENANT: {currentOrg?.slug || activeWorkspace?.name || "PERSONAL"}
+              </Badge>
+              <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                Zero-Trust Policy Enforced
+              </span>
+            </div>
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
+              Welcome back, {user?.fullName || "Lead Architect"}
+            </h1>
+            <p className="text-xs text-zinc-400 max-w-2xl">
+              Continuous delivery verification active for <strong>{currentOrg?.name || activeWorkspace?.name || "Workspace"}</strong>.
+              Correlating requirements, engineering tasks, GitHub commits, test runs, and semantic blast radii.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link href="/projects">
+              <Button size="sm" className="h-8 gap-1.5 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
+                <Plus className="h-3.5 w-3.5" />
+                New Project
+              </Button>
+            </Link>
+            <Link href="/traceability">
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs border-[#26262C] text-zinc-200">
+                <Layers className="h-3.5 w-3.5" />
+                Traceability
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Metric Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 4-Column Metric Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {metrics.map((metric) => {
           const Icon = metric.icon;
           return (
-            <Card key={metric.title} className={`${metric.border} bg-slate-900/50 hover:bg-slate-900/80 transition-all`}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <CardTitle className="text-xs font-medium text-slate-400">
-                  {metric.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg bg-slate-800/80 ${metric.color}`}>
-                  <Icon className="h-4 w-4" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-white tracking-tight font-mono">
-                  {metric.value}
-                </div>
-                <p className="text-xs text-slate-400 mt-1">{metric.subtext}</p>
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
-                  <TrendingUp className="h-3 w-3" />
-                  {metric.change}
-                </div>
-              </CardContent>
+            <Card key={metric.title} className="p-4 border-[#1C1C21] bg-[#0E0E11] relative before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.04]">
+              <div className="flex items-center justify-between pb-2">
+                <span className="text-xs font-medium text-zinc-400">{metric.title}</span>
+                <Icon className="h-3.5 w-3.5 text-zinc-500" />
+              </div>
+              <div className="text-2xl font-semibold text-zinc-100 font-mono tabular-nums tracking-tight">
+                {metric.value}
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1">{metric.subtext}</p>
+              <div className="mt-2.5 pt-2 border-t border-[#1C1C21] flex items-center gap-1.5 text-[11px] text-zinc-400 font-mono">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {metric.indicator}
+              </div>
             </Card>
           );
         })}
       </div>
 
-      {/* Core Traceability Spine Callout */}
-      <Card className="border-indigo-500/40 bg-gradient-to-br from-indigo-950/30 via-slate-900/80 to-purple-950/20 shadow-xl overflow-hidden">
-        <div className="p-6 sm:p-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
+      {/* Traceability Spine Callout */}
+      <div className="relative rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.06]">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
+          <div className="space-y-2 max-w-2xl">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                <Layers className="h-4 w-4" />
-              </div>
-              <Badge variant="default" className="text-xs font-semibold">
-                CORE VISUAL ANCHOR
+              <Badge variant="outline" className="font-mono text-[10px] text-zinc-300 border-[#26262C]">
+                CONTINUOUS LINEAGE
               </Badge>
+              <span className="text-xs text-zinc-400">Deterministic Requirement-to-Commit Traceability</span>
             </div>
-            <h2 className="text-xl font-bold text-white">
-              End-to-End Traceability Spine Matrix
+            <h2 className="text-base font-semibold text-zinc-100">
+              Traceability Spine Matrix
             </h2>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Explore the deterministic unbroken chain linking business requirements directly to engineering tasks, GitHub pull requests, JUnit verification test runs, and Tree-sitter AST blast radius intelligence.
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Verify continuous lineage across requirements, tasks, GitHub pull requests, JUnit test executions, and Tree-sitter semantic AST risk assessments.
             </p>
+            {/* Inline Mini Lineage Chain */}
+            <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-zinc-400 flex-wrap">
+              <span className="px-2 py-0.5 rounded bg-[#141418] border border-[#1C1C21] text-zinc-300">REQ-SPEC</span>
+              <ArrowRight className="h-3 w-3 text-zinc-600" />
+              <span className="px-2 py-0.5 rounded bg-[#141418] border border-[#1C1C21] text-zinc-300">ENG-TASK</span>
+              <ArrowRight className="h-3 w-3 text-zinc-600" />
+              <span className="px-2 py-0.5 rounded bg-[#141418] border border-[#1C1C21] text-zinc-300">PR # / COMMIT</span>
+              <ArrowRight className="h-3 w-3 text-zinc-600" />
+              <span className="px-2 py-0.5 rounded bg-[#141418] border border-[#1C1C21] text-emerald-400">JUNIT PASSED</span>
+            </div>
           </div>
 
           <div className="shrink-0">
             <Link href="/traceability">
-              <Button variant="glow" size="lg" className="gap-2">
-                Launch Traceability Matrix
-                <ArrowRight className="h-4 w-4" />
+              <Button size="sm" className="h-8 gap-1.5 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
+                Open Traceability Matrix
+                <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           </div>
         </div>
-      </Card>
+      </div>
 
-      {/* 2-Column: Recent AI Findings & Connected Repos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* 2-Column: Recent AI Findings & Microservices Cluster */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent AI PR Blast Radius Findings */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+        <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
             <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-400" />
-                Recent AI Blast Radius Insights
+              <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
+                <GitCommit className="h-3.5 w-3.5 text-zinc-400" />
+                Recent AST Blast Radius Stream
               </CardTitle>
-              <CardDescription>
-                Automated Tree-sitter AST dependency impact audits
+              <CardDescription className="text-[11px] text-zinc-500">
+                Automated semantic code risk assessments
               </CardDescription>
             </div>
             <Link href="/ai-insights">
-              <Button variant="ghost" size="sm" className="text-xs text-indigo-400">
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-zinc-400 hover:text-zinc-100">
                 View All
               </Button>
             </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
+          </div>
+
+          <div className="space-y-2">
             {recentInsights.length === 0 ? (
-              <div className="p-6 text-center rounded-xl border border-dashed border-slate-800 bg-slate-950/20 text-xs text-slate-400">
-                <Sparkles className="h-5 w-5 text-slate-600 mx-auto mb-2" />
-                No commits or PR analyses detected yet. Push a commit or select a PR in AI Insights to view live AST blast radius insights.
+              <div className="p-6 text-center rounded-md border border-dashed border-[#26262C] text-xs text-zinc-500">
+                No commit or PR analyses ingested yet. Push a commit or inspect a pull request in AI Insights to view semantic impact.
               </div>
             ) : (
               recentInsights.map((item, idx) => (
                 <div
                   key={`${item.pr}-${idx}`}
-                  className="flex items-center justify-between p-3 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-800/30 transition-colors"
+                  className="flex items-center justify-between p-2.5 rounded-md border border-[#1C1C21] bg-[#141418] hover:border-[#26262C] transition-colors"
                 >
-                  <div className="space-y-1 truncate pr-3">
+                  <div className="space-y-0.5 truncate pr-3">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-semibold text-sky-400">
+                      <span className="font-mono text-xs font-semibold text-zinc-200">
                         {item.pr}
                       </span>
-                      <span className="text-xs font-medium text-slate-200 truncate">
+                      <span className="text-xs text-zinc-300 truncate">
                         {item.title}
                       </span>
                     </div>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-zinc-500 font-mono">
                       Impacted files / symbols: {item.symbols}
                     </span>
                   </div>
                   <Badge
                     variant={
                       item.risk === "LOW"
-                        ? "success"
+                        ? "riskLow"
                         : item.risk === "MEDIUM"
-                          ? "warning"
-                          : "destructive"
+                        ? "riskMedium"
+                        : "riskHigh"
                     }
-                    className="text-[10px]"
+                    className="font-mono text-[10px]"
                   >
-                    {item.risk} RISK ({item.score}%)
+                    {item.risk} ({item.score}%)
                   </Badge>
                 </div>
               ))
             )}
-          </CardContent>
+          </div>
         </Card>
 
-        {/* System Health & Architecture Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              Microservices Cluster Architecture
-            </CardTitle>
-            <CardDescription>
-              Current status of Spring Boot & FastAPI microservice nodes
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { name: "API Gateway (Reactive)", port: ":8080", status: "HEALTHY", role: "Edge Ingress & Zero-Trust" },
-              { name: "Identity Service", port: ":8081", status: "HEALTHY", role: "Auth, RS256 JWKS & RBAC" },
-              { name: "Source Control Service", port: ":8082", status: "HEALTHY", role: "GitHub Webhooks & Thin Ingest" },
-              { name: "Testing Service", port: ":8083", status: "HEALTHY", role: "JUnit Ingestion & Test Runs" },
-              { name: "AI Intelligence Service", port: ":8084", status: "HEALTHY", role: "pgvector & Gemini RAG" },
-              { name: "Project Service", port: ":8085", status: "HEALTHY", role: "Tasks, REQs & Traceability" },
-            ].map((svc) => (
+        {/* Microservices Cluster Status */}
+        <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
+            <div>
+              <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
+                <Activity className="h-3.5 w-3.5 text-zinc-400" />
+                Microservices Topology
+              </CardTitle>
+              <CardDescription className="text-[11px] text-zinc-500">
+                Ingress nodes and internal microservice health
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-800">
+              6/6 HEALTHY
+            </Badge>
+          </div>
+
+          <div className="space-y-1.5">
+            {microservices.map((svc) => (
               <div
                 key={svc.name}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-800 bg-slate-950/40 text-xs"
+                className="flex items-center justify-between p-2 rounded-md border border-[#1C1C21] bg-[#141418] text-xs"
               >
                 <div className="space-y-0.5">
-                  <div className="font-medium text-slate-200 flex items-center gap-2">
+                  <div className="font-medium text-zinc-200 flex items-center gap-2">
                     <span>{svc.name}</span>
-                    <span className="text-[10px] font-mono text-slate-500">{svc.port}</span>
+                    <span className="text-[10px] font-mono text-zinc-500">{svc.port}</span>
                   </div>
-                  <div className="text-[11px] text-slate-400">{svc.role}</div>
+                  <div className="text-[11px] text-zinc-400">{svc.role}</div>
                 </div>
-                <Badge variant="success" className="text-[10px]">
-                  {svc.status}
-                </Badge>
+                <div className="flex items-center gap-1.5 font-mono text-[10px] text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  UP
+                </div>
               </div>
             ))}
-          </CardContent>
+          </div>
         </Card>
       </div>
     </div>

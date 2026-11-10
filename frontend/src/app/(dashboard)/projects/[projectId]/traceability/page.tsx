@@ -16,8 +16,6 @@ import {
   Clock,
   Camera,
   CheckCircle2,
-  ExternalLink,
-  ChevronRight,
   PlusCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -156,84 +154,82 @@ function TraceabilityMatrixContent() {
   const filteredGaps = gaps.filter((g) => gapFilter === "ALL" || g.severity === gapFilter);
 
   const healthStatusColor = health?.status === "GREEN"
-    ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
+    ? "text-emerald-400 border-emerald-900 bg-emerald-950/20"
     : health?.status === "AMBER"
-    ? "text-amber-400 border-amber-500/30 bg-amber-500/10"
-    : "text-rose-400 border-rose-500/30 bg-rose-500/10";
+    ? "text-amber-400 border-amber-900 bg-amber-950/20"
+    : "text-rose-400 border-rose-900 bg-rose-950/20";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Breadcrumb & Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Link
-              href="/projects"
-              className="hover:text-indigo-400 transition-colors flex items-center gap-1"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Projects
-            </Link>
-            <span>/</span>
-            <Link
-              href={`/projects/${projectId}`}
-              className="hover:text-indigo-400 transition-colors font-mono"
-            >
-              {projectId ? projectId.substring(0, 12) : "PROJECT"}
-            </Link>
-            <span>/</span>
-            <span className="text-white font-semibold">Unified Traceability Matrix</span>
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-              <Layers className="h-5 w-5" />
+      <div className="relative rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.06]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono">
+              <Link
+                href="/projects"
+                className="hover:text-zinc-200 transition-colors flex items-center gap-1"
+              >
+                <ArrowLeft className="h-3 w-3" /> Projects
+              </Link>
+              <span>/</span>
+              <span className="text-zinc-300">
+                {projectId ? projectId.substring(0, 12) : "PROJECT"}
+              </span>
+              <span>/</span>
+              <span className="text-zinc-100 font-semibold font-sans">Traceability Matrix</span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              Unified Engineering Traceability & Intelligence
-            </h1>
+            <div className="flex items-center gap-2 pt-0.5">
+              <div className="p-1.5 rounded-md bg-[#141418] text-zinc-300 border border-[#26262C]">
+                <Layers className="h-4 w-4" />
+              </div>
+              <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
+                Engineering Traceability & Lineage
+              </h1>
+            </div>
+            <p className="text-xs text-zinc-400 max-w-2xl">
+              Live authoritative spine: Requirement → Task → Code Artifact → Commit → Pull Request → Test Run → AI Risk → Merge Readiness.
+            </p>
           </div>
-          <p className="text-xs text-slate-400 max-w-2xl">
-            Live authoritative spine: Requirement → Task → Code Artifact → Commit → Pull Request → Test Run → AI Analysis → Risk → Merge Readiness → Remediation.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSync}
-            disabled={isSyncing || isLoading || isTenantLoading}
-            className="gap-1.5 text-xs"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-            {isSyncing ? "Syncing..." : "Sync Traceability"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSync}
+              disabled={isSyncing || isLoading || isTenantLoading}
+              className="h-8 gap-1.5 text-xs border-[#26262C] bg-[#141418] text-zinc-300"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+              {isSyncing ? "Syncing..." : "Sync Lineage"}
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSnapshotDialog(true)}
-            disabled={isLoading || isTenantLoading}
-            className="gap-1.5 text-xs"
-          >
-            <Camera className="h-3.5 w-3.5" />
-            Snapshot State
-          </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSnapshotDialog(true)}
+              disabled={isLoading || isTenantLoading}
+              className="h-8 gap-1.5 text-xs border-[#26262C] bg-[#141418] text-zinc-300"
+            >
+              <Camera className="h-3.5 w-3.5" />
+              Snapshot State
+            </Button>
 
-          <Button
-            variant="glow"
-            size="sm"
-            onClick={handleExportAudit}
-            disabled={!traceData || isLoading || isTenantLoading}
-            className="gap-1.5 text-xs"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Export Audit Matrix
-          </Button>
+            <Button
+              size="sm"
+              onClick={handleExportAudit}
+              disabled={!traceData || isLoading || isTenantLoading}
+              className="h-8 gap-1.5 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export Audit
+            </Button>
+          </div>
         </div>
       </div>
 
       {errorMessage && !isTenantLoading && (
-        <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-center gap-3">
+        <div className="p-3.5 rounded-md border border-rose-900/60 bg-rose-950/20 text-rose-300 text-xs flex items-center gap-2.5">
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{errorMessage}</span>
         </div>
@@ -241,37 +237,38 @@ function TraceabilityMatrixContent() {
 
       {/* Snapshot Creation Modal Dialog */}
       {showSnapshotDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-lg border border-[#26262C] bg-[#0E0E11] p-5 shadow-2xl space-y-3.5">
             <div className="space-y-1">
-              <h3 className="text-base font-semibold text-white">Save Governance Snapshot</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="text-sm font-semibold text-zinc-100">Save Governance Snapshot</h3>
+              <p className="text-xs text-zinc-400">
                 Create an immutable governance snapshot of the full delivery spine, gaps, and health scores for compliance audits.
               </p>
             </div>
-            <form onSubmit={handleCreateSnapshot} className="space-y-4">
+            <form onSubmit={handleCreateSnapshot} className="space-y-3">
               <input
                 type="text"
                 placeholder="e.g. Release v1.0 Production Audit"
                 value={snapshotLabel}
                 onChange={(e) => setSnapshotLabel(e.target.value)}
                 required
-                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="h-8 w-full rounded-md border border-[#26262C] bg-[#09090B] px-2.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-400"
               />
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setShowSnapshotDialog(false)}
+                  className="h-8 text-xs border-[#26262C]"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  variant="glow"
                   size="sm"
                   disabled={isSnapshotting || !snapshotLabel.trim()}
+                  className="h-8 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                 >
                   {isSnapshotting ? "Saving..." : "Save Snapshot"}
                 </Button>
@@ -283,18 +280,18 @@ function TraceabilityMatrixContent() {
 
       {/* Health & Governance KPI Card Strip */}
       {health && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Project Health</span>
-              <Badge className={`border text-[10px] uppercase font-bold ${healthStatusColor}`}>
+              <span className="text-xs font-medium text-zinc-400">Project Lineage</span>
+              <Badge variant="outline" className={`font-mono text-[10px] uppercase font-semibold ${healthStatusColor}`}>
                 {health.status}
               </Badge>
             </div>
-            <div className="text-2xl font-bold font-mono text-white">
-              {health.healthScore} <span className="text-xs text-slate-500">/ 100</span>
+            <div className="text-2xl font-semibold font-mono tabular-nums text-zinc-100">
+              {health.healthScore} <span className="text-xs text-zinc-500 font-normal">/ 100</span>
             </div>
-            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div className="w-full bg-[#1C1C21] rounded-full h-1 overflow-hidden">
               <div
                 className={`h-full rounded-full ${
                   health.status === "GREEN"
@@ -308,12 +305,12 @@ function TraceabilityMatrixContent() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
-            <div className="text-xs text-slate-400">Requirements Complete</div>
-            <div className="text-2xl font-bold text-emerald-400 font-mono">
-              {health.requirementsCompleted} <span className="text-xs text-slate-500">/ {health.totalRequirements}</span>
+          <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-1">
+            <div className="text-xs font-medium text-zinc-400">Requirements Complete</div>
+            <div className="text-2xl font-semibold text-emerald-400 font-mono tabular-nums">
+              {health.requirementsCompleted} <span className="text-xs text-zinc-500 font-normal">/ {health.totalRequirements}</span>
             </div>
-            <div className="text-[10px] text-slate-500">
+            <div className="text-[11px] text-zinc-500 font-mono">
               {health.requirementsAtRisk > 0 ? (
                 <span className="text-amber-400">{health.requirementsAtRisk} at risk</span>
               ) : (
@@ -322,22 +319,22 @@ function TraceabilityMatrixContent() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
-            <div className="text-xs text-slate-400">Tasks & Code Lineage</div>
-            <div className="text-2xl font-bold text-indigo-400 font-mono">
-              {health.openTasks} <span className="text-xs text-slate-500">active tasks</span>
+          <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-1">
+            <div className="text-xs font-medium text-zinc-400">Tasks & Code Lineage</div>
+            <div className="text-2xl font-semibold text-zinc-100 font-mono tabular-nums">
+              {health.openTasks} <span className="text-xs text-zinc-500 font-normal">active tasks</span>
             </div>
-            <div className="text-[10px] text-slate-500">
+            <div className="text-[11px] text-zinc-500 font-mono">
               {health.activePrs} pull requests linked across repositories
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
-            <div className="text-xs text-slate-400">Delivery Gaps Detected</div>
-            <div className="text-2xl font-bold font-mono text-amber-400">
+          <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-1">
+            <div className="text-xs font-medium text-zinc-400">Delivery Gaps Detected</div>
+            <div className="text-2xl font-semibold font-mono tabular-nums text-amber-400">
               {gaps.length}
             </div>
-            <div className="text-[10px] text-slate-500">
+            <div className="text-[11px] text-zinc-500 font-mono">
               {health.blockedTasks > 0 ? (
                 <span className="text-rose-400 font-semibold">{health.blockedTasks} blocker(s) present</span>
               ) : (
@@ -350,15 +347,15 @@ function TraceabilityMatrixContent() {
 
       {/* Health Reasons Alerts */}
       {health?.reasons && health.reasons.length > 0 && (
-        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 p-4 space-y-2">
-          <div className="text-xs font-semibold uppercase text-slate-400 flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-indigo-400" />
+        <div className="rounded-lg border border-[#1C1C21] bg-[#141418] p-3.5 space-y-2">
+          <div className="text-xs font-semibold uppercase text-zinc-400 flex items-center gap-1.5 tracking-wider">
+            <ShieldCheck className="h-4 w-4 text-zinc-300" />
             Deterministic Governance Audit Notes
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {health.reasons.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-slate-300">
-                <div className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" />
+              <div key={i} className="flex items-center gap-2 text-xs text-zinc-300">
+                <div className="h-1.5 w-1.5 rounded-full bg-zinc-500 shrink-0" />
                 <span>{r}</span>
               </div>
             ))}
@@ -367,48 +364,48 @@ function TraceabilityMatrixContent() {
       )}
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex border-b border-slate-800 gap-6 text-xs font-medium text-slate-400">
+      <div className="flex border-b border-[#1C1C21] gap-6 text-xs font-medium text-zinc-400">
         <button
           onClick={() => setActiveTab("spine")}
-          className={`pb-3 transition-colors ${
+          className={`pb-2.5 transition-colors ${
             activeTab === "spine"
-              ? "text-white border-b-2 border-indigo-500 font-semibold"
-              : "hover:text-slate-200"
+              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+              : "hover:text-zinc-200"
           }`}
         >
           Delivery Spine Flow ({traceData?.chains?.length || 0})
         </button>
         <button
           onClick={() => setActiveTab("gaps")}
-          className={`pb-3 transition-colors flex items-center gap-1.5 ${
+          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${
             activeTab === "gaps"
-              ? "text-white border-b-2 border-indigo-500 font-semibold"
-              : "hover:text-slate-200"
+              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+              : "hover:text-zinc-200"
           }`}
         >
           Gap Inspector
           {gaps.length > 0 && (
-            <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono text-amber-400 border-amber-900">
               {gaps.length}
             </Badge>
           )}
         </button>
         <button
           onClick={() => setActiveTab("snapshots")}
-          className={`pb-3 transition-colors flex items-center gap-1.5 ${
+          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${
             activeTab === "snapshots"
-              ? "text-white border-b-2 border-indigo-500 font-semibold"
-              : "hover:text-slate-200"
+              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+              : "hover:text-zinc-200"
           }`}
         >
           Historical Snapshots ({snapshots.length})
         </button>
         <button
           onClick={() => setActiveTab("repositories")}
-          className={`pb-3 transition-colors flex items-center gap-1.5 ${
+          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${
             activeTab === "repositories"
-              ? "text-white border-b-2 border-indigo-500 font-semibold"
-              : "hover:text-slate-200"
+              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+              : "hover:text-zinc-200"
           }`}
         >
           Connected Repositories ({traceData?.repositories?.length || repositories.length})
@@ -427,26 +424,26 @@ function TraceabilityMatrixContent() {
       {/* Tab 2: Gap Inspector */}
       {activeTab === "gaps" && (
         (isLoading || isTenantLoading) ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
-            <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
-            <div className="text-sm font-semibold text-white">Auditing Governance Gaps...</div>
+          <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-12 text-center space-y-2">
+            <RefreshCw className="h-5 w-5 text-zinc-400 animate-spin mx-auto" />
+            <div className="text-xs font-mono text-zinc-300">Auditing Governance Gaps...</div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <div className="text-xs text-slate-400">
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5">
+              <div className="text-xs text-zinc-400">
                 Showing {filteredGaps.length} of {gaps.length} detected governance gaps across the delivery spine.
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">Filter Severity:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-zinc-400">Filter Severity:</span>
                 {(["ALL", "HIGH", "MEDIUM", "LOW"] as const).map((sev) => (
                   <button
                     key={sev}
                     onClick={() => setGapFilter(sev)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                    className={`rounded px-2 py-0.5 text-xs font-medium font-mono transition-colors ${
                       gapFilter === sev
-                        ? "bg-indigo-600 text-white"
-                        : "bg-slate-800/80 text-slate-300 hover:bg-slate-700"
+                        ? "bg-zinc-100 text-zinc-900 font-semibold"
+                        : "bg-[#141418] text-zinc-400 hover:text-zinc-200 border border-[#26262C]"
                     }`}
                   >
                     {sev}
@@ -456,20 +453,20 @@ function TraceabilityMatrixContent() {
             </div>
 
             {filteredGaps.length === 0 ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-12 text-center space-y-2">
-                <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
-                <h3 className="text-sm font-semibold text-white">Zero Governance Gaps Detected</h3>
-                <p className="text-xs text-slate-400">All requirements, tasks, PRs, and verification suites satisfy integrity invariants.</p>
+              <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-12 text-center space-y-2">
+                <CheckCircle2 className="h-6 w-6 text-emerald-400 mx-auto" />
+                <h3 className="text-sm font-semibold text-zinc-200">Zero Governance Gaps Detected</h3>
+                <p className="text-xs text-zinc-400">All requirements, tasks, PRs, and verification suites satisfy integrity invariants.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {filteredGaps.map((gap, idx) => (
                   <div
                     key={idx}
-                    className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3"
+                    className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-2.5"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-indigo-400">
+                      <span className="font-mono text-xs font-semibold text-zinc-200">
                         {gap.gapType}
                       </span>
                       <Badge
@@ -477,19 +474,20 @@ function TraceabilityMatrixContent() {
                           gap.severity === "HIGH" || gap.severity === "CRITICAL"
                             ? "destructive"
                             : gap.severity === "MEDIUM"
-                            ? "warning"
+                            ? "outline"
                             : "secondary"
                         }
+                        className="text-[10px] font-mono"
                       >
                         {gap.severity}
                       </Badge>
                     </div>
                     <div>
-                      <div className="text-xs font-semibold text-white">{gap.artifactName}</div>
-                      <div className="text-xs text-slate-400 mt-1">{gap.evidence}</div>
+                      <div className="text-xs font-semibold text-zinc-200">{gap.artifactName}</div>
+                      <div className="text-xs text-zinc-400 mt-1">{gap.evidence}</div>
                     </div>
-                    <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-amber-300/90 flex items-start gap-2">
-                      <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="p-2.5 rounded bg-[#141418] border border-[#1C1C21] text-[11px] text-amber-300/90 flex items-start gap-2">
+                      <ShieldAlert className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
                       <span>{gap.recommendation}</span>
                     </div>
                   </div>
@@ -503,19 +501,19 @@ function TraceabilityMatrixContent() {
       {/* Tab 3: Historical Snapshots */}
       {activeTab === "snapshots" && (
         (isLoading || isTenantLoading) ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
-            <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
-            <div className="text-sm font-semibold text-white">Loading Governance Snapshots...</div>
+          <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-12 text-center space-y-2">
+            <RefreshCw className="h-5 w-5 text-zinc-400 animate-spin mx-auto" />
+            <div className="text-xs font-mono text-zinc-300">Loading Governance Snapshots...</div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">Immutable Governance Snapshots</h3>
+              <h3 className="text-sm font-semibold text-zinc-200">Immutable Governance Snapshots</h3>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowSnapshotDialog(true)}
-                className="gap-1.5 text-xs"
+                className="gap-1.5 text-xs h-8 border-[#26262C]"
               >
                 <Camera className="h-3.5 w-3.5" />
                 New Snapshot
@@ -523,33 +521,33 @@ function TraceabilityMatrixContent() {
             </div>
 
             {snapshots.length === 0 ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-12 text-center space-y-2">
-                <Clock className="h-8 w-8 text-slate-500 mx-auto" />
-                <h3 className="text-sm font-semibold text-white">No Snapshots Created Yet</h3>
-                <p className="text-xs text-slate-400">Save snapshots at major milestones or PR merges for immutable compliance records.</p>
+              <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-12 text-center space-y-2">
+                <Clock className="h-6 w-6 text-zinc-500 mx-auto" />
+                <h3 className="text-sm font-semibold text-zinc-200">No Snapshots Created Yet</h3>
+                <p className="text-xs text-zinc-400">Save snapshots at major milestones or PR merges for immutable compliance records.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {snapshots.map((snap) => (
                   <div
                     key={snap.id}
-                    className="flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-900/40"
+                    className="flex items-center justify-between p-3.5 rounded-lg border border-[#1C1C21] bg-[#0E0E11]"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-white">{snap.snapshotName}</span>
+                        <span className="text-sm font-medium text-zinc-200">{snap.snapshotName}</span>
                         {snap.prNumber && (
-                          <Badge variant="outline" className="font-mono text-[10px]">
+                          <Badge variant="outline" className="font-mono text-[10px] border-[#26262C]">
                             PR #{snap.prNumber}
                           </Badge>
                         )}
                         {snap.commitSha && (
-                          <Badge variant="outline" className="font-mono text-[10px]">
+                          <Badge variant="outline" className="font-mono text-[10px] border-[#26262C]">
                             {snap.commitSha.substring(0, 7)}
                           </Badge>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-zinc-500 font-mono">
                         Captured on {new Date(snap.createdAt).toLocaleString()}
                       </p>
                     </div>
@@ -565,7 +563,7 @@ function TraceabilityMatrixContent() {
                           alert("Failed to parse snapshot data.");
                         }
                       }}
-                      className="text-xs"
+                      className="text-xs h-7 border-[#26262C]"
                     >
                       View Snapshot
                     </Button>
@@ -580,38 +578,40 @@ function TraceabilityMatrixContent() {
       {/* Tab 4: Connected Repositories */}
       {activeTab === "repositories" && (
         (isLoading || isTenantLoading) ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-12 text-center space-y-3">
-            <RefreshCw className="h-6 w-6 text-indigo-400 animate-spin mx-auto" />
-            <div className="text-sm font-semibold text-white">Loading Connected Repositories...</div>
+          <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-12 text-center space-y-2">
+            <RefreshCw className="h-5 w-5 text-zinc-400 animate-spin mx-auto" />
+            <div className="text-xs font-mono text-zinc-300">Loading Connected Repositories...</div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">Project Connected Repositories</h3>
+              <h3 className="text-sm font-semibold text-zinc-200">Project Connected Repositories</h3>
               <Link href="/repositories">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-[#26262C]">
                   <PlusCircle className="h-3.5 w-3.5" />
                   Manage Source Control
                 </Button>
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {(traceData?.repositories || repositories).map((repo: any) => (
                 <div
                   key={repo.id || repo.repositoryId}
-                  className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 space-y-2"
+                  className="p-3.5 rounded-lg border border-[#1C1C21] bg-[#0E0E11] space-y-2"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <GitBranch className="h-4 w-4 text-sky-400" />
-                      <span className="font-semibold text-sm text-white">
+                      <GitBranch className="h-4 w-4 text-zinc-400" />
+                      <span className="font-medium text-sm text-zinc-200">
                         {repo.repositoryName || repo.name || "Connected Repository"}
                       </span>
                     </div>
-                    <Badge variant="success">SYNCED</Badge>
+                    <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-900">
+                      SYNCED
+                    </Badge>
                   </div>
-                  <div className="text-[11px] text-slate-500 font-mono">
+                  <div className="text-[11px] text-zinc-500 font-mono">
                     Repository ID: {repo.repositoryId || repo.id}
                   </div>
                 </div>
@@ -628,7 +628,7 @@ export default function TraceabilityMatrixPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-8 text-center text-slate-500 text-xs">
+        <div className="p-8 text-center text-zinc-500 text-xs font-mono">
           Loading traceability matrix...
         </div>
       }

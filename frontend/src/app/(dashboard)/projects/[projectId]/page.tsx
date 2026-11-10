@@ -33,11 +33,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-const COLUMNS: { id: TaskStatus; label: string; color: string }[] = [
-  { id: "TODO", label: "To Do", color: "border-slate-700" },
-  { id: "IN_PROGRESS", label: "In Progress", color: "border-sky-500/40" },
-  { id: "IN_REVIEW", label: "In Review", color: "border-purple-500/40" },
-  { id: "DONE", label: "Verified & Done", color: "border-emerald-500/40" },
+const COLUMNS: { id: TaskStatus; label: string; dotColor: string; borderColor: string }[] = [
+  { id: "TODO", label: "To Do", dotColor: "bg-zinc-500", borderColor: "border-[#1C1C21]" },
+  { id: "IN_PROGRESS", label: "In Progress", dotColor: "bg-sky-400", borderColor: "border-sky-500/25" },
+  { id: "IN_REVIEW", label: "In Review", dotColor: "bg-amber-400", borderColor: "border-amber-500/25" },
+  { id: "DONE", label: "Verified & Done", dotColor: "bg-emerald-400", borderColor: "border-emerald-500/25" },
 ];
 
 function ProjectDetailContent() {
@@ -358,25 +358,25 @@ function ProjectDetailContent() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
-        <Loader2 className="h-8 w-8 animate-spin text-sky-400" />
-        <p className="text-xs text-slate-400">Loading project details and task board...</p>
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+        <p className="text-xs font-mono text-zinc-400">Loading project details and task board...</p>
       </div>
     );
   }
 
   if (error && !project) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => router.push("/projects")} className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={() => router.push("/projects")} className="gap-1.5 h-8">
+            <ArrowLeft className="h-3.5 w-3.5" />
             Back to Projects
           </Button>
         </div>
-        <div className="p-8 rounded-2xl border border-rose-500/30 bg-rose-950/20 text-center space-y-3">
-          <AlertCircle className="mx-auto h-8 w-8 text-rose-400" />
-          <h2 className="text-base font-bold text-white">Project Not Found</h2>
-          <p className="text-xs text-slate-300 max-w-md mx-auto">{error}</p>
+        <div className="p-6 rounded-lg border border-rose-500/30 bg-rose-950/20 text-center space-y-2.5">
+          <AlertCircle className="mx-auto h-6 w-6 text-rose-400" />
+          <h2 className="text-sm font-semibold text-zinc-100">Project Not Found</h2>
+          <p className="text-xs text-zinc-300 max-w-md mx-auto">{error}</p>
         </div>
       </div>
     );
@@ -385,15 +385,15 @@ function ProjectDetailContent() {
   const linkedRepo = repositories[0]?.repositoryName || project?.repositoryName;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {/* Project Banner with Traceability Anchor link */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-xl">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-5">
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="default" className="font-mono text-xs">
-              PROJECT: {project?.key || "PROJECT"}
+            <Badge variant="default" className="font-mono text-[11px]">
+              {project?.key || "PROJECT"}
             </Badge>
-            <span className="text-xs text-slate-400">Repositories:</span>
+            <span className="text-xs text-zinc-500">Repositories:</span>
             {repositories && repositories.length > 0 ? (
               repositories.map((r: any) => {
                 const repoId = r.repositoryId || r.id;
@@ -402,74 +402,74 @@ function ProjectDetailContent() {
                   <Badge
                     key={repoId}
                     variant="outline"
-                    className="text-xs font-mono text-slate-200 border-slate-700 bg-slate-800/80 gap-1.5 py-0.5 px-2"
+                    className="text-[11px] font-mono text-zinc-200 border-[#26262C] bg-[#141418] gap-1.5 py-0.5 px-2"
                   >
-                    <FolderGit2 className="h-3 w-3 text-sky-400" />
+                    <FolderGit2 className="h-3 w-3 text-zinc-400" />
                     {name}
                     <button
                       type="button"
                       onClick={() => handleUnlinkRepo(repoId, name)}
-                      className="text-slate-400 hover:text-rose-400 ml-1 font-bold"
+                      className="text-zinc-500 hover:text-rose-400 ml-1 font-bold cursor-pointer"
                       title="Unlink repository from project"
                     >
-                      ×
+                      &times;
                     </button>
                   </Badge>
                 );
               })
             ) : linkedRepo ? (
-              <span className="font-mono text-slate-200 text-xs">{linkedRepo}</span>
+              <span className="font-mono text-zinc-200 text-xs">{linkedRepo}</span>
             ) : (
-              <span className="text-slate-500 italic text-xs">No repository linked</span>
+              <span className="text-zinc-500 italic text-xs">No repository linked</span>
             )}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
+          <h1 className="text-lg font-semibold tracking-tight text-zinc-100">
             {project?.name || "Project Details"}
           </h1>
-          <p className="text-xs text-slate-400 max-w-2xl">
+          <p className="text-xs text-zinc-400 max-w-2xl">
             {project?.description || "Sprint task execution board linked deterministically to engineering requirements."}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowTaskModal(true)}
-            className="gap-1.5"
+            className="gap-1.5 h-8 px-3 text-xs"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
             Add Task
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowReqModal(true)}
-            className="gap-1.5 border-purple-500/30 text-purple-300 hover:bg-purple-950/30"
+            className="gap-1.5 h-8 px-3 text-xs"
           >
-            <Plus className="h-4 w-4 text-purple-400" />
+            <Plus className="h-3.5 w-3.5" />
             Add Requirement
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={handleOpenRepoModal}
-            className="gap-1.5 border-indigo-500/30 text-indigo-300 hover:bg-indigo-950/30"
+            className="gap-1.5 h-8 px-3 text-xs"
           >
-            <FolderGit2 className="h-4 w-4 text-indigo-400" />
+            <FolderGit2 className="h-3.5 w-3.5 text-zinc-400" />
             Link Repository
           </Button>
           <Link href={`/projects/${rawProjectId}/traceability`}>
-            <Button variant="outline" size="sm" className="gap-2 border-slate-700 text-slate-300">
-              <Layers className="h-4 w-4 text-purple-400" />
+            <Button variant="outline" size="sm" className="gap-1.5 h-8 px-3 text-xs">
+              <Layers className="h-3.5 w-3.5 text-zinc-400" />
               Traceability Matrix
             </Button>
           </Link>
           <Link href={`/ai-insights`}>
-            <Button variant="glow" size="sm" className="gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-300" />
+            <Button variant="default" size="sm" className="gap-1.5 h-8 px-3 text-xs">
+              <Sparkles className="h-3.5 w-3.5" />
               AI Engineering Health
-              <ArrowRight className="h-3.5 w-3.5" />
+              <ArrowRight className="h-3 w-3" />
             </Button>
           </Link>
         </div>
@@ -477,7 +477,7 @@ function ProjectDetailContent() {
 
       {/* Global Success Notification banner */}
       {notification && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-3 text-xs text-emerald-300 animate-in fade-in slide-in-from-top duration-200">
+        <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-950/30 p-3 text-xs text-emerald-300">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
           <span>{notification}</span>
         </div>
@@ -485,44 +485,45 @@ function ProjectDetailContent() {
 
       {/* Global error banner if action failed */}
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
-          <AlertCircle className="h-4 w-4 shrink-0" />
+        <div className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Kanban Board Columns */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
         {COLUMNS.map((col) => {
           const colTasks = tasks.filter((t) => t.status === col.id);
 
           return (
             <div
               key={col.id}
-              className={`flex flex-col rounded-2xl border ${col.color} bg-slate-950/60 p-4 min-h-[500px] backdrop-blur-md`}
+              className={`flex flex-col rounded-lg border ${col.borderColor} bg-[#0E0E11] p-3 min-h-[480px]`}
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 mb-4">
+              <div className="flex items-center justify-between pb-2.5 border-b border-[#1C1C21] mb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  <span className={`h-2 w-2 rounded-full ${col.dotColor}`} />
+                  <h3 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-zinc-300">
                     {col.label}
                   </h3>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[11px] font-bold text-slate-400">
-                    {colTasks.length}
-                  </span>
                 </div>
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded bg-[#141418] border border-[#26262C] px-1.5 text-[11px] font-mono tabular-nums text-zinc-400">
+                  {colTasks.length}
+                </span>
               </div>
 
               {/* Task Cards */}
-              <div className="flex-1 space-y-3">
+              <div className="flex-1 space-y-2.5">
                 {colTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 shadow-sm hover:border-indigo-500/50 hover:bg-slate-900 transition-all space-y-2.5"
+                    className="rounded-md border border-[#1C1C21] bg-[#141418] p-3 hover:border-[#32323A] hover:bg-[#17171C] transition-colors space-y-2"
                   >
                     {/* Header: Key & Priority */}
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-indigo-400">
+                      <span className="font-mono text-[11px] font-medium text-zinc-400 tabular-nums">
                         {task.taskKey}
                       </span>
                       <Badge
@@ -533,44 +534,44 @@ function ProjectDetailContent() {
                             ? "warning"
                             : "secondary"
                         }
-                        className="text-[10px] px-1.5 py-0"
+                        className="text-[10px] font-mono px-1.5 py-0"
                       >
                         {task.priority}
                       </Badge>
                     </div>
 
                     {/* Title */}
-                    <p className="text-xs font-medium text-slate-200 leading-snug">
+                    <p className="text-xs font-medium text-zinc-100 leading-snug">
                       {task.title}
                     </p>
 
                     {/* Requirement Pill */}
                     {task.requirementKey && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
-                        <Tag className="h-3 w-3 text-purple-400" />
+                      <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-mono">
+                        <Tag className="h-3 w-3 text-zinc-500" />
                         <span>Bound:</span>
-                        <span className="text-purple-300 font-bold">{task.requirementKey}</span>
+                        <span className="text-zinc-200 font-medium">{task.requirementKey}</span>
                       </div>
                     )}
 
                     {/* PR & Assignee */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
+                    <div className="flex items-center justify-between pt-2 border-t border-[#1C1C21] text-[11px] text-zinc-400">
                       {task.linkedPrNumber ? (
                         <Link
                           href={`/ai-insights?pr=${task.linkedPrNumber}`}
-                          className="flex items-center gap-1 font-mono text-sky-400 hover:text-sky-300 hover:underline transition-colors"
+                          className="flex items-center gap-1 font-mono text-zinc-200 hover:text-white hover:underline transition-colors tabular-nums"
                           title="Open in AI Engineering Health"
                         >
-                          <GitPullRequest className="h-3 w-3" />
+                          <GitPullRequest className="h-3 w-3 text-emerald-400" />
                           #{task.linkedPrNumber}
                           <ArrowRight className="h-2.5 w-2.5 opacity-60" />
                         </Link>
                       ) : (
-                        <span className="text-slate-600">No PR yet</span>
+                        <span className="text-zinc-600 font-mono text-[10px]">No PR yet</span>
                       )}
 
-                      <span className="flex items-center gap-1 text-slate-300">
-                        <User className="h-3 w-3 text-slate-500" />
+                      <span className="flex items-center gap-1 text-zinc-400">
+                        <User className="h-3 w-3 text-zinc-500" />
                         {task.assigneeName || "Unassigned"}
                       </span>
                     </div>
@@ -581,40 +582,40 @@ function ProjectDetailContent() {
                         <button
                           type="button"
                           onClick={() => moveTask(task.id, "TODO")}
-                          className="text-[10px] text-slate-500 hover:text-slate-300 px-1 py-0.5 rounded"
+                          className="text-[10px] font-mono text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-[#1F1F26] cursor-pointer"
                           title="Move to Todo"
                         >
-                          ← Todo
+                          &larr; Todo
                         </button>
                       )}
                       {col.id !== "IN_PROGRESS" && (
                         <button
                           type="button"
                           onClick={() => moveTask(task.id, "IN_PROGRESS")}
-                          className="text-[10px] text-sky-400 hover:text-sky-300 px-1 py-0.5 rounded"
+                          className="text-[10px] font-mono text-sky-400 hover:text-sky-300 px-1.5 py-0.5 rounded hover:bg-sky-950/30 cursor-pointer"
                           title="Move to In Progress"
                         >
-                          {col.id === "TODO" ? "Progress →" : "← Progress"}
+                          {col.id === "TODO" ? "Progress \u2192" : "\u2190 Progress"}
                         </button>
                       )}
                       {col.id !== "IN_REVIEW" && (
                         <button
                           type="button"
                           onClick={() => moveTask(task.id, "IN_REVIEW")}
-                          className="text-[10px] text-purple-400 hover:text-purple-300 px-1 py-0.5 rounded"
+                          className="text-[10px] font-mono text-amber-400 hover:text-amber-300 px-1.5 py-0.5 rounded hover:bg-amber-950/30 cursor-pointer"
                           title="Move to In Review"
                         >
-                          {col.id === "DONE" ? "← Review" : "Review →"}
+                          {col.id === "DONE" ? "\u2190 Review" : "Review \u2192"}
                         </button>
                       )}
                       {col.id !== "DONE" && (
                         <button
                           type="button"
                           onClick={() => moveTask(task.id, "DONE")}
-                          className="text-[10px] text-emerald-400 hover:text-emerald-300 px-1 py-0.5 rounded"
+                          className="text-[10px] font-mono text-emerald-400 hover:text-emerald-300 px-1.5 py-0.5 rounded hover:bg-emerald-950/30 cursor-pointer"
                           title="Mark Done"
                         >
-                          Done ✓
+                          Done &check;
                         </button>
                       )}
                     </div>
@@ -622,7 +623,7 @@ function ProjectDetailContent() {
                 ))}
 
                 {colTasks.length === 0 && (
-                  <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-800 text-xs text-slate-600">
+                  <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-[#26262C] text-xs text-zinc-600">
                     No tasks in this stage
                   </div>
                 )}
@@ -649,7 +650,7 @@ function ProjectDetailContent() {
         <form onSubmit={handleCreateTask} className="space-y-4 mt-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Task Key</label>
+              <label className="text-xs font-medium text-zinc-300">Task Key</label>
               <Input
                 placeholder="e.g. TASK-101"
                 value={taskKey}
@@ -657,12 +658,12 @@ function ProjectDetailContent() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Bound Requirement</label>
+              <label className="text-xs font-medium text-zinc-300">Bound Requirement</label>
               {requirements.length > 0 ? (
                 <select
                   value={selectedReqId}
                   onChange={(e) => setSelectedReqId(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="h-9 w-full rounded-md border border-[#26262C] bg-[#09090B] px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-400"
                 >
                   <option value="">None (Unbound Task)</option>
                   {requirements.map((req) => (
@@ -672,7 +673,7 @@ function ProjectDetailContent() {
                   ))}
                 </select>
               ) : (
-                <div className="flex h-10 w-full items-center rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-slate-500 italic">
+                <div className="flex h-9 w-full items-center rounded-md border border-[#26262C] bg-[#09090B] px-3 text-xs text-zinc-500 italic">
                   No requirements created yet (leaving unbound)
                 </div>
               )}
@@ -680,7 +681,7 @@ function ProjectDetailContent() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Task Summary</label>
+            <label className="text-xs font-medium text-zinc-300">Task Summary</label>
             <Input
               placeholder="e.g. Implement OAuth2 token revocation filter"
               value={taskTitle}
@@ -691,11 +692,11 @@ function ProjectDetailContent() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Priority</label>
+              <label className="text-xs font-medium text-zinc-300">Priority</label>
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="h-10 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-9 w-full rounded-md border border-[#26262C] bg-[#09090B] px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-400"
               >
                 <option value="LOW">LOW</option>
                 <option value="MEDIUM">MEDIUM</option>
@@ -704,7 +705,7 @@ function ProjectDetailContent() {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Assignee</label>
+              <label className="text-xs font-medium text-zinc-300">Assignee</label>
               <Input
                 placeholder="e.g. Lead Engineer"
                 value={assignee}
@@ -722,10 +723,10 @@ function ProjectDetailContent() {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="glow" size="sm" disabled={!taskTitle || isSubmitting}>
+            <Button type="submit" variant="default" size="sm" disabled={!taskTitle || isSubmitting}>
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                   Creating...
                 </>
               ) : (
@@ -752,7 +753,7 @@ function ProjectDetailContent() {
 
         <form onSubmit={handleCreateRequirement} className="space-y-4 mt-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Requirement Key</label>
+            <label className="text-xs font-medium text-zinc-300">Requirement Key</label>
             <Input
               placeholder="e.g. REQ-AUTH-01"
               value={reqIdentifier}
@@ -761,7 +762,7 @@ function ProjectDetailContent() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Title</label>
+            <label className="text-xs font-medium text-zinc-300">Title</label>
             <Input
               placeholder="e.g. Support Multi-Tenant OAuth2 Token Revocation"
               value={reqTitle}
@@ -771,19 +772,19 @@ function ProjectDetailContent() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Specification Description</label>
+            <label className="text-xs font-medium text-zinc-300">Specification Description</label>
             <textarea
               placeholder="Detailed description of the requirement and acceptance criteria..."
               value={reqDescription}
               onChange={(e) => setReqDescription(e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-md border border-[#26262C] bg-[#09090B] p-2.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-400"
               required
             />
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2.5 text-xs text-rose-300">
+            <div className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-950/30 p-2.5 text-xs text-rose-300">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
               <span>{error}</span>
             </div>
@@ -798,10 +799,10 @@ function ProjectDetailContent() {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="glow" size="sm" disabled={!reqTitle.trim() || isSubmittingReq}>
+            <Button type="submit" variant="default" size="sm" disabled={!reqTitle.trim() || isSubmittingReq}>
               {isSubmittingReq ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                   Creating...
                 </>
               ) : (
@@ -828,17 +829,17 @@ function ProjectDetailContent() {
 
         <form onSubmit={handleLinkRepo} className="space-y-4 mt-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Connected Repository</label>
+            <label className="text-xs font-medium text-zinc-300">Connected Repository</label>
             {isLoadingAvailableRepos ? (
-              <div className="flex items-center gap-2 p-3 text-xs text-slate-400">
-                <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+              <div className="flex items-center gap-2 p-3 text-xs text-zinc-400">
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
                 Loading connected repositories...
               </div>
             ) : availableRepos.length > 0 ? (
               <select
                 value={selectedRepoToLink}
                 onChange={(e) => setSelectedRepoToLink(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-9 w-full rounded-md border border-[#26262C] bg-[#09090B] px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-400"
                 required
               >
                 <option value="">Select a repository to link...</option>
@@ -855,14 +856,14 @@ function ProjectDetailContent() {
                 })}
               </select>
             ) : (
-              <div className="p-3 rounded-lg border border-dashed border-slate-800 text-xs text-slate-500 text-center">
+              <div className="p-3 rounded-md border border-dashed border-[#26262C] text-xs text-zinc-500 text-center">
                 No connected repositories found. Connect a GitHub repository first.
               </div>
             )}
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-950/40 p-2.5 text-xs text-rose-300">
+            <div className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-950/30 p-2.5 text-xs text-rose-300">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
               <span>{error}</span>
             </div>
@@ -877,10 +878,10 @@ function ProjectDetailContent() {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="glow" size="sm" disabled={!selectedRepoToLink || isSubmittingRepo}>
+            <Button type="submit" variant="default" size="sm" disabled={!selectedRepoToLink || isSubmittingRepo}>
               {isSubmittingRepo ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                   Linking...
                 </>
               ) : (
@@ -896,7 +897,7 @@ function ProjectDetailContent() {
 
 export default function ProjectDetailPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-slate-500 text-xs">Loading project details...</div>}>
+    <Suspense fallback={<div className="p-8 text-center font-mono text-zinc-500 text-xs">Loading project details...</div>}>
       <ProjectDetailContent />
     </Suspense>
   );

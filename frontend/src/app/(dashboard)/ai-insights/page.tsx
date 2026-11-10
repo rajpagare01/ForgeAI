@@ -2088,43 +2088,43 @@ function AiInsightsContent() {
   }, [prAnalysisResult, provenanceFilter]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1C1C21] pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-purple-400" />
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <Cpu className="h-5 w-5 text-zinc-300" />
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
               AI Engineering Intelligence Layer
             </h1>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Automatic real GitHub PR intelligence, AST static analysis, repository-scoped blast radius, and grounded LLM reasoning for{" "}
-            <span className="text-purple-300 font-medium">{workspaceDisplayName}</span>.
+          <p className="text-xs text-zinc-400 mt-1">
+            Pull request static analysis, AST call graph blast radius, and grounded code review for{" "}
+            <span className="text-zinc-200 font-medium">{workspaceDisplayName}</span>.
           </p>
         </div>
 
         {/* Authorized Repository Selector */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 shadow-sm">
-            <FolderGit2 className="h-4 w-4 text-purple-400" />
-            <span className="text-xs text-slate-400">Repository:</span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 bg-[#0E0E11] border border-[#26262C] rounded-md px-2.5 h-8">
+            <FolderGit2 className="h-3.5 w-3.5 text-zinc-400" />
+            <span className="text-[11px] text-zinc-500">Repository:</span>
             {isLoadingRepos && repositories.length === 0 ? (
-              <Loader2 className="h-3 w-3 animate-spin text-purple-400" />
+              <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />
             ) : (
               <select
                 aria-label="Authorized Repository Selection"
                 value={selectedRepoId}
                 onChange={(e) => handleSelectRepo(e.target.value)}
-                className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs text-zinc-100 font-medium focus:outline-none cursor-pointer"
               >
                 {repositories.length === 0 ? (
-                  <option value="" disabled className="bg-slate-900 text-slate-400">
+                  <option value="" disabled className="bg-[#0E0E11] text-zinc-400">
                     No repositories connected
                   </option>
                 ) : (
                   repositories.map((repo) => (
-                    <option key={repo.id} value={repo.id} className="bg-slate-900 text-white">
+                    <option key={repo.id} value={repo.id} className="bg-[#0E0E11] text-zinc-100">
                       {repo.fullName}
                     </option>
                   ))
@@ -2133,11 +2133,11 @@ function AiInsightsContent() {
             )}
           </div>
           {selectedRepo && (
-            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 shadow-sm">
-              <GitBranch className="h-4 w-4 text-indigo-400" />
-              <span className="text-xs text-slate-400">Branch:</span>
+            <div className="flex items-center gap-2 bg-[#0E0E11] border border-[#26262C] rounded-md px-2.5 h-8">
+              <GitBranch className="h-3.5 w-3.5 text-zinc-400" />
+              <span className="text-[11px] text-zinc-500">Branch:</span>
               {isLoadingBranches ? (
-                <Loader2 className="h-3 w-3 animate-spin text-indigo-400" />
+                <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />
               ) : (
                 <select
                   aria-label="Repository Branch Selection"
@@ -2157,10 +2157,10 @@ function AiInsightsContent() {
                       }
                     }
                   }}
-                  className="bg-transparent text-xs text-indigo-300 font-mono font-medium focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs text-zinc-200 font-mono tabular-nums font-medium focus:outline-none cursor-pointer"
                 >
                   {(branches.length > 0 ? branches : [{ name: selectedRepo.defaultBranch, commitSha: "" }]).map((b) => (
-                    <option key={b.name} value={b.name} className="bg-slate-900 text-white">
+                    <option key={b.name} value={b.name} className="bg-[#0E0E11] text-zinc-100">
                       {b.name} {b.commitSha ? `(${b.commitSha.substring(0, 7)})` : ""}
                     </option>
                   ))}
@@ -2171,19 +2171,19 @@ function AiInsightsContent() {
 
           {/* Live Push Guard Status Pill */}
           <div
-            className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono shadow-sm transition-all ${
+            className={`hidden md:flex items-center gap-2 px-2.5 h-8 rounded-md border text-[11px] font-mono transition-colors ${
               sseConnected
-                ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-300"
-                : "border-amber-500/40 bg-amber-950/30 text-amber-300"
+                ? "border-emerald-900/60 bg-emerald-950/20 text-emerald-300"
+                : "border-amber-900/60 bg-amber-950/20 text-amber-300"
             }`}
           >
             <span
-              className={`h-2 w-2 rounded-full ${
-                sseConnected ? "bg-emerald-400 animate-ping" : "bg-amber-400"
+              className={`h-1.5 w-1.5 rounded-full ${
+                sseConnected ? "bg-emerald-400" : "bg-amber-400"
               }`}
             />
-            <span className="font-semibold">
-              {sseConnected ? "● Live Push Guard Active" : "● Push Guard Active (15s Poll)"}
+            <span className="font-medium">
+              {sseConnected ? "Live Push Guard Active" : "Push Guard Active (15s Poll)"}
             </span>
           </div>
         </div>
@@ -2191,50 +2191,50 @@ function AiInsightsContent() {
 
       {/* Continuous Repository Synchronization Indicator */}
       {selectedRepo && (
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm text-xs">
-          <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg border border-[#1C1C21] bg-[#0E0E11] text-xs">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <span className="text-slate-400 font-medium">Sync State:</span>
+              <span className="text-zinc-500 text-[11px] font-medium">Sync State:</span>
               {isLoadingSyncStatus && !syncStatus ? (
-                <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-400" />
+                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                  <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />
                   <span>Checking...</span>
                 </div>
               ) : (
                 <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-medium border ${
                     syncStatus?.syncStatus === "SYNCED"
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                      ? "bg-emerald-950/30 text-emerald-400 border-emerald-900/60"
                       : syncStatus?.syncStatus === "SYNCING"
-                      ? "bg-blue-500/10 text-blue-400 border-blue-500/30 animate-pulse"
+                      ? "bg-sky-950/30 text-sky-400 border-sky-900/60"
                       : syncStatus?.syncStatus === "STALE"
-                      ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                      ? "bg-amber-950/30 text-amber-400 border-amber-900/60"
                       : syncStatus?.syncStatus === "FAILED"
-                      ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                      : "bg-slate-800 text-slate-400 border-slate-700"
+                      ? "bg-rose-950/30 text-rose-400 border-rose-900/60"
+                      : "bg-[#141418] text-zinc-400 border-[#26262C]"
                   }`}
                 >
-                  {syncStatus?.syncStatus === "SYNCED" && <CheckCircle2 className="h-3.5 w-3.5" />}
-                  {syncStatus?.syncStatus === "SYNCING" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {syncStatus?.syncStatus === "STALE" && <AlertTriangle className="h-3.5 w-3.5" />}
-                  {syncStatus?.syncStatus === "FAILED" && <ShieldAlert className="h-3.5 w-3.5" />}
+                  {syncStatus?.syncStatus === "SYNCED" && <CheckCircle2 className="h-3 w-3" />}
+                  {syncStatus?.syncStatus === "SYNCING" && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {syncStatus?.syncStatus === "STALE" && <AlertTriangle className="h-3 w-3" />}
+                  {syncStatus?.syncStatus === "FAILED" && <ShieldAlert className="h-3 w-3" />}
                   {syncStatus?.syncStatus || "SYNCED"}
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 font-mono text-[11px] bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-md">
-              <span className="text-slate-500">GitHub HEAD:</span>
-              <span className="text-slate-300 font-semibold">
+            <div className="flex items-center gap-1.5 font-mono tabular-nums text-[11px] bg-[#141418] border border-[#26262C] px-2 py-0.5 rounded">
+              <span className="text-zinc-500">GitHub HEAD:</span>
+              <span className="text-zinc-200 font-medium">
                 {(syncStatus?.latestObservedSha || (syncStatus as any)?.currentGithubHead)
                   ? (syncStatus?.latestObservedSha || (syncStatus as any)?.currentGithubHead).substring(0, 7)
                   : "None"}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 font-mono text-[11px] bg-slate-950/70 border border-slate-800/80 px-2.5 py-1 rounded-md">
-              <span className="text-slate-500">Indexed HEAD:</span>
-              <span className="text-indigo-400 font-semibold">
+            <div className="flex items-center gap-1.5 font-mono tabular-nums text-[11px] bg-[#141418] border border-[#26262C] px-2 py-0.5 rounded">
+              <span className="text-zinc-500">Indexed HEAD:</span>
+              <span className="text-zinc-200 font-medium">
                 {(syncStatus?.latestIndexedSha || (syncStatus as any)?.indexedHead)
                   ? (syncStatus?.latestIndexedSha || (syncStatus as any)?.indexedHead).substring(0, 7)
                   : "None"}
@@ -2242,9 +2242,9 @@ function AiInsightsContent() {
             </div>
 
             {syncStatus?.lastSyncedAt && (
-              <div className="text-[11px] text-slate-400">
+              <div className="text-[11px] text-zinc-500 font-mono tabular-nums">
                 Last Synced:{" "}
-                <span className="text-slate-200 font-medium">
+                <span className="text-zinc-300">
                   {new Date(syncStatus.lastSyncedAt).toLocaleTimeString()}
                 </span>
               </div>
@@ -2259,20 +2259,20 @@ function AiInsightsContent() {
 
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={handleReconcile}
               disabled={isReconciling || isLoadingSyncStatus}
-              className="h-7 text-xs px-3 border-indigo-500/30 bg-indigo-950/30 hover:bg-indigo-900/50 text-indigo-200 transition-colors"
+              className="h-7 text-xs px-2.5"
             >
               {isReconciling ? (
                 <>
-                  <Loader2 className="h-3 w-3 animate-spin mr-1.5 text-indigo-400" />
+                  <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
                   Reconciling...
                 </>
               ) : (
                 <>
-                  <RefreshCw className="h-3 w-3 mr-1.5 text-indigo-400" />
+                  <RefreshCw className="h-3 w-3 mr-1.5" />
                   Reconcile
                 </>
               )}
@@ -2289,32 +2289,32 @@ function AiInsightsContent() {
         if (secStatus.status === "NOT_ANALYZED") return null;
         const SecIcon = secStatus.icon;
         return (
-          <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all shadow-lg ${secStatus.bg}`}>
+          <div className={`p-4 rounded-lg border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors ${secStatus.bg}`}>
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
-                <SecIcon className="h-6 w-6" />
+              <div className="p-2 rounded-md bg-[#09090B]/80 border border-[#26262C]">
+                <SecIcon className="h-5 w-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Security Status</span>
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Security Status</span>
                   <Badge
                     variant="outline"
-                    className={`text-xs font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 border ${
+                    className={`text-[11px] font-mono font-semibold uppercase tracking-wider px-2 py-0.5 border ${
                       secStatus.status === "CRITICAL / BLOCKED"
-                        ? "bg-rose-950 text-rose-300 border-rose-500 animate-pulse"
+                        ? "bg-rose-950/60 text-rose-300 border-rose-800/70"
                         : secStatus.status === "HIGH RISK"
-                        ? "bg-amber-950 text-amber-300 border-amber-500"
+                        ? "bg-amber-950/60 text-amber-300 border-amber-800/70"
                         : secStatus.status === "PARTIAL EVIDENCE"
-                        ? "bg-blue-950 text-blue-300 border-blue-500"
+                        ? "bg-sky-950/60 text-sky-300 border-sky-800/70"
                         : secStatus.status === "WARNINGS"
-                        ? "bg-yellow-950 text-yellow-300 border-yellow-500"
-                        : "bg-emerald-950 text-emerald-300 border-emerald-500"
+                        ? "bg-amber-950/40 text-amber-300 border-amber-800/60"
+                        : "bg-emerald-950/60 text-emerald-300 border-emerald-800/70"
                     }`}
                   >
-                    ● {secStatus.status}
+                    {secStatus.status}
                   </Badge>
                 </div>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
                   {secStatus.description}
                 </p>
               </div>
@@ -2323,24 +2323,24 @@ function AiInsightsContent() {
             {/* Quick Actions in Banner */}
             <div className="flex items-center gap-2 flex-wrap shrink-0">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleSecretScan}
                 disabled={isSecretScanning || !selectedRepoId}
-                className="h-8 text-xs px-3 border-purple-500/40 bg-purple-950/30 text-purple-200 hover:bg-purple-900/50"
+                className="h-8 text-xs px-3"
               >
-                {isSecretScanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <KeyRound className="h-3.5 w-3.5 mr-1.5 text-purple-400" />}
+                {isSecretScanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <KeyRound className="h-3.5 w-3.5 mr-1.5 text-zinc-400" />}
                 Scan for Secrets
               </Button>
 
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleRepositoryScan}
                 disabled={isRepoScanning || !selectedRepoId}
-                className="h-8 text-xs px-3 border-indigo-500/40 bg-indigo-950/30 text-indigo-200 hover:bg-indigo-900/50"
+                className="h-8 text-xs px-3"
               >
-                {isRepoScanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1.5 text-indigo-400" />}
+                {isRepoScanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1.5 text-zinc-400" />}
                 Scan Repository
               </Button>
 
@@ -2350,7 +2350,7 @@ function AiInsightsContent() {
                   size="sm"
                   onClick={handleRescan}
                   disabled={isRescanning}
-                  className="h-8 text-xs px-3 border-emerald-500/40 bg-emerald-950/30 text-emerald-200 hover:bg-emerald-900/50"
+                  className="h-8 text-xs px-3 border-emerald-900/60 bg-emerald-950/20 text-emerald-300 hover:bg-emerald-950/40"
                 >
                   {isRescanning ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5 text-emerald-400" />}
                   Re-Scan Changes
@@ -2367,35 +2367,36 @@ function AiInsightsContent() {
       {(() => {
         if (!prAnalysisResult) {
           return (
-            <Card className="border-indigo-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/20 shadow-xl">
-              <CardHeader className="pb-3 border-b border-slate-800/80">
-                <div className="flex items-center gap-2.5">
-                  <Activity className="h-5 w-5 text-indigo-400" />
-                  <CardTitle className="text-base text-white tracking-wide">
+            <Card className="border-[#1C1C21] bg-[#0E0E11]">
+              <CardHeader className="pb-3 border-b border-[#1C1C21]">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-zinc-400" />
+                  <CardTitle className="text-sm font-semibold text-zinc-100">
                     Engineering Health Center
                   </CardTitle>
-                  <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                    Authoritative Code Quality, Security & Readiness
+                  <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
+                    Code Quality, Security & Merge Readiness
                   </span>
                 </div>
               </CardHeader>
-              <CardContent className="py-7 text-center space-y-3">
-                <div className="inline-flex p-3 rounded-full bg-slate-900 border border-slate-800 text-slate-400">
-                  <Sparkles className="h-6 w-6 text-indigo-400" />
+              <CardContent className="py-8 text-center space-y-3">
+                <div className="inline-flex p-2.5 rounded-md bg-[#141418] border border-[#26262C] text-zinc-400">
+                  <Activity className="h-5 w-5" />
                 </div>
-                <div className="text-sm font-semibold text-slate-200">
+                <div className="text-sm font-medium text-zinc-200">
                   Awaiting Pull Request Analysis
                 </div>
-                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                <p className="text-xs text-zinc-400 max-w-md mx-auto">
                   Deterministic metrics for Security, Reliability, Test Sufficiency, Dependency Vulnerabilities, and Merge Readiness will be calculated as soon as a pull request is analyzed.
                 </p>
                 {selectedPrNumber && (
-                  <div className="pt-2">
+                  <div className="pt-1">
                     <Button
                       size="sm"
+                      variant="default"
                       onClick={handleAnalyzePr}
                       disabled={isAnalyzingPr}
-                      className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white"
+                      className="text-xs h-8 px-3"
                     >
                       {isAnalyzingPr ? (
                         <>
@@ -2404,7 +2405,7 @@ function AiInsightsContent() {
                         </>
                       ) : (
                         <>
-                          <Sparkles className="h-3.5 w-3.5 mr-1.5 text-indigo-200" />
+                          <Play className="h-3.5 w-3.5 mr-1.5" />
                           Analyze Pull Request #{selectedPrNumber}
                         </>
                       )}
@@ -2480,21 +2481,21 @@ function AiInsightsContent() {
         const missingCoverageCount = strat?.coverage_summary?.coverage_available === false ? (strat?.must_run?.length || 1) : 0;
 
         return (
-          <Card className="border-indigo-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/40 shadow-xl">
-            <CardHeader className="pb-3 border-b border-slate-800/80">
+          <Card className="border-[#1C1C21] bg-[#0E0E11]">
+            <CardHeader className="pb-3 border-b border-[#1C1C21]">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <Activity className="h-5 w-5 text-indigo-400" />
-                  <CardTitle className="text-base text-white tracking-wide">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-zinc-400" />
+                  <CardTitle className="text-sm font-semibold text-zinc-100">
                     Engineering Health Center
                   </CardTitle>
-                  <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-                    Unified Code Quality, Security & Readiness
+                  <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
+                    Code Quality, Security & Merge Readiness
                   </span>
                 </div>
 
                 {/* Sub-Navigation for Engineering Health */}
-                <div className="flex items-center gap-1 p-1 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono flex-wrap">
+                <div className="flex items-center gap-1 p-1 bg-[#141418] border border-[#26262C] rounded-md text-xs font-mono flex-wrap">
                   {[
                     { id: "all", label: "Overview" },
                     { id: "security", label: "Security" },
@@ -2510,10 +2511,10 @@ function AiInsightsContent() {
                         setActiveTab("pr");
                         setActiveHealthSection(tab.id as any);
                       }}
-                      className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+                      className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
                         activeHealthSection === tab.id
-                          ? "bg-indigo-600 text-white font-semibold shadow-sm"
-                          : "text-slate-400 hover:text-white"
+                          ? "bg-zinc-100 text-zinc-950 font-medium"
+                          : "text-zinc-400 hover:text-zinc-100"
                       }`}
                     >
                       {tab.label}
@@ -2533,27 +2534,27 @@ function AiInsightsContent() {
                     setActiveTab("pr");
                     setActiveHealthSection("security");
                   }}
-                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                  className={`p-3 rounded-md border transition-colors text-left flex flex-col justify-between gap-1 group ${
                     activeHealthSection === "security"
-                      ? "border-rose-500/60 bg-rose-950/20 shadow-md"
-                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                      ? "border-rose-700/70 bg-rose-950/20"
+                      : "border-[#1C1C21] bg-[#141418] hover:border-[#26262C]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 group-hover:text-zinc-300">
                       Security
                     </span>
                     <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
                   </div>
-                  <div className={`text-sm font-bold font-mono truncate ${
+                  <div className={`text-sm font-semibold font-mono tabular-nums truncate ${
                     secStatusText === "CRITICAL" ? "text-rose-400" : secStatusText === "HIGH" ? "text-amber-400" : "text-emerald-400"
                   }`}>
                     {secStatusText}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                  <div className="text-[10px] font-mono tabular-nums text-zinc-400 flex items-center justify-between pt-0.5">
                     <span>{secRuleMatchesCount} rules</span>
                     {secretFindingsCount > 0 && (
-                      <span className="text-rose-400 font-bold">{secretFindingsCount} secrets</span>
+                      <span className="text-rose-400 font-semibold">{secretFindingsCount} secrets</span>
                     )}
                   </div>
                 </button>
@@ -2565,22 +2566,22 @@ function AiInsightsContent() {
                     setActiveTab("pr");
                     setActiveHealthSection("reliability");
                   }}
-                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                  className={`p-3 rounded-md border transition-colors text-left flex flex-col justify-between gap-1 group ${
                     activeHealthSection === "reliability"
-                      ? "border-amber-500/60 bg-amber-950/20 shadow-md"
-                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                      ? "border-amber-700/70 bg-amber-950/20"
+                      : "border-[#1C1C21] bg-[#141418] hover:border-[#26262C]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 group-hover:text-zinc-300">
                       Reliability
                     </span>
                     <Bug className="h-3.5 w-3.5 text-amber-400" />
                   </div>
-                  <div className="text-sm font-bold font-mono text-amber-300 truncate">
+                  <div className="text-sm font-semibold font-mono tabular-nums text-amber-300 truncate">
                     {relStatusText}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                  <div className="text-[10px] font-mono tabular-nums text-zinc-400 flex items-center justify-between pt-0.5">
                     <span title="Detected via static rules">{relDetectedCount} det</span>
                     <span title="Likely dereference issues">{relLikelyCount} likely</span>
                     <span title="Requires review">{relReviewCount} rev</span>
@@ -2594,25 +2595,25 @@ function AiInsightsContent() {
                     setActiveTab("pr");
                     setActiveHealthSection("tests");
                   }}
-                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                  className={`p-3 rounded-md border transition-colors text-left flex flex-col justify-between gap-1 group ${
                     activeHealthSection === "tests"
-                      ? "border-indigo-500/60 bg-indigo-950/20 shadow-md"
-                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                      ? "border-zinc-400 bg-[#1A1A20]"
+                      : "border-[#1C1C21] bg-[#141418] hover:border-[#26262C]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 group-hover:text-zinc-300">
                       Tests
                     </span>
-                    <TestTube className="h-3.5 w-3.5 text-indigo-400" />
+                    <TestTube className="h-3.5 w-3.5 text-zinc-400" />
                   </div>
-                  <div className={`text-sm font-bold font-mono truncate ${
-                    testStatusText.includes("FAILED") ? "text-rose-400" : "text-indigo-300"
+                  <div className={`text-sm font-semibold font-mono tabular-nums truncate ${
+                    testStatusText.includes("FAILED") ? "text-rose-400" : "text-zinc-100"
                   }`}>
                     {testStatusText}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
-                    <span className="text-purple-300" title="AI Recommended tests">{totalRecommendedTests} recs</span>
+                  <div className="text-[10px] font-mono tabular-nums text-zinc-400 flex items-center justify-between pt-0.5">
+                    <span className="text-zinc-300" title="AI Recommended tests">{totalRecommendedTests} recs</span>
                     <span title="Actual verified CI failures">{failedRequiredTests} fails</span>
                   </div>
                 </button>
@@ -2624,24 +2625,24 @@ function AiInsightsContent() {
                     setActiveTab("pr");
                     setActiveHealthSection("dependencies");
                   }}
-                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                  className={`p-3 rounded-md border transition-colors text-left flex flex-col justify-between gap-1 group ${
                     activeHealthSection === "dependencies"
-                      ? "border-blue-500/60 bg-blue-950/20 shadow-md"
-                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                      ? "border-sky-700/70 bg-sky-950/20"
+                      : "border-[#1C1C21] bg-[#141418] hover:border-[#26262C]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 group-hover:text-zinc-300">
                       Dependencies
                     </span>
-                    <Boxes className="h-3.5 w-3.5 text-blue-400" />
+                    <Boxes className="h-3.5 w-3.5 text-sky-400" />
                   </div>
-                  <div className={`text-sm font-bold font-mono truncate ${
-                    depStatusText === "PARTIAL" ? "text-blue-300" : "text-emerald-400"
+                  <div className={`text-sm font-semibold font-mono tabular-nums truncate ${
+                    depStatusText === "PARTIAL" ? "text-sky-300" : "text-emerald-400"
                   }`}>
                     {depStatusText}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                  <div className="text-[10px] font-mono tabular-nums text-zinc-400 flex items-center justify-between pt-0.5">
                     <span>{depCount} pkgs</span>
                     <span className={depVulnCount > 0 ? "text-rose-400" : "text-emerald-400"}>
                       {depVulnCount} vulns
@@ -2656,22 +2657,22 @@ function AiInsightsContent() {
                     setActiveTab("pr");
                     setActiveHealthSection("impact");
                   }}
-                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                  className={`p-3 rounded-md border transition-colors text-left flex flex-col justify-between gap-1 group ${
                     activeHealthSection === "impact"
-                      ? "border-purple-500/60 bg-purple-950/20 shadow-md"
-                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                      ? "border-zinc-400 bg-[#1A1A20]"
+                      : "border-[#1C1C21] bg-[#141418] hover:border-[#26262C]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 group-hover:text-zinc-300">
                       Impact
                     </span>
-                    <Network className="h-3.5 w-3.5 text-purple-400" />
+                    <Network className="h-3.5 w-3.5 text-zinc-400" />
                   </div>
-                  <div className="text-sm font-bold font-mono text-purple-300 truncate">
+                  <div className="text-sm font-semibold font-mono tabular-nums text-zinc-100 truncate">
                     {impactLevelText}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
+                  <div className="text-[10px] font-mono tabular-nums text-zinc-400 flex items-center justify-between pt-0.5">
                     <span>{changedFilesCount} files</span>
                     <span>{downstreamReposCount} repos</span>
                   </div>
@@ -2684,25 +2685,25 @@ function AiInsightsContent() {
                     setActiveTab("pr");
                     setActiveHealthSection("merge");
                   }}
-                  className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between gap-1 group ${
+                  className={`p-3 rounded-md border transition-colors text-left flex flex-col justify-between gap-1 group ${
                     activeHealthSection === "merge"
-                      ? "border-emerald-500/60 bg-emerald-950/20 shadow-md"
-                      : "border-slate-800 bg-slate-950/70 hover:border-indigo-500/50 hover:bg-slate-900/80"
+                      ? "border-emerald-700/70 bg-emerald-950/20"
+                      : "border-[#1C1C21] bg-[#141418] hover:border-[#26262C]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 group-hover:text-indigo-300">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 group-hover:text-zinc-300">
                       Merge Status
                     </span>
                     <GitPullRequest className="h-3.5 w-3.5 text-emerald-400" />
                   </div>
-                  <div className={`text-sm font-bold font-mono truncate ${
+                  <div className={`text-sm font-semibold font-mono tabular-nums truncate ${
                     mergeDecisionText.includes("BLOCKED") ? "text-rose-400" : mergeDecisionText.includes("WARNING") ? "text-amber-400" : "text-emerald-400"
                   }`}>
                     {mergeDecisionText.replace(/_/g, " ")}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-0.5">
-                    <span className={blockersCount > 0 ? "text-rose-400 font-bold" : "text-emerald-400"}>
+                  <div className="text-[10px] font-mono tabular-nums text-zinc-400 flex items-center justify-between pt-0.5">
+                    <span className={blockersCount > 0 ? "text-rose-400 font-semibold" : "text-emerald-400"}>
                       {blockersCount} blockers
                     </span>
                     <span>Score {riskScoreNum.toFixed(0)}</span>
@@ -2711,79 +2712,79 @@ function AiInsightsContent() {
               </div>
 
               {/* Engineering Lifecycle Timeline View (Section 15) */}
-              <div className="p-3.5 rounded-xl border border-slate-800/80 bg-slate-950/80 space-y-2.5">
+              <div className="p-3.5 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 font-mono text-slate-300 font-semibold uppercase tracking-wider text-[11px]">
-                    <Workflow className="h-4 w-4 text-indigo-400" />
-                    <span>Live Engineering Intelligence Workflow Lifecycle</span>
+                  <div className="flex items-center gap-2 font-mono text-zinc-300 font-medium uppercase tracking-wider text-[11px]">
+                    <Workflow className="h-3.5 w-3.5 text-zinc-400" />
+                    <span>Engineering Workflow Lifecycle</span>
                   </div>
-                  <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
-                    Deterministic Evidence &bull; Multi-Tenant Isolated
+                  <span className="text-[10px] font-mono text-zinc-500 hidden sm:inline">
+                    Deterministic Evidence &bull; Tenant Isolated
                   </span>
                 </div>
 
                 {/* Horizontal Step Pipeline */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 font-mono text-[10px]">
                   {/* Step 1: Project & Req */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">1. Project & Req</span>
-                    <div className="text-emerald-400 font-bold flex items-center gap-1">
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">1. Project & Req</span>
+                    <div className="text-emerald-400 font-semibold flex items-center gap-1">
                       <CheckCircle2 className="h-3 w-3" /> Linked
                     </div>
                   </div>
 
                   {/* Step 2: Task */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">2. Task Linked</span>
-                    <div className="text-emerald-400 font-bold flex items-center gap-1">
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">2. Task Linked</span>
+                    <div className="text-emerald-400 font-semibold flex items-center gap-1">
                       <CheckCircle2 className="h-3 w-3" /> Active
                     </div>
                   </div>
 
                   {/* Step 3: Git Repo & Branch */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">3. Branch / Commit</span>
-                    <div className="text-indigo-300 font-bold truncate">
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">3. Branch / Commit</span>
+                    <div className="text-zinc-200 font-semibold truncate">
                       {prChangeSet?.sourceBranch || "main"}
                     </div>
                   </div>
 
                   {/* Step 4: Pull Request */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">4. Pull Request</span>
-                    <div className="text-white font-bold">
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">4. Pull Request</span>
+                    <div className="text-zinc-100 font-semibold tabular-nums">
                       {selectedPrNumber ? `PR #${selectedPrNumber}` : "None"}
                     </div>
                   </div>
 
                   {/* Step 5: Tests / CI */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">5. CI / Tests</span>
-                    <div className={`font-bold ${failedRequiredTests > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">5. CI / Tests</span>
+                    <div className={`font-semibold tabular-nums ${failedRequiredTests > 0 ? "text-rose-400" : "text-emerald-400"}`}>
                       {failedRequiredTests > 0 ? `${failedRequiredTests} Failures` : "Verified"}
                     </div>
                   </div>
 
                   {/* Step 6: AI Health */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">6. AI Analysis</span>
-                    <div className="text-purple-300 font-bold">
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">6. AI Analysis</span>
+                    <div className="text-zinc-200 font-semibold">
                       {prAnalysisResult ? "Executed" : "Pending"}
                     </div>
                   </div>
 
                   {/* Step 7: Security & Bugs */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">7. Security/Bugs</span>
-                    <div className={`font-bold ${critFindingsCount > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">7. Security/Bugs</span>
+                    <div className={`font-semibold tabular-nums ${critFindingsCount > 0 ? "text-rose-400" : "text-emerald-400"}`}>
                       {critFindingsCount > 0 ? `${critFindingsCount} Critical` : "Clean"}
                     </div>
                   </div>
 
                   {/* Step 8: Merge Ready */}
-                  <div className="p-2 rounded-lg border border-slate-800 bg-slate-900/50 space-y-1">
-                    <span className="text-slate-500 block uppercase">8. Merge Ready</span>
-                    <div className={`font-bold ${mergeDecisionText.includes("BLOCKED") ? "text-rose-400" : "text-emerald-400"}`}>
+                  <div className="p-2 rounded border border-[#1C1C21] bg-[#141418] space-y-1">
+                    <span className="text-zinc-500 block uppercase">8. Merge Ready</span>
+                    <div className={`font-semibold truncate ${mergeDecisionText.includes("BLOCKED") ? "text-rose-400" : "text-emerald-400"}`}>
                       {mergeDecisionText}
                     </div>
                   </div>
@@ -2791,8 +2792,8 @@ function AiInsightsContent() {
               </div>
 
               {/* 4 Clickable Quick Metrics */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/60 text-xs">
-                <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#1C1C21] text-xs">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
@@ -2800,11 +2801,11 @@ function AiInsightsContent() {
                       setActiveHealthSection("security");
                       setFindingSeverityFilter("CRITICAL");
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-rose-500/30 bg-rose-950/20 text-rose-300 hover:bg-rose-950/40 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-rose-900/60 bg-rose-950/20 text-rose-300 hover:bg-rose-950/35 transition-colors"
                   >
                     <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
                     <span>Critical Findings:</span>
-                    <strong className="font-mono">{critFindingsCount}</strong>
+                    <strong className="font-mono tabular-nums">{critFindingsCount}</strong>
                   </button>
 
                   <button
@@ -2814,11 +2815,11 @@ function AiInsightsContent() {
                       setActiveHealthSection("security");
                       setFindingSeverityFilter("HIGH");
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-amber-500/30 bg-amber-950/20 text-amber-300 hover:bg-amber-950/40 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-amber-900/60 bg-amber-950/20 text-amber-300 hover:bg-amber-950/35 transition-colors"
                   >
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
                     <span>High Findings:</span>
-                    <strong className="font-mono">{highFindingsCount}</strong>
+                    <strong className="font-mono tabular-nums">{highFindingsCount}</strong>
                   </button>
 
                   <button
@@ -2828,11 +2829,11 @@ function AiInsightsContent() {
                       setActiveHealthSection("tests");
                       setTestBucketFilter("FAILURES");
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-indigo-500/30 bg-indigo-950/20 text-indigo-300 hover:bg-indigo-950/40 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[#26262C] bg-[#141418] text-zinc-300 hover:border-zinc-600 transition-colors"
                   >
-                    <TestTube className="h-3.5 w-3.5 text-indigo-400" />
+                    <TestTube className="h-3.5 w-3.5 text-zinc-400" />
                     <span>Tests Failing:</span>
-                    <strong className="font-mono">{testsFailingCount}</strong>
+                    <strong className="font-mono tabular-nums">{testsFailingCount}</strong>
                   </button>
 
                   <button
@@ -2842,34 +2843,34 @@ function AiInsightsContent() {
                       setActiveHealthSection("tests");
                       setTestBucketFilter("MUST_RUN");
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-blue-500/30 bg-blue-950/20 text-blue-300 hover:bg-blue-950/40 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-sky-900/60 bg-sky-950/20 text-sky-300 hover:bg-sky-950/35 transition-colors"
                   >
-                    <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                    <CheckCheck className="h-3.5 w-3.5 text-sky-400" />
                     <span>Missing Coverage:</span>
-                    <strong className="font-mono">{missingCoverageCount}</strong>
+                    <strong className="font-mono tabular-nums">{missingCoverageCount}</strong>
                   </button>
                 </div>
 
                 {/* Secondary Utilities */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => setIsDepSecurityModalOpen(true)}
-                    className="text-[11px] font-mono text-slate-400 hover:text-white flex items-center gap-1"
+                    className="text-[11px] font-mono text-zinc-400 hover:text-zinc-100 flex items-center gap-1 transition-colors"
                   >
-                    <Boxes className="h-3.5 w-3.5 text-blue-400" />
+                    <Boxes className="h-3.5 w-3.5 text-sky-400" />
                     Dependency CVE Database
                   </button>
-                  <span className="text-slate-700">&bull;</span>
+                  <span className="text-zinc-700">&bull;</span>
                   <button
                     type="button"
                     onClick={() => {
                       if (selectedPrNumber) fetchAnalysisHistory(selectedPrNumber);
                       setIsHistoryModalOpen(true);
                     }}
-                    className="text-[11px] font-mono text-slate-400 hover:text-white flex items-center gap-1"
+                    className="text-[11px] font-mono text-zinc-400 hover:text-zinc-100 flex items-center gap-1 transition-colors"
                   >
-                    <History className="h-3.5 w-3.5 text-purple-400" />
+                    <History className="h-3.5 w-3.5 text-zinc-400" />
                     Analysis History Timeline
                   </button>
                 </div>
@@ -2880,97 +2881,105 @@ function AiInsightsContent() {
       })()}
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div className="flex items-center gap-1.5 border-b border-[#1C1C21] pb-2.5 overflow-x-auto">
         <button
           onClick={() => setActiveTab("pr")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
             activeTab === "pr"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141418]"
           }`}
         >
-          <GitPullRequest className="h-4 w-4" />
+          <GitPullRequest className="h-3.5 w-3.5" />
           Automatic PR Intelligence
         </button>
         <button
           onClick={() => setActiveTab("search")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
             activeTab === "search"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141418]"
           }`}
         >
-          <Search className="h-4 w-4" />
+          <Search className="h-3.5 w-3.5" />
           Semantic Vector Search (pgvector)
         </button>
         <button
           onClick={() => setActiveTab("impact")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
             activeTab === "impact"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141418]"
           }`}
         >
-          <Network className="h-4 w-4" />
+          <Network className="h-3.5 w-3.5" />
           AST Call Graph Blast Radius
         </button>
         <button
           onClick={() => setActiveTab("dependencies")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
             activeTab === "dependencies"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141418]"
           }`}
         >
-          <Share2 className="h-4 w-4" />
+          <Share2 className="h-3.5 w-3.5" />
           Cross-Repository Topology
         </button>
         <button
           onClick={() => setActiveTab("remediation")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
             activeTab === "remediation"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141418]"
           }`}
         >
-          <Sliders className="h-4 w-4" />
+          <Sliders className="h-3.5 w-3.5" />
           Controlled Remediation
           {localActions.length > 0 && (
-            <Badge className="ml-1 bg-purple-500/20 text-purple-300 border-purple-500/30 text-[10px] px-1.5 py-0 font-mono">
+            <span className={`ml-1 rounded px-1.5 py-0 text-[10px] font-mono tabular-nums ${
+              activeTab === "remediation"
+                ? "bg-zinc-900/15 text-zinc-950"
+                : "bg-[#141418] text-zinc-300 border border-[#26262C]"
+            }`}>
               {localActions.length}
-            </Badge>
+            </span>
           )}
         </button>
         <button
           onClick={() => setActiveTab("autodocs")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
             activeTab === "autodocs"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141418]"
           }`}
         >
-          <BookOpen className="h-4 w-4" />
+          <BookOpen className="h-3.5 w-3.5" />
           System Design & Auto-Docs
           {documents.length > 0 && (
-            <Badge className="ml-1 bg-sky-500/20 text-sky-300 border-sky-500/30 text-[10px] px-1.5 py-0 font-mono">
+            <span className={`ml-1 rounded px-1.5 py-0 text-[10px] font-mono tabular-nums ${
+              activeTab === "autodocs"
+                ? "bg-zinc-900/15 text-zinc-950"
+                : "bg-[#141418] text-zinc-300 border border-[#26262C]"
+            }`}>
               {documents.length}
-            </Badge>
+            </span>
           )}
         </button>
         <button
           onClick={() => setActiveTab("commitguard")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
             activeTab === "commitguard"
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-100 hover:bg-[#141418]"
           }`}
         >
-          <ShieldAlert className="h-4 w-4" />
+          <ShieldAlert className="h-3.5 w-3.5" />
           Commit Push Guard
           {commitReports.some((r) => r.status === "CRITICAL_ALERT") && (
-            <Badge className="ml-1 bg-rose-500/20 text-rose-300 border-rose-500/30 text-[10px] px-1.5 py-0 font-mono">
+            <span className="ml-1 rounded bg-rose-950/60 text-rose-300 border border-rose-800/60 text-[10px] px-1.5 py-0 font-mono">
               ALERT
-            </Badge>
+            </span>
           )}
         </button>
       </div>
@@ -2979,26 +2988,26 @@ function AiInsightsContent() {
       {/* TAB 1: AUTOMATIC REAL GITHUB PULL REQUEST INTELLIGENCE                    */}
       {/* ========================================================================= */}
       {activeTab === "pr" && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {/* PR Selector & Metadata Header */}
-          <Card className="border-indigo-500/20 bg-slate-900/60">
+          <Card className="border-[#1C1C21] bg-[#0E0E11]">
             <CardHeader className="pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="text-base text-white flex items-center gap-2">
-                    <GitPullRequest className="h-5 w-5 text-indigo-400" />
+                  <CardTitle className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                    <GitPullRequest className="h-4 w-4 text-zinc-400" />
                     Authoritative GitHub Pull Request
                   </CardTitle>
-                  <CardDescription className="text-xs">
-                    Select a real GitHub pull request to automatically obtain change sets, statically derive symbols, and compute blast radius.
+                  <CardDescription className="text-xs text-zinc-400 mt-0.5">
+                    Select a pull request to fetch change sets, derive AST symbols, and compute blast radius.
                   </CardDescription>
                 </div>
 
                 {/* PR Dropdown */}
                 <div className="flex items-center gap-2">
                   {isLoadingPrs ? (
-                    <div className="flex items-center gap-2 text-xs text-slate-400 py-1.5 px-3 bg-slate-950 border border-slate-800 rounded-lg">
-                      <Loader2 className="h-3 w-3 animate-spin text-purple-400" />
+                    <div className="flex items-center gap-2 text-xs text-zinc-400 h-8 px-3 bg-[#141418] border border-[#26262C] rounded-md">
+                      <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />
                       Loading PRs...
                     </div>
                   ) : pullRequests.length > 0 ? (
@@ -3006,16 +3015,16 @@ function AiInsightsContent() {
                       aria-label="Authoritative Pull Request Selection"
                       value={selectedPrNumber}
                       onChange={(e) => setSelectedPrNumber(Number(e.target.value) || "")}
-                      className="bg-slate-950 border border-slate-800 text-xs text-white rounded-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer max-w-xs truncate"
+                      className="bg-[#141418] border border-[#26262C] text-xs text-zinc-100 rounded-md px-3 h-8 focus:border-zinc-400 focus:outline-none cursor-pointer max-w-xs truncate"
                     >
                       {pullRequests.map((pr) => (
-                        <option key={pr.id || pr.number} value={pr.prNumber || pr.number}>
+                        <option key={pr.id || pr.number} value={pr.prNumber || pr.number} className="bg-[#0E0E11] text-zinc-100">
                           #{pr.prNumber || pr.number}: {pr.title}
                         </option>
                       ))}
                     </select>
                   ) : (
-                    <div className="text-xs text-slate-500 italic bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                    <div className="text-xs text-zinc-500 bg-[#141418] px-3 py-1.5 rounded-md border border-[#26262C]">
                       No pull requests synchronized for this repository
                     </div>
                   )}
@@ -3026,16 +3035,16 @@ function AiInsightsContent() {
             {/* Authoritative Changeset Details Card */}
             <CardContent className="space-y-4 pt-0">
               {isLoadingChangeSet ? (
-                <div className="flex items-center justify-center p-6 text-xs text-slate-400">
-                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400 mr-2" />
+                <div className="flex items-center justify-center p-6 text-xs text-zinc-400">
+                  <Loader2 className="h-4 w-4 animate-spin text-zinc-400 mr-2" />
                   Fetching authoritative change set from GitHub / Source Control...
                 </div>
               ) : prChangeSet ? (
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 space-y-4">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                <div className="rounded-md border border-[#26262C] bg-[#141418] p-4 space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#1C1C21] pb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-white">
+                        <span className="text-sm font-medium text-zinc-100 tabular-nums">
                           #{prChangeSet.number}: {prChangeSet.title}
                         </span>
                         <Badge
@@ -3045,28 +3054,28 @@ function AiInsightsContent() {
                           {prChangeSet.state}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 font-mono">
-                        <GitBranch className="h-3 w-3 text-indigo-400" />
-                        <span>{prChangeSet.sourceBranch || "head"}</span>
-                        <ArrowRight className="h-3 w-3 text-slate-600" />
-                        <span>{prChangeSet.targetBranch || "main"}</span>
+                      <div className="flex items-center gap-2 text-xs text-zinc-400 mt-1 font-mono tabular-nums">
+                        <GitBranch className="h-3 w-3 text-zinc-500" />
+                        <span className="text-zinc-300">{prChangeSet.sourceBranch || "head"}</span>
+                        <ArrowRight className="h-3 w-3 text-zinc-600" />
+                        <span className="text-zinc-300">{prChangeSet.targetBranch || "main"}</span>
                         {prChangeSet.headSha && (
-                          <span className="text-[10px] text-slate-500 ml-2">
-                            (head: {prChangeSet.headSha.substring(0, 7)})
+                          <span className="text-[11px] text-zinc-500 ml-1">
+                            ({prChangeSet.headSha.substring(0, 7)})
                           </span>
                         )}
                       </div>
                     </div>
 
                     {/* Stats pills */}
-                    <div className="flex items-center gap-2 text-xs font-mono">
-                      <span className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-slate-300">
+                    <div className="flex items-center gap-2 text-[11px] font-mono tabular-nums">
+                      <span className="px-2 py-0.5 rounded bg-[#0E0E11] border border-[#26262C] text-zinc-300">
                         {prChangeSet.changedFilesCount || prChangeSet.files?.length || 0} files changed
                       </span>
-                      <span className="px-2.5 py-1 rounded-md bg-emerald-950/50 border border-emerald-800/40 text-emerald-400">
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/30 border border-emerald-900/50 text-emerald-400">
                         +{prChangeSet.additions || 0}
                       </span>
-                      <span className="px-2.5 py-1 rounded-md bg-rose-950/50 border border-rose-800/40 text-rose-400">
+                      <span className="px-2 py-0.5 rounded bg-rose-950/30 border border-rose-900/50 text-rose-400">
                         -{prChangeSet.deletions || 0}
                       </span>
                     </div>
@@ -3075,24 +3084,24 @@ function AiInsightsContent() {
                   {/* Changed Files Chips */}
                   {prChangeSet.files && prChangeSet.files.length > 0 && (
                     <div className="space-y-1.5">
-                      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                        Authoritative Changed Files ({prChangeSet.files.length})
+                      <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">
+                        Changed Files ({prChangeSet.files.length})
                       </div>
                       <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                         {prChangeSet.files.map((file, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-300"
+                            className="flex items-center gap-1.5 px-2 py-1 rounded border border-[#26262C] bg-[#0E0E11] text-[11px] font-mono text-zinc-300"
                           >
-                            <FileCode className="h-3 w-3 text-indigo-400" />
+                            <FileCode className="h-3 w-3 text-zinc-500" />
                             <span className="truncate max-w-xs">{file.filename}</span>
                             <span
-                              className={`text-[9px] px-1 rounded uppercase font-bold ${
+                              className={`text-[9px] px-1 rounded uppercase font-semibold ${
                                 file.status === "added"
-                                  ? "text-emerald-400 bg-emerald-950/80"
+                                  ? "text-emerald-400 bg-emerald-950/50"
                                   : file.status === "removed"
-                                  ? "text-rose-400 bg-rose-950/80"
-                                  : "text-amber-400 bg-amber-950/80"
+                                  ? "text-rose-400 bg-rose-950/50"
+                                  : "text-amber-400 bg-amber-950/50"
                               }`}
                             >
                               {file.status}
@@ -3108,17 +3117,17 @@ function AiInsightsContent() {
                     <Button
                       onClick={handleAnalyzePr}
                       disabled={isAnalyzingPr || !selectedRepoId || !selectedPrNumber}
-                      variant="glow"
-                      className="w-full sm:w-auto px-6 py-2.5 text-xs font-semibold flex items-center gap-2"
+                      variant="default"
+                      className="w-full sm:w-auto h-8 px-4 text-xs font-medium flex items-center gap-2"
                     >
                       {isAnalyzingPr ? (
                         <>
-                          <Loader2 className="h-4 w-4 animate-spin text-white" />
-                          Running Real PR Intelligence Pipeline...
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Running PR Intelligence Pipeline...
                         </>
                       ) : (
                         <>
-                          <Sparkles className="h-4 w-4 text-purple-200" />
+                          <Play className="h-3.5 w-3.5" />
                           Analyze Pull Request
                         </>
                       )}
@@ -3128,7 +3137,7 @@ function AiInsightsContent() {
                     <button
                       type="button"
                       onClick={() => setShowAdvancedOverride(!showAdvancedOverride)}
-                      className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+                      className="text-xs text-zinc-400 hover:text-zinc-100 flex items-center gap-1 transition-colors"
                     >
                       {showAdvancedOverride ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                       Advanced Override (Manual Symbols)
@@ -3137,8 +3146,8 @@ function AiInsightsContent() {
 
                   {/* Collapsible Advanced Override Section */}
                   {showAdvancedOverride && (
-                    <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-2 mt-2">
-                      <div className="text-[11px] text-slate-400">
+                    <div className="p-3 rounded-md border border-[#26262C] bg-[#0E0E11] space-y-2 mt-2">
+                      <div className="text-[11px] text-zinc-400">
                         Optional: Override static AST symbol derivation with manual symbols for debugging.
                       </div>
                       <Input
@@ -3153,7 +3162,7 @@ function AiInsightsContent() {
               ) : null}
 
               {prError && (
-                <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300 flex items-center gap-2">
+                <div className="p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs text-rose-300 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
                   <span>{prError}</span>
                 </div>
@@ -3163,57 +3172,57 @@ function AiInsightsContent() {
 
           {/* Lifecycle Execution Pipeline Indicator */}
           {isAnalyzingPr && (
-            <Card className="border-indigo-500/30 bg-slate-900/80 p-5">
-              <div className="text-xs font-semibold text-white mb-3 flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
-                Live PR Intelligence Pipeline Progression:
+            <Card className="border-[#1C1C21] bg-[#0E0E11] p-4">
+              <div className="text-xs font-medium text-zinc-200 mb-3 flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-300" />
+                PR Intelligence Pipeline Execution
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-[11px]">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-[11px] font-mono">
                 <div
-                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  className={`p-2 rounded-md border flex items-center gap-1.5 ${
                     lifecycleStep === "fetching"
-                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
-                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                      ? "border-zinc-400 bg-[#1A1A20] text-zinc-100"
+                      : "border-[#1C1C21] bg-[#141418] text-zinc-500"
                   }`}
                 >
                   <GitPullRequest className="h-3 w-3 shrink-0" />
                   <span>1. Authoritative PR</span>
                 </div>
                 <div
-                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  className={`p-2 rounded-md border flex items-center gap-1.5 ${
                     lifecycleStep === "deriving"
-                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
-                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                      ? "border-zinc-400 bg-[#1A1A20] text-zinc-100"
+                      : "border-[#1C1C21] bg-[#141418] text-zinc-500"
                   }`}
                 >
                   <Code2 className="h-3 w-3 shrink-0" />
                   <span>2. Tree-sitter AST</span>
                 </div>
                 <div
-                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  className={`p-2 rounded-md border flex items-center gap-1.5 ${
                     lifecycleStep === "indexing"
-                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
-                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                      ? "border-zinc-400 bg-[#1A1A20] text-zinc-100"
+                      : "border-[#1C1C21] bg-[#141418] text-zinc-500"
                   }`}
                 >
                   <Database className="h-3 w-3 shrink-0" />
                   <span>3. Durable Indexing</span>
                 </div>
                 <div
-                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  className={`p-2 rounded-md border flex items-center gap-1.5 ${
                     lifecycleStep === "graph"
-                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
-                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                      ? "border-zinc-400 bg-[#1A1A20] text-zinc-100"
+                      : "border-[#1C1C21] bg-[#141418] text-zinc-500"
                   }`}
                 >
                   <Network className="h-3 w-3 shrink-0" />
                   <span>4. Graph CTE</span>
                 </div>
                 <div
-                  className={`p-2 rounded-lg border flex items-center gap-1.5 ${
+                  className={`p-2 rounded-md border flex items-center gap-1.5 ${
                     lifecycleStep === "reasoning"
-                      ? "border-purple-500 bg-purple-950/40 text-purple-200 animate-pulse"
-                      : "border-slate-800 bg-slate-950/50 text-slate-400"
+                      ? "border-zinc-400 bg-[#1A1A20] text-zinc-100"
+                      : "border-[#1C1C21] bg-[#141418] text-zinc-500"
                   }`}
                 >
                   <Cpu className="h-3 w-3 shrink-0" />
@@ -3225,24 +3234,24 @@ function AiInsightsContent() {
 
           {/* Analysis Results */}
           {prAnalysisResult && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Fallback Banner when viewing previous AI data */}
               {(isUsingLastAnalysis || prAnalysisResult?.impact_metadata?.showing_previous_ai_data) && (
-                <div className="p-4 rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                <div className="p-4 rounded-lg border border-amber-900/60 bg-amber-950/20 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-400 shrink-0">
-                      <AlertTriangle className="h-5 w-5" />
+                    <div className="p-2 rounded-md bg-amber-950/50 border border-amber-800/50 text-amber-400 shrink-0">
+                      <AlertTriangle className="h-4 w-4" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                      <div className="text-xs font-semibold text-amber-300 uppercase tracking-wider flex items-center gap-2 flex-wrap">
                         <span>This is the previous data — AI API is not working currently.</span>
                         {lastAnalysisTimestamp && (
-                          <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-950/60 text-amber-300 font-mono">
+                          <Badge variant="outline" className="text-[10px] border-amber-800/60 bg-amber-950/40 text-amber-300 font-mono tabular-nums">
                             Recorded: {lastAnalysisTimestamp}
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-slate-300 mt-1">
+                      <p className="text-xs text-zinc-300 mt-1">
                         The live AI API is currently not responding. Displaying the last real analysis performed by ForgeAI. Live real-time derivation is paused.
                       </p>
                     </div>
@@ -3253,7 +3262,7 @@ function AiInsightsContent() {
                       variant="outline"
                       onClick={handleAnalyzePr}
                       disabled={isAnalyzingPr}
-                      className="h-8 text-xs border-amber-500/40 bg-amber-950/40 text-amber-200 hover:bg-amber-900/60"
+                      className="h-8 text-xs border-amber-800/60 bg-amber-950/30 text-amber-200 hover:bg-amber-950/50"
                     >
                       {isAnalyzingPr ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5 text-amber-400" />}
                       Retry AI API
@@ -3261,13 +3270,13 @@ function AiInsightsContent() {
                   </div>
                 </div>
               )}
-              <Card className="border-purple-500/30 bg-purple-950/10 shadow-xl">
-                <CardHeader className="pb-4">
+              <Card className="border-[#1C1C21] bg-[#0E0E11]">
+                <CardHeader className="pb-4 border-b border-[#1C1C21]">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-6 w-6 text-purple-400" />
-                        <CardTitle className="text-lg text-white">
+                        <ShieldCheck className="h-4 w-4 text-zinc-400" />
+                        <CardTitle className="text-sm font-semibold text-zinc-100">
                           Engineering Impact & Risk Intelligence
                         </CardTitle>
                       </div>
@@ -3275,40 +3284,40 @@ function AiInsightsContent() {
                       {/* Overall Risk Badge */}
                       <Badge
                         variant="outline"
-                        className={`text-xs font-bold px-3 py-1 uppercase tracking-wider border ${
+                        className={`text-[11px] font-mono font-semibold px-2.5 py-0.5 uppercase tracking-wider border ${
                           prAnalysisResult.risk_level === "LOW"
-                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
+                            ? "bg-emerald-950/30 text-emerald-400 border-emerald-900/60"
                             : prAnalysisResult.risk_level === "MEDIUM"
-                            ? "bg-amber-500/15 text-amber-400 border-amber-500/40"
+                            ? "bg-amber-950/30 text-amber-400 border-amber-900/60"
                             : prAnalysisResult.risk_level === "HIGH"
-                            ? "bg-orange-500/15 text-orange-400 border-orange-500/40"
-                            : "bg-rose-500/15 text-rose-400 border-rose-500/40 animate-pulse"
+                            ? "bg-orange-950/30 text-orange-400 border-orange-900/60"
+                            : "bg-rose-950/30 text-rose-400 border-rose-900/60"
                         }`}
                       >
                         Risk: {prAnalysisResult.risk_level}
                       </Badge>
 
                       {/* Deterministic Risk Score */}
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-900 border border-slate-800 text-xs font-mono">
-                        <Activity className="h-3.5 w-3.5 text-indigo-400" />
-                        <span className="text-slate-400">Score:</span>
-                        <span className="font-bold text-white">
+                      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#141418] border border-[#26262C] text-[11px] font-mono tabular-nums">
+                        <Activity className="h-3 w-3 text-zinc-400" />
+                        <span className="text-zinc-500">Score:</span>
+                        <span className="font-semibold text-zinc-100">
                           {typeof prAnalysisResult.risk_score === "number"
                             ? prAnalysisResult.risk_score.toFixed(1)
                             : "0.0"}
                         </span>
-                        <span className="text-slate-500">/ 100</span>
+                        <span className="text-zinc-500">/ 100</span>
                       </div>
 
                       {/* Evidence Confidence */}
                       <Badge
                         variant="outline"
-                        className={`text-xs font-mono px-2.5 py-1 ${
+                        className={`text-[11px] font-mono px-2 py-0.5 ${
                           prAnalysisResult.confidence === "HIGH"
-                            ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                            ? "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                             : prAnalysisResult.confidence === "MEDIUM"
-                            ? "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
-                            : "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                            ? "text-sky-400 border-sky-900/60 bg-sky-950/20"
+                            : "text-amber-400 border-amber-900/60 bg-amber-950/20"
                         }`}
                         title={prAnalysisResult.impact_metadata?.confidence_reason}
                       >
@@ -3318,9 +3327,9 @@ function AiInsightsContent() {
 
                     {/* Transparency Badges */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="font-mono text-xs">
+                      <Badge variant="outline" className="font-mono text-[11px] border-[#26262C] bg-[#141418] text-zinc-300">
                         Provider:{" "}
-                        <span className="text-purple-300 font-bold ml-1">
+                        <span className="text-zinc-100 font-semibold ml-1">
                           {prAnalysisResult.provider === "GROQ"
                             ? "Groq Cloud"
                             : prAnalysisResult.provider === "GEMINI"
@@ -3329,22 +3338,22 @@ function AiInsightsContent() {
                         </span>
                       </Badge>
                       {prAnalysisResult.fallback_used ? (
-                        <Badge variant="destructive" className="font-mono text-xs animate-pulse">
+                        <Badge variant="destructive" className="font-mono text-[11px]">
                           Fallback: Yes (Groq)
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="font-mono text-xs text-emerald-400 border-emerald-500/40">
+                        <Badge variant="outline" className="font-mono text-[11px] text-emerald-400 border-emerald-900/60">
                           Primary: Gemini
                         </Badge>
                       )}
                     </div>
                   </div>
 
-                  <CardDescription className="text-xs font-mono pt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <CardDescription className="text-[11px] font-mono tabular-nums pt-2 text-zinc-400 flex flex-wrap items-center gap-x-4 gap-y-1">
                     <span>Model: {prAnalysisResult.model_version}</span>
                     <span>Duration: {prAnalysisResult.execution_duration_ms}ms</span>
                     {prAnalysisResult.impact_metadata?.confidence_reason && (
-                      <span className="text-slate-400 font-sans italic">
+                      <span className="text-zinc-400 font-sans">
                         Evidence: {prAnalysisResult.impact_metadata.confidence_reason}
                       </span>
                     )}
@@ -3354,55 +3363,52 @@ function AiInsightsContent() {
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-6 pt-2">
+                <CardContent className="space-y-5 pt-5">
                   {/* ========================================================= */}
                   {/* AUTOMATED MERGE READINESS BANNER (DETERMINISTIC ENGINE)   */}
                   {/* ========================================================= */}
                   {prAnalysisResult.merge_readiness && (
-                    <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950 p-5 shadow-2xl relative overflow-hidden space-y-4">
-                      {/* Subtle accent backdrop */}
-                      <div className="absolute top-0 right-0 w-96 h-32 bg-purple-500/5 blur-3xl pointer-events-none rounded-full -mr-20 -mt-10" />
-
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-4">
                       {/* Header Row: Decision Badge, Readiness Score, Policy & "Why?" Toggle */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-                        <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1C1C21] pb-3.5">
+                        <div className="flex items-center gap-2.5 flex-wrap">
                           {/* Categorical Decision Badge */}
                           {(() => {
                             const decision = prAnalysisResult.merge_readiness.decision;
                             if (decision === "READY") {
                               return (
-                                <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 flex items-center gap-1.5 shadow-lg shadow-emerald-950/50">
-                                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                <Badge className="px-2.5 py-1 text-xs font-mono font-semibold tracking-wide bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 flex items-center gap-1.5">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                                   READY TO MERGE
                                 </Badge>
                               );
                             }
                             if (decision === "READY_WITH_WARNINGS") {
                               return (
-                                <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-amber-950/80 text-amber-300 border border-amber-500/50 flex items-center gap-1.5 shadow-lg shadow-amber-950/50">
-                                  <AlertTriangle className="h-4 w-4 text-amber-400" />
+                                <Badge className="px-2.5 py-1 text-xs font-mono font-semibold tracking-wide bg-amber-950/60 text-amber-300 border border-amber-800/60 flex items-center gap-1.5">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
                                   READY WITH WARNINGS
                                 </Badge>
                               );
                             }
                             if (decision === "NOT_READY") {
                               return (
-                                <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-rose-950/80 text-rose-300 border border-rose-500/50 flex items-center gap-1.5 shadow-lg shadow-rose-950/50">
-                                  <XCircle className="h-4 w-4 text-rose-400" />
+                                <Badge className="px-2.5 py-1 text-xs font-mono font-semibold tracking-wide bg-rose-950/60 text-rose-300 border border-rose-800/60 flex items-center gap-1.5">
+                                  <XCircle className="h-3.5 w-3.5 text-rose-400" />
                                   NOT READY TO MERGE
                                 </Badge>
                               );
                             }
                             return (
-                              <Badge className="px-3 py-1.5 text-xs font-mono font-bold tracking-wide bg-blue-950/80 text-blue-300 border border-blue-500/50 flex items-center gap-1.5 shadow-lg shadow-blue-950/50">
-                                <AlertCircle className="h-4 w-4 text-blue-400" />
+                              <Badge className="px-2.5 py-1 text-xs font-mono font-semibold tracking-wide bg-sky-950/60 text-sky-300 border border-sky-800/60 flex items-center gap-1.5">
+                                <AlertCircle className="h-3.5 w-3.5 text-sky-400" />
                                 BLOCKED BY MISSING EVIDENCE
                               </Badge>
                             );
                           })()}
 
                           {/* Policy Version Badge */}
-                          <Badge variant="outline" className="text-[10px] font-mono text-slate-400 border-slate-800 bg-slate-900/60">
+                          <Badge variant="outline" className="text-[10px] font-mono text-zinc-400 border-[#26262C] bg-[#0E0E11]">
                             Policy: {prAnalysisResult.merge_readiness.policy_version || "merge-policy-v1"}
                           </Badge>
 
@@ -3411,7 +3417,7 @@ function AiInsightsContent() {
                             const sec = prAnalysisResult.merge_readiness.security_status;
                             if (sec === "NO_SECURITY_FINDINGS") {
                               return (
-                                <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/30 bg-emerald-950/20 flex items-center gap-1">
+                                <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-900/60 bg-emerald-950/20 flex items-center gap-1">
                                   <ShieldCheck className="h-3 w-3" />
                                   Security: Clean
                                 </Badge>
@@ -3427,15 +3433,15 @@ function AiInsightsContent() {
                             }
                             if (sec === "SECURITY_WARNING") {
                               return (
-                                <Badge variant="outline" className="text-[10px] font-mono text-amber-400 border-amber-500/40 bg-amber-950/20 flex items-center gap-1">
+                                <Badge variant="outline" className="text-[10px] font-mono text-amber-400 border-amber-900/60 bg-amber-950/20 flex items-center gap-1">
                                   <ShieldAlert className="h-3 w-3" />
                                   Security: Warning
                                 </Badge>
                               );
                             }
                             return (
-                              <Badge variant="outline" className="text-[10px] font-mono text-slate-400 border-slate-700 bg-slate-900/40 flex items-center gap-1">
-                                <ShieldX className="h-3 w-3 text-slate-500" />
+                              <Badge variant="outline" className="text-[10px] font-mono text-zinc-400 border-[#26262C] bg-[#0E0E11] flex items-center gap-1">
+                                <ShieldX className="h-3 w-3 text-zinc-500" />
                                 Security: Evidence Unavailable
                               </Badge>
                             );
@@ -3445,10 +3451,10 @@ function AiInsightsContent() {
                         {/* Readiness Score & "Why?" Expand Toggle */}
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono uppercase tracking-wider text-slate-400">Readiness Score:</span>
-                            <div className="flex items-baseline gap-1">
+                            <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">Readiness Score:</span>
+                            <div className="flex items-baseline gap-1 font-mono tabular-nums">
                               <span
-                                className={`text-lg font-mono font-extrabold ${
+                                className={`text-lg font-semibold ${
                                   prAnalysisResult.merge_readiness.readiness_score >= 80
                                     ? "text-emerald-400"
                                     : prAnalysisResult.merge_readiness.readiness_score >= 50
@@ -3460,38 +3466,38 @@ function AiInsightsContent() {
                                   ? prAnalysisResult.merge_readiness.readiness_score.toFixed(1)
                                   : "0.0"}
                               </span>
-                              <span className="text-[10px] font-mono text-slate-500">/ 100.0</span>
+                              <span className="text-[10px] text-zinc-500">/ 100.0</span>
                             </div>
                           </div>
 
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             onClick={() => setIsReadinessDetailsOpen((prev) => !prev)}
-                            className="h-8 text-xs font-mono px-3 border-slate-700 bg-slate-900/80 hover:bg-slate-800 text-slate-200 transition-colors flex items-center gap-1.5"
+                            className="h-7 text-xs font-mono px-2.5 flex items-center gap-1.5"
                           >
-                            <HelpCircle className="h-3.5 w-3.5 text-purple-400" />
+                            <HelpCircle className="h-3.5 w-3.5 text-zinc-400" />
                             <span>Why?</span>
                             {isReadinessDetailsOpen ? (
-                              <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                              <ChevronUp className="h-3.5 w-3.5 text-zinc-400" />
                             ) : (
-                              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                              <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
                             )}
                           </Button>
                         </div>
                       </div>
 
                       {/* Summary Banner */}
-                      <div className="text-xs text-slate-300 leading-relaxed font-sans">
+                      <div className="text-xs text-zinc-300 leading-relaxed font-sans">
                         {prAnalysisResult.merge_readiness.summary}
                       </div>
 
                       {/* Blocker Callouts if any */}
                       {prAnalysisResult.merge_readiness.blockers && prAnalysisResult.merge_readiness.blockers.length > 0 && (
-                        <div className="p-3.5 rounded-xl border border-rose-500/40 bg-rose-950/30 text-xs space-y-1.5">
-                          <div className="font-bold text-rose-200 flex items-center gap-1.5">
-                            <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                        <div className="p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs space-y-1.5">
+                          <div className="font-semibold text-rose-300 flex items-center gap-1.5">
+                            <XCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
                             <span>Merge Blockers ({prAnalysisResult.merge_readiness.blockers.length})</span>
                           </div>
                           <ul className="list-disc list-inside space-y-1 text-rose-300/90 pl-1">
@@ -3504,9 +3510,9 @@ function AiInsightsContent() {
 
                       {/* Warning Callouts if any */}
                       {prAnalysisResult.merge_readiness.warnings && prAnalysisResult.merge_readiness.warnings.length > 0 && (
-                        <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-950/20 text-xs space-y-1.5">
-                          <div className="font-bold text-amber-200 flex items-center gap-1.5">
-                            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                        <div className="p-3 rounded-md border border-amber-900/60 bg-amber-950/20 text-xs space-y-1.5">
+                          <div className="font-semibold text-amber-300 flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                             <span>Advisory Warnings ({prAnalysisResult.merge_readiness.warnings.length})</span>
                           </div>
                           <ul className="list-disc list-inside space-y-1 text-amber-300/90 pl-1">
@@ -3519,43 +3525,43 @@ function AiInsightsContent() {
 
                       {/* Interactive "Why?" Evidence Drawer */}
                       {isReadinessDetailsOpen && (
-                        <div className="pt-3 border-t border-slate-800/80 space-y-4 animate-in fade-in duration-200">
+                        <div className="pt-3 border-t border-[#1C1C21] space-y-3 animate-in fade-in duration-150">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                              <Scale className="h-4 w-4 text-indigo-400" />
-                              Required Checks & Grounded Evidence Matrix
+                            <span className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <Scale className="h-3.5 w-3.5 text-zinc-400" />
+                              Required Checks & Evidence Matrix
                             </span>
-                            <span className="text-[11px] font-mono text-slate-400">
+                            <span className="text-[11px] font-mono text-zinc-500">
                               Deterministic Evaluation &bull; Mode A Advisory
                             </span>
                           </div>
 
                           {/* Required Checks Matrix Table */}
-                          <div className="rounded-xl border border-slate-800 bg-slate-950/80 overflow-hidden">
+                          <div className="rounded-md border border-[#1C1C21] bg-[#0E0E11] overflow-hidden">
                             <div className="overflow-x-auto">
                               <table className="w-full text-left text-xs font-mono">
-                                <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                                <thead className="bg-[#09090B] text-zinc-500 uppercase text-[10px] border-b border-[#1C1C21]">
                                   <tr>
-                                    <th className="px-3.5 py-2.5">Check Name</th>
-                                    <th className="px-3.5 py-2.5">Category</th>
-                                    <th className="px-3.5 py-2.5">Status</th>
-                                    <th className="px-3.5 py-2.5">Observed Evidence</th>
-                                    <th className="px-3.5 py-2.5">Evaluation Detail</th>
+                                    <th className="px-3.5 py-2 font-medium">Check Name</th>
+                                    <th className="px-3.5 py-2 font-medium">Category</th>
+                                    <th className="px-3.5 py-2 font-medium">Status</th>
+                                    <th className="px-3.5 py-2 font-medium">Observed Evidence</th>
+                                    <th className="px-3.5 py-2 font-medium">Evaluation Detail</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-800/60">
+                                <tbody className="divide-y divide-[#1C1C21]">
                                   {Array.isArray(prAnalysisResult.merge_readiness.required_checks) &&
                                     prAnalysisResult.merge_readiness.required_checks.map((check, cIdx) => (
-                                      <tr key={cIdx} className="hover:bg-slate-900/40 transition-colors">
-                                        <td className="px-3.5 py-2.5 font-semibold text-slate-200 whitespace-nowrap">
+                                      <tr key={cIdx} className="hover:bg-[#141418] transition-colors">
+                                        <td className="px-3.5 py-2 font-medium text-zinc-200 whitespace-nowrap">
                                           {check.name}
                                         </td>
-                                        <td className="px-3.5 py-2.5 text-slate-400 text-[11px]">
+                                        <td className="px-3.5 py-2 text-zinc-400 text-[11px]">
                                           {check.category}
                                         </td>
-                                        <td className="px-3.5 py-2.5 whitespace-nowrap">
+                                        <td className="px-3.5 py-2 whitespace-nowrap">
                                           {check.status === "PASSED" && (
-                                            <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/40 bg-emerald-950/30">
+                                            <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-900/60 bg-emerald-950/20">
                                               PASSED
                                             </Badge>
                                           )}
@@ -3565,30 +3571,30 @@ function AiInsightsContent() {
                                             </Badge>
                                           )}
                                           {check.status === "MISSING" && (
-                                            <Badge variant="outline" className="text-[10px] text-blue-400 border-blue-500/40 bg-blue-950/30">
+                                            <Badge variant="outline" className="text-[10px] text-sky-400 border-sky-900/60 bg-sky-950/20">
                                               MISSING
                                             </Badge>
                                           )}
                                           {check.status === "RUNNING" && (
-                                            <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/40 bg-purple-950/30 animate-pulse">
+                                            <Badge variant="outline" className="text-[10px] text-zinc-200 border-[#26262C] bg-[#141418]">
                                               RUNNING
                                             </Badge>
                                           )}
                                           {check.status === "WARNING" && (
-                                            <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/40 bg-amber-950/30">
+                                            <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-900/60 bg-amber-950/20">
                                               WARNING
                                             </Badge>
                                           )}
                                           {check.status === "SKIPPED" && (
-                                            <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700 bg-slate-900/40">
+                                            <Badge variant="outline" className="text-[10px] text-zinc-400 border-[#26262C] bg-[#141418]">
                                               SKIPPED
                                             </Badge>
                                           )}
                                         </td>
-                                        <td className="px-3.5 py-2.5 text-slate-300 text-[11px] max-w-xs truncate">
+                                        <td className="px-3.5 py-2 text-zinc-300 text-[11px] max-w-xs truncate">
                                           {check.evidence || "—"}
                                         </td>
-                                        <td className="px-3.5 py-2.5 text-slate-400 text-[11px] font-sans">
+                                        <td className="px-3.5 py-2 text-zinc-400 text-[11px] font-sans">
                                           {check.detail || "—"}
                                         </td>
                                       </tr>
@@ -3600,28 +3606,28 @@ function AiInsightsContent() {
 
                           {/* Evidence Summary Stats Grid */}
                           {prAnalysisResult.merge_readiness.evidence_summary && (
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-xs">
-                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
-                                <div className="text-[10px] uppercase text-slate-500">CI Run Status</div>
-                                <div className="text-slate-200 font-bold mt-0.5">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono tabular-nums text-xs">
+                              <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#0E0E11]">
+                                <div className="text-[10px] uppercase text-zinc-500">CI Run Status</div>
+                                <div className="text-zinc-200 font-semibold mt-0.5">
                                   {prAnalysisResult.merge_readiness.evidence_summary.ci_status}
                                 </div>
                               </div>
-                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
-                                <div className="text-[10px] uppercase text-slate-500">Required Tests (Exec/Total)</div>
-                                <div className="text-slate-200 font-bold mt-0.5">
+                              <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#0E0E11]">
+                                <div className="text-[10px] uppercase text-zinc-500">Required Tests (Exec/Total)</div>
+                                <div className="text-zinc-200 font-semibold mt-0.5">
                                   {prAnalysisResult.merge_readiness.evidence_summary.executed_required_tests} / {prAnalysisResult.merge_readiness.evidence_summary.total_required_tests}
                                 </div>
                               </div>
-                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
-                                <div className="text-[10px] uppercase text-slate-500">Required Test Failures</div>
-                                <div className={`font-bold mt-0.5 ${prAnalysisResult.merge_readiness.evidence_summary.failed_required_tests > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                              <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#0E0E11]">
+                                <div className="text-[10px] uppercase text-zinc-500">Required Test Failures</div>
+                                <div className={`font-semibold mt-0.5 ${prAnalysisResult.merge_readiness.evidence_summary.failed_required_tests > 0 ? "text-rose-400" : "text-emerald-400"}`}>
                                   {prAnalysisResult.merge_readiness.evidence_summary.failed_required_tests}
                                 </div>
                               </div>
-                              <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60">
-                                <div className="text-[10px] uppercase text-slate-500">Deterministic Risk</div>
-                                <div className="text-purple-300 font-bold mt-0.5">
+                              <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#0E0E11]">
+                                <div className="text-[10px] uppercase text-zinc-500">Deterministic Risk</div>
+                                <div className="text-zinc-100 font-semibold mt-0.5">
                                   {(prAnalysisResult.merge_readiness?.evidence_summary?.deterministic_risk_score ?? 0).toFixed(1)} / 100
                                 </div>
                               </div>
@@ -3636,48 +3642,48 @@ function AiInsightsContent() {
                   {/* UNIFIED ENGINEERING RISK AGGREGATOR CARD (v3)             */}
                   {/* ========================================================= */}
                   {prAnalysisResult.unified_risk && (
-                    <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900/60 to-slate-950 p-5 shadow-xl relative overflow-hidden space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <Scale className="h-5 w-5 text-indigo-400" />
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1C1C21] pb-3">
+                        <div className="flex items-center gap-2">
+                          <Scale className="h-4 w-4 text-zinc-400" />
                           <div>
-                            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                            <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">
                               Unified Engineering Risk Engine
                             </span>
-                            <div className="text-[11px] font-mono text-slate-400">
+                            <div className="text-[11px] font-mono text-zinc-500">
                               Deterministic Multi-Dimensional Formula (v3)
                             </div>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <div className="flex items-baseline gap-1 font-mono">
-                            <span className="text-xs uppercase text-slate-400">Final Risk:</span>
+                          <div className="flex items-baseline gap-1.5 font-mono tabular-nums">
+                            <span className="text-[11px] uppercase text-zinc-500">Final Risk:</span>
                             <span
-                              className={`text-xl font-extrabold ${
+                              className={`text-lg font-semibold ${
                                 (prAnalysisResult.unified_risk.final_risk ?? 0) >= 75
                                   ? "text-rose-400"
                                   : (prAnalysisResult.unified_risk.final_risk ?? 0) >= 50
                                   ? "text-amber-400"
                                   : (prAnalysisResult.unified_risk.final_risk ?? 0) >= 25
-                                  ? "text-yellow-400"
+                                  ? "text-amber-300"
                                   : "text-emerald-400"
                               }`}
                             >
                               {(prAnalysisResult.unified_risk.final_risk ?? 0).toFixed(1)}
                             </span>
-                            <span className="text-[10px] text-slate-500">/ 100.0</span>
+                            <span className="text-[10px] text-zinc-500">/ 100.0</span>
                           </div>
                           <Badge
                             variant="outline"
                             className={`font-mono text-[10px] px-2 py-0.5 ${
                               prAnalysisResult.unified_risk.final_risk_level === "CRITICAL"
-                                ? "text-rose-400 border-rose-500/50 bg-rose-950/30"
+                                ? "text-rose-400 border-rose-900/60 bg-rose-950/30"
                                 : prAnalysisResult.unified_risk.final_risk_level === "HIGH"
-                                ? "text-amber-400 border-amber-500/50 bg-amber-950/30"
+                                ? "text-amber-400 border-amber-900/60 bg-amber-950/30"
                                 : prAnalysisResult.unified_risk.final_risk_level === "MEDIUM"
-                                ? "text-yellow-400 border-yellow-500/50 bg-yellow-950/30"
-                                : "text-emerald-400 border-emerald-500/50 bg-emerald-950/30"
+                                ? "text-amber-300 border-amber-900/50 bg-amber-950/20"
+                                : "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                             }`}
                           >
                             {prAnalysisResult.unified_risk.final_risk_level}
@@ -3686,89 +3692,89 @@ function AiInsightsContent() {
                       </div>
 
                       {/* Dimension Contribution Cards */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                         {/* Local Risk */}
-                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] font-mono">
-                            <span className="text-slate-400">Local Impact (35%)</span>
-                            <span className="text-slate-200 font-bold">
+                        <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                            <span className="text-zinc-400">Local Impact (35%)</span>
+                            <span className="text-zinc-200 font-semibold">
                               {(prAnalysisResult.unified_risk.local_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
-                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                          <div className="w-full bg-[#1C1C21] rounded-full h-1.5 overflow-hidden">
                             <div
-                              className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"
+                              className="bg-zinc-200 h-1.5 rounded-full transition-all duration-300"
                               style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.local_risk ?? 0)}%` }}
                             />
                           </div>
-                          <div className="text-[10px] font-mono text-slate-500">
+                          <div className="text-[10px] font-mono tabular-nums text-zinc-500">
                             Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.local ?? ((prAnalysisResult.unified_risk.local_risk ?? 0) * 0.35)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
 
                         {/* Distributed Risk */}
-                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] font-mono">
-                            <span className="text-slate-400">Distributed (15%)</span>
-                            <span className="text-slate-200 font-bold">
+                        <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                            <span className="text-zinc-400">Distributed (15%)</span>
+                            <span className="text-zinc-200 font-semibold">
                               {(prAnalysisResult.unified_risk.distributed_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
-                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                          <div className="w-full bg-[#1C1C21] rounded-full h-1.5 overflow-hidden">
                             <div
-                              className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                              className="bg-sky-500 h-1.5 rounded-full transition-all duration-300"
                               style={{ width: `${Math.min(100, (prAnalysisResult.unified_risk.distributed_risk ?? 0) * 2)}%` }}
                             />
                           </div>
-                          <div className="text-[10px] font-mono text-slate-500">
+                          <div className="text-[10px] font-mono tabular-nums text-zinc-500">
                             Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.distributed ?? ((prAnalysisResult.unified_risk.distributed_risk ?? 0) * 0.15)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
 
                         {/* Security Risk */}
-                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] font-mono">
-                            <span className="text-slate-400">Security (35%)</span>
-                            <span className="text-slate-200 font-bold">
+                        <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                            <span className="text-zinc-400">Security (35%)</span>
+                            <span className="text-zinc-200 font-semibold">
                               {(prAnalysisResult.unified_risk.security_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
-                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                          <div className="w-full bg-[#1C1C21] rounded-full h-1.5 overflow-hidden">
                             <div
-                              className="bg-rose-500 h-1.5 rounded-full transition-all duration-500"
+                              className="bg-rose-500 h-1.5 rounded-full transition-all duration-300"
                               style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.security_risk ?? 0)}%` }}
                             />
                           </div>
-                          <div className="text-[10px] font-mono text-slate-500">
+                          <div className="text-[10px] font-mono tabular-nums text-zinc-500">
                             Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.security ?? ((prAnalysisResult.unified_risk.security_risk ?? 0) * 0.35)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
 
                         {/* Reliability Risk */}
-                        <div className="p-3 rounded-xl border border-slate-800/80 bg-slate-900/60 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] font-mono">
-                            <span className="text-slate-400">Reliability (15%)</span>
-                            <span className="text-slate-200 font-bold">
+                        <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                            <span className="text-zinc-400">Reliability (15%)</span>
+                            <span className="text-zinc-200 font-semibold">
                               {(prAnalysisResult.unified_risk.reliability_risk ?? 0).toFixed(1)}
                             </span>
                           </div>
-                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                          <div className="w-full bg-[#1C1C21] rounded-full h-1.5 overflow-hidden">
                             <div
-                              className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                              className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
                               style={{ width: `${Math.min(100, prAnalysisResult.unified_risk.reliability_risk ?? 0)}%` }}
                             />
                           </div>
-                          <div className="text-[10px] font-mono text-slate-500">
+                          <div className="text-[10px] font-mono tabular-nums text-zinc-500">
                             Contrib: +{((prAnalysisResult.unified_risk.dimension_contributions?.reliability ?? ((prAnalysisResult.unified_risk.reliability_risk ?? 0) * 0.15)) ?? 0).toFixed(1)} pts
                           </div>
                         </div>
                       </div>
 
                       {/* Formula footer & Floor Notice */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-[11px] font-mono text-slate-400">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-[11px] font-mono text-zinc-500">
                         <span>Formula: min(100.0, 0.35*local + 0.15*distributed + 0.35*security + 0.15*reliability)</span>
                         {prAnalysisResult.unified_risk.final_risk >= 75 && prAnalysisResult.unified_risk.security_risk > 0 && (
-                          <span className="text-rose-400 flex items-center gap-1 font-semibold">
+                          <span className="text-rose-400 flex items-center gap-1 font-medium">
                             <AlertTriangle className="h-3 w-3" />
                             Elevated by Critical Security Floor Policy
                           </span>
@@ -3781,16 +3787,16 @@ function AiInsightsContent() {
                   {/* DETERMINISTIC SECURITY INTELLIGENCE CARD                  */}
                   {/* ========================================================= */}
                   {prAnalysisResult.security_assessment && (
-                    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 shadow-xl space-y-4">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-4">
                       {/* Card Header */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <ShieldCheck className="h-5 w-5 text-emerald-400" />
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1C1C21] pb-3">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4 text-emerald-400" />
                           <div>
-                            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                            <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">
                               Deterministic Security Analysis Layer
                             </span>
-                            <div className="text-[11px] font-mono text-slate-400">
+                            <div className="text-[11px] font-mono text-zinc-500">
                               Static Rule Verification &bull; Zero Raw Secret Leakage
                             </div>
                           </div>
@@ -3804,34 +3810,34 @@ function AiInsightsContent() {
                               SECURITY BLOCKER
                             </Badge>
                           ) : prAnalysisResult.security_assessment.security_status === "SECURITY_WARNING" ? (
-                            <Badge variant="outline" className="font-mono text-[10px] text-amber-400 border-amber-500/40 bg-amber-950/30 flex items-center gap-1">
+                            <Badge variant="outline" className="font-mono text-[10px] text-amber-400 border-amber-900/60 bg-amber-950/20 flex items-center gap-1">
                               <AlertTriangle className="h-3 w-3" />
                               SECURITY WARNING
                             </Badge>
                           ) : prAnalysisResult.security_assessment.security_status === "SECURITY_EVIDENCE_UNAVAILABLE" ? (
-                            <Badge variant="outline" className="font-mono text-[10px] text-slate-400 border-slate-700 bg-slate-900/40 flex items-center gap-1">
+                            <Badge variant="outline" className="font-mono text-[10px] text-zinc-400 border-[#26262C] bg-[#0E0E11] flex items-center gap-1">
                               <ShieldX className="h-3 w-3" />
                               EVIDENCE UNAVAILABLE
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-500/40 bg-emerald-950/30 flex items-center gap-1">
+                            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-900/60 bg-emerald-950/20 flex items-center gap-1">
                               <ShieldCheck className="h-3 w-3" />
                               CLEAN (0 FINDINGS)
                             </Badge>
                           )}
 
                           {/* Severity Pill Counts */}
-                          <div className="flex items-center gap-1 text-[10px] font-mono">
-                            <span className="px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-500/30 text-rose-300">
+                          <div className="flex items-center gap-1 text-[10px] font-mono tabular-nums">
+                            <span className="px-1.5 py-0.5 rounded bg-rose-950/30 border border-rose-900/60 text-rose-300">
                               {prAnalysisResult.security_assessment.critical_count} Crit
                             </span>
-                            <span className="px-1.5 py-0.5 rounded bg-amber-950/40 border border-amber-500/30 text-amber-300">
+                            <span className="px-1.5 py-0.5 rounded bg-amber-950/30 border border-amber-900/60 text-amber-300">
                               {prAnalysisResult.security_assessment.high_count} High
                             </span>
-                            <span className="px-1.5 py-0.5 rounded bg-yellow-950/40 border border-yellow-500/30 text-yellow-300">
+                            <span className="px-1.5 py-0.5 rounded bg-amber-950/20 border border-amber-900/50 text-amber-300">
                               {prAnalysisResult.security_assessment.medium_count} Med
                             </span>
-                            <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                            <span className="px-1.5 py-0.5 rounded bg-[#0E0E11] border border-[#26262C] text-zinc-400">
                               {prAnalysisResult.security_assessment.low_count} Low
                             </span>
                           </div>
@@ -3840,8 +3846,8 @@ function AiInsightsContent() {
 
                       {/* Partial Evidence Warning Callout (Dependency CVE Scanner Unavailable) */}
                       {prAnalysisResult.security_assessment.evidence_status === "PARTIAL" && (
-                        <div className="p-3 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200 flex items-center gap-2.5 font-sans">
-                          <Info className="h-4 w-4 text-blue-400 shrink-0" />
+                        <div className="p-3 rounded-md border border-sky-900/60 bg-sky-950/20 text-xs text-sky-200 flex items-center gap-2.5 font-sans">
+                          <Info className="h-4 w-4 text-sky-400 shrink-0" />
                           <span>
                             <strong>Partial Evidence:</strong> Dependency CVE scanner database is unconfigured. Code-level and secret scanning is fully verified. ForgeAI reports partial status truthfully with zero false certainty.
                           </span>
@@ -3854,84 +3860,84 @@ function AiInsightsContent() {
                           {prAnalysisResult.security_assessment.findings.map((f, fIdx) => (
                             <div
                               key={fIdx}
-                              className={`p-3.5 rounded-xl border text-xs space-y-2 transition-colors ${
+                              className={`p-3.5 rounded-md border text-xs space-y-2 transition-colors ${
                                 f.severity === "CRITICAL"
-                                  ? "border-rose-500/40 bg-rose-950/20"
+                                  ? "border-[#26262C] border-l-2 border-l-rose-500 bg-[#0E0E11]"
                                   : f.severity === "HIGH"
-                                  ? "border-amber-500/40 bg-amber-950/15"
-                                  : "border-slate-800 bg-slate-900/40"
+                                  ? "border-[#26262C] border-l-2 border-l-amber-500 bg-[#0E0E11]"
+                                  : "border-[#1C1C21] bg-[#0E0E11]"
                               }`}
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge
                                     variant={f.severity === "CRITICAL" ? "destructive" : "outline"}
-                                    className={`text-[9px] font-mono font-bold uppercase tracking-wider ${
+                                    className={`text-[9px] font-mono font-semibold uppercase tracking-wider ${
                                       f.severity === "HIGH"
-                                        ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
+                                        ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
                                         : f.severity === "MEDIUM"
-                                        ? "text-yellow-400 border-yellow-500/40 bg-yellow-950/30"
+                                        ? "text-amber-300 border-amber-900/50 bg-amber-950/15"
                                         : ""
                                     }`}
                                   >
                                     {f.severity}
                                   </Badge>
-                                  <Badge variant="outline" className="text-[9px] font-mono text-emerald-400 border-emerald-500/40 bg-emerald-950/20 flex items-center gap-1">
+                                  <Badge variant="outline" className="text-[9px] font-mono text-emerald-400 border-emerald-900/60 bg-emerald-950/20 flex items-center gap-1">
                                     <ShieldCheck className="h-3 w-3" />
                                     DETERMINISTIC
                                   </Badge>
-                                  <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+                                  <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                                     {f.category}
                                   </span>
-                                  <span className="font-bold text-slate-200">{f.title}</span>
+                                  <span className="font-semibold text-zinc-100">{f.title}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <span className="font-mono text-[10px] text-slate-500">{f.rule_id}</span>
+                                  <span className="font-mono text-[10px] text-zinc-500">{f.rule_id}</span>
                                   {f.is_blocker ? (
-                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase font-mono font-bold">
+                                    <Badge variant="destructive" className="text-[9px] px-1.5 py-0 uppercase font-mono font-semibold">
                                       BLOCKING
                                     </Badge>
                                   ) : (
-                                    <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase font-mono text-slate-400">
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 uppercase font-mono text-zinc-400 border-[#26262C]">
                                       ADVISORY
                                     </Badge>
                                   )}
                                 </div>
                               </div>
 
-                              <p className="text-slate-300 text-[11px] leading-relaxed">{f.description}</p>
+                              <p className="text-zinc-300 text-[11px] leading-relaxed">{f.description}</p>
 
                               {/* Concrete Redacted Evidence */}
-                              <div className="p-2.5 rounded-lg bg-slate-950/90 border border-slate-800 font-mono text-[11px] text-purple-300 flex items-center justify-between gap-2 overflow-x-auto">
+                              <div className="p-2.5 rounded-md bg-[#09090B] border border-[#26262C] font-mono tabular-nums text-[11px] text-zinc-200 flex items-center justify-between gap-2 overflow-x-auto">
                                 <div>
-                                  <span className="text-slate-500">{f.file_path}{f.line_number ? `:${f.line_number}` : ""}:</span>{" "}
-                                  <span className="font-bold text-purple-200">{f.redacted_evidence}</span>
+                                  <span className="text-zinc-500">{f.file_path}{f.line_number ? `:${f.line_number}` : ""}:</span>{" "}
+                                  <span className="font-medium text-amber-200">{f.redacted_evidence}</span>
                                 </div>
-                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-purple-950/40 border border-purple-500/30 text-purple-300 shrink-0">
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-[#141418] border border-[#26262C] text-zinc-300 shrink-0">
                                   Confidence: {f.confidence}
                                 </span>
                               </div>
 
                               {/* Actionable Remediation Guidance */}
-                              <div className="text-[11px] text-slate-400 flex items-start gap-1.5">
-                                <span className="text-emerald-400 font-semibold shrink-0">Remediation:</span>
+                              <div className="text-[11px] text-zinc-400 flex items-start gap-1.5">
+                                <span className="text-emerald-400 font-medium shrink-0">Remediation:</span>
                                 <span>{f.remediation}</span>
                               </div>
 
                               {/* Interactive Action Buttons */}
-                              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-                                <span className="text-[10px] font-mono text-slate-500">
-                                  Verification: <span className="text-amber-400 font-semibold">Deterministic Re-Scan Required</span>
+                              <div className="flex items-center justify-between pt-2 border-t border-[#1C1C21]">
+                                <span className="text-[10px] font-mono text-zinc-500">
+                                  Verification: <span className="text-amber-400 font-medium">Deterministic Re-Scan Required</span>
                                 </span>
                                 <div className="flex items-center gap-2">
                                   <Button
                                     type="button"
-                                    variant="outline"
+                                    variant="secondary"
                                     size="sm"
                                     onClick={() => setSelectedFindingForModal(f)}
-                                    className="h-6 text-[10px] px-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 flex items-center gap-1"
+                                    className="h-6 text-[10px] px-2 flex items-center gap-1"
                                   >
-                                    <Eye className="h-3 w-3 text-indigo-400" />
+                                    <Eye className="h-3 w-3 text-zinc-400" />
                                     Safe Context
                                   </Button>
                                   <Button
@@ -3939,9 +3945,9 @@ function AiInsightsContent() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleExplainFinding(f)}
-                                    className="h-6 text-[10px] px-2 border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 flex items-center gap-1"
+                                    className="h-6 text-[10px] px-2 border-[#26262C] bg-[#141418] hover:bg-[#1C1C21] text-zinc-200 flex items-center gap-1"
                                   >
-                                    <Sparkles className="h-3 w-3 text-purple-400" />
+                                    <Cpu className="h-3 w-3 text-zinc-400" />
                                     Explain with ForgeAI
                                   </Button>
                                 </div>
@@ -3950,7 +3956,7 @@ function AiInsightsContent() {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-6 text-slate-500 text-xs font-mono">
+                        <div className="text-center py-6 text-zinc-500 text-xs font-mono">
                           Zero security vulnerabilities or secret leaks detected in pull request files.
                         </div>
                       )}
@@ -3961,16 +3967,16 @@ function AiInsightsContent() {
                   {/* DETERMINISTIC RELIABILITY INTELLIGENCE CARD               */}
                   {/* ========================================================= */}
                   {prAnalysisResult.reliability_assessment && (
-                    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 shadow-xl space-y-4">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-4">
                       {/* Card Header */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <Activity className="h-5 w-5 text-purple-400" />
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1C1C21] pb-3">
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-4 w-4 text-zinc-400" />
                           <div>
-                            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                            <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">
                               Deterministic Reliability Analysis Layer
                             </span>
-                            <div className="text-[11px] font-mono text-slate-400">
+                            <div className="text-[11px] font-mono text-zinc-500">
                               Swallowed Exceptions &bull; Missing Timeouts &bull; Concurrency Safety &bull; Churn Hotspots
                             </div>
                           </div>
@@ -3984,19 +3990,19 @@ function AiInsightsContent() {
                               RELIABILITY FAILED
                             </Badge>
                           ) : prAnalysisResult.reliability_assessment.reliability_status === "WARNING" ? (
-                            <Badge variant="outline" className="font-mono text-[10px] text-amber-400 border-amber-500/40 bg-amber-950/30 flex items-center gap-1">
+                            <Badge variant="outline" className="font-mono text-[10px] text-amber-400 border-amber-900/60 bg-amber-950/20 flex items-center gap-1">
                               <AlertTriangle className="h-3 w-3" />
                               RELIABILITY WARNING
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-500/40 bg-emerald-950/30 flex items-center gap-1">
+                            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-900/60 bg-emerald-950/20 flex items-center gap-1">
                               <CheckCircle2 className="h-3 w-3" />
                               PASSED (0 ISSUES)
                             </Badge>
                           )}
 
                           {/* Risk Score Pill */}
-                          <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                          <div className="text-[10px] font-mono tabular-nums px-2 py-0.5 rounded bg-[#0E0E11] border border-[#26262C] text-zinc-300">
                             Risk: {(prAnalysisResult.reliability_assessment?.reliability_risk_score ?? 0).toFixed(1)} / 100
                           </div>
                         </div>
@@ -4004,8 +4010,8 @@ function AiInsightsContent() {
 
                       {/* Partial Evidence Warning Callout */}
                       {prAnalysisResult.reliability_assessment.evidence_status === "PARTIAL" && (
-                        <div className="p-3 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200 flex items-center gap-2.5 font-sans">
-                          <Info className="h-4 w-4 text-blue-400 shrink-0" />
+                        <div className="p-3 rounded-md border border-sky-900/60 bg-sky-950/20 text-xs text-sky-200 flex items-center gap-2.5 font-sans">
+                          <Info className="h-4 w-4 text-sky-400 shrink-0" />
                           <span>
                             <strong>Partial Telemetry:</strong> Live OpenTelemetry distributed tracing is currently offline. Static concurrency, exception handling, and churn hotspot rules were executed deterministically.
                           </span>
@@ -4018,80 +4024,80 @@ function AiInsightsContent() {
                           {prAnalysisResult.reliability_assessment.findings.map((rf, rIdx) => (
                             <div
                               key={rIdx}
-                              className={`p-3.5 rounded-xl border text-xs space-y-2 transition-colors ${
+                              className={`p-3.5 rounded-md border text-xs space-y-2 transition-colors ${
                                 rf.severity === "CRITICAL"
-                                  ? "border-rose-500/40 bg-rose-950/20"
+                                  ? "border-[#26262C] border-l-2 border-l-rose-500 bg-[#0E0E11]"
                                   : rf.severity === "HIGH"
-                                  ? "border-amber-500/40 bg-amber-950/15"
-                                  : "border-slate-800 bg-slate-900/40"
+                                  ? "border-[#26262C] border-l-2 border-l-amber-500 bg-[#0E0E11]"
+                                  : "border-[#1C1C21] bg-[#0E0E11]"
                               }`}
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge
                                     variant={rf.severity === "CRITICAL" ? "destructive" : "outline"}
-                                    className={`text-[9px] font-mono font-bold uppercase tracking-wider ${
+                                    className={`text-[9px] font-mono font-semibold uppercase tracking-wider ${
                                       rf.severity === "HIGH"
-                                        ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
+                                        ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
                                         : rf.severity === "MEDIUM"
-                                        ? "text-yellow-400 border-yellow-500/40 bg-yellow-950/30"
+                                        ? "text-amber-300 border-amber-900/50 bg-amber-950/15"
                                         : ""
                                     }`}
                                   >
                                     {rf.severity}
                                   </Badge>
-                                  <Badge variant="outline" className="text-[9px] font-mono text-purple-400 border-purple-500/40 bg-purple-950/20 flex items-center gap-1">
-                                    <Activity className="h-3 w-3" />
+                                  <Badge variant="outline" className="text-[9px] font-mono text-zinc-200 border-[#26262C] bg-[#141418] flex items-center gap-1">
+                                    <Activity className="h-3 w-3 text-zinc-400" />
                                     DETERMINISTIC
                                   </Badge>
-                                  <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+                                  <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                                     {rf.category}
                                   </span>
-                                  <span className="font-bold text-slate-200">{rf.title}</span>
+                                  <span className="font-semibold text-zinc-100">{rf.title}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <span className="font-mono text-[10px] text-slate-500">{rf.rule_id}</span>
+                                  <span className="font-mono text-[10px] text-zinc-500">{rf.rule_id}</span>
                                   {rf.is_blocker && (
-                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 uppercase font-mono font-bold">
+                                    <Badge variant="destructive" className="text-[9px] px-1.5 py-0 uppercase font-mono font-semibold">
                                       BLOCKING
                                     </Badge>
                                   )}
                                 </div>
                               </div>
 
-                              <p className="text-slate-300 text-[11px] leading-relaxed">{rf.description}</p>
+                              <p className="text-zinc-300 text-[11px] leading-relaxed">{rf.description}</p>
 
                               {/* Concrete Evidence Snippet */}
-                              <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 font-mono text-[11px] text-indigo-300 flex items-center justify-between gap-2 overflow-x-auto">
+                              <div className="p-2.5 rounded-md bg-[#09090B] border border-[#26262C] font-mono tabular-nums text-[11px] text-zinc-200 flex items-center justify-between gap-2 overflow-x-auto">
                                 <div>
-                                  <span className="text-slate-500">{rf.file_path}{rf.line_number ? `:${rf.line_number}` : ""}:</span>{" "}
+                                  <span className="text-zinc-500">{rf.file_path}{rf.line_number ? `:${rf.line_number}` : ""}:</span>{" "}
                                   <span>{rf.evidence}</span>
                                 </div>
-                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-indigo-950/40 border border-indigo-500/30 text-indigo-300 shrink-0">
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-[#141418] border border-[#26262C] text-zinc-300 shrink-0">
                                   Confidence: {rf.confidence}
                                 </span>
                               </div>
 
                               {/* Remediation */}
-                              <div className="text-[11px] text-slate-400 flex items-start gap-1.5">
-                                <span className="text-emerald-400 font-semibold shrink-0">Remediation:</span>
+                              <div className="text-[11px] text-zinc-400 flex items-start gap-1.5">
+                                <span className="text-emerald-400 font-medium shrink-0">Remediation:</span>
                                 <span>{rf.remediation}</span>
                               </div>
 
                               {/* Interactive Action Buttons */}
-                              <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-                                <span className="text-[10px] font-mono text-slate-500">
-                                  Evidence: <span className="text-indigo-300 font-semibold">Static AST & Churn Verification</span>
+                              <div className="flex items-center justify-between pt-2 border-t border-[#1C1C21]">
+                                <span className="text-[10px] font-mono text-zinc-500">
+                                  Evidence: <span className="text-zinc-300 font-medium">Static AST & Churn Verification</span>
                                 </span>
                                 <div className="flex items-center gap-2">
                                   <Button
                                     type="button"
-                                    variant="outline"
+                                    variant="secondary"
                                     size="sm"
                                     onClick={() => setSelectedFindingForModal(rf)}
-                                    className="h-6 text-[10px] px-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 flex items-center gap-1"
+                                    className="h-6 text-[10px] px-2 flex items-center gap-1"
                                   >
-                                    <Eye className="h-3 w-3 text-indigo-400" />
+                                    <Eye className="h-3 w-3 text-zinc-400" />
                                     Safe Context
                                   </Button>
                                   <Button
@@ -4099,9 +4105,9 @@ function AiInsightsContent() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleExplainFinding(rf)}
-                                    className="h-6 text-[10px] px-2 border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 flex items-center gap-1"
+                                    className="h-6 text-[10px] px-2 border-[#26262C] bg-[#141418] hover:bg-[#1C1C21] text-zinc-200 flex items-center gap-1"
                                   >
-                                    <Sparkles className="h-3 w-3 text-purple-400" />
+                                    <Cpu className="h-3 w-3 text-zinc-400" />
                                     Explain with ForgeAI
                                   </Button>
                                 </div>
@@ -4110,7 +4116,7 @@ function AiInsightsContent() {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-6 text-slate-500 text-xs font-mono">
+                        <div className="text-center py-6 text-zinc-500 text-xs font-mono">
                           Zero reliability failure risks or exception swallows identified.
                         </div>
                       )}
@@ -4119,11 +4125,11 @@ function AiInsightsContent() {
 
                   {/* Insufficient context warning callout if applicable */}
                   {prAnalysisResult.summary?.includes("INSUFFICIENT_CONTEXT") && (
-                    <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/30 text-xs text-amber-200 flex items-start gap-3">
-                      <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="p-4 rounded-lg border border-amber-900/60 bg-amber-950/20 text-xs text-amber-200 flex items-start gap-3">
+                      <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold text-amber-100">Grounded Evidence Warning: Insufficient Context</div>
-                        <div>
+                        <div className="font-semibold text-amber-100">Grounded Evidence Warning: Insufficient Context</div>
+                        <div className="mt-0.5 text-amber-200/80">
                           No indexed code chunks or knowledge graph edges matched this repository. ForgeAI does not fabricate facts.
                           Please ensure the repository has been indexed into ForgeAI before performing deep impact analysis.
                         </div>
@@ -4133,13 +4139,13 @@ function AiInsightsContent() {
 
                   {/* 1. Deterministic Risk Factors Breakdown */}
                   {Array.isArray(prAnalysisResult.risk_factors) && prAnalysisResult.risk_factors.length > 0 && (
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <Sliders className="h-4 w-4 text-purple-400" />
+                        <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sliders className="h-3.5 w-3.5 text-zinc-400" />
                           Deterministic Risk Factors Breakdown
                         </span>
-                        <span className="text-[11px] font-mono text-slate-400">
+                        <span className="text-[11px] font-mono tabular-nums text-zinc-400">
                           Score: {(prAnalysisResult.risk_score ?? 0).toFixed(1)} / 100
                         </span>
                       </div>
@@ -4147,24 +4153,24 @@ function AiInsightsContent() {
                         {prAnalysisResult.risk_factors.map((rf, idx) => (
                           <div
                             key={idx}
-                            className="p-3 rounded-lg border border-slate-800/80 bg-slate-900/60 text-xs flex flex-col justify-between gap-1.5"
+                            className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] text-xs flex flex-col justify-between gap-1.5"
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-slate-200">{rf.factor || rf.name}</span>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-zinc-200">{rf.factor || rf.name}</span>
                               <Badge
                                 variant="outline"
-                                className={`text-[10px] font-mono ${
+                                className={`text-[10px] font-mono tabular-nums shrink-0 ${
                                   (rf.points ?? rf.score ?? 0) > 10
-                                    ? "text-rose-400 border-rose-500/40 bg-rose-950/20"
+                                    ? "text-rose-400 border-rose-900/60 bg-rose-950/20"
                                     : (rf.points ?? rf.score ?? 0) > 0
-                                    ? "text-amber-400 border-amber-500/40 bg-amber-950/20"
-                                    : "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                    ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
+                                    : "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                                 }`}
                               >
                                 +{(rf.points ?? rf.score ?? 0)} pts
                               </Badge>
                             </div>
-                            <p className="text-[11px] text-slate-400 leading-snug">{rf.detail || rf.details}</p>
+                            <p className="text-[11px] text-zinc-400 leading-snug">{rf.detail || rf.details}</p>
                           </div>
                         ))}
                       </div>
@@ -4174,9 +4180,9 @@ function AiInsightsContent() {
                   {/* 2. Changed Components & Affected Modules */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Changed Components */}
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
-                      <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                        <FileCode className="h-4 w-4 text-indigo-400" />
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-3">
+                      <div className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <FileCode className="h-3.5 w-3.5 text-zinc-400" />
                         Directly Changed Components
                       </div>
                       {(() => {
@@ -4193,16 +4199,16 @@ function AiInsightsContent() {
                           ];
                         }
                         if (items.length === 0) {
-                          return <div className="text-xs text-slate-500 italic">No specific symbols identified</div>;
+                          return <div className="text-xs text-zinc-500">No specific symbols identified</div>;
                         }
                         return (
                           <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
                             {items.map((comp, idx) => (
                               <div
                                 key={idx}
-                                className="px-2 py-1 rounded border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-300 flex items-center gap-1.5"
+                                className="px-2 py-1 rounded border border-[#26262C] bg-[#0E0E11] text-[11px] font-mono text-zinc-300 flex items-center gap-1.5"
                               >
-                                <Badge variant="outline" className="text-[9px] font-mono text-indigo-400 px-1 py-0">
+                                <Badge variant="outline" className="text-[9px] font-mono text-zinc-400 border-[#26262C] px-1 py-0">
                                   {comp.type}
                                 </Badge>
                                 <span className="truncate max-w-xs">{comp.name}</span>
@@ -4214,10 +4220,10 @@ function AiInsightsContent() {
                     </div>
 
                     {/* Affected Modules */}
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <Boxes className="h-4 w-4 text-purple-400" />
+                        <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Boxes className="h-3.5 w-3.5 text-zinc-400" />
                           Architectural Areas & Modules
                         </span>
                         {prAnalysisResult.impact_metadata?.cross_module_impact && (
@@ -4227,19 +4233,19 @@ function AiInsightsContent() {
                         )}
                       </div>
                       {Array.isArray(prAnalysisResult.affected_modules) && prAnalysisResult.affected_modules.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                           {prAnalysisResult.affected_modules.map((mod, idx) => (
                             <Badge
                               key={idx}
                               variant="outline"
-                              className="text-xs font-mono px-2.5 py-1 bg-purple-950/20 text-purple-300 border-purple-500/30"
+                              className="text-xs font-mono px-2 py-0.5 bg-[#0E0E11] text-zinc-200 border-[#26262C]"
                             >
                               {mod}
                             </Badge>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-500 italic">No specific architectural modules isolated</div>
+                        <div className="text-xs text-zinc-500">No specific architectural modules isolated</div>
                       )}
                     </div>
                   </div>
@@ -4247,13 +4253,13 @@ function AiInsightsContent() {
                   {/* 3. Multi-Hop Blast Radius (Direct vs Transitive) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Direct Impact (Depth = 1) */}
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <Network className="h-4 w-4 text-emerald-400" />
+                        <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Network className="h-3.5 w-3.5 text-emerald-400" />
                           Direct Blast Radius (Depth 1)
                         </span>
-                        <Badge variant="outline" className="text-[10px] font-mono">
+                        <Badge variant="outline" className="text-[10px] font-mono tabular-nums border-[#26262C] text-zinc-300">
                           {Array.isArray(prAnalysisResult.direct_impact) ? prAnalysisResult.direct_impact.length : 0} callers
                         </Badge>
                       </div>
@@ -4262,30 +4268,30 @@ function AiInsightsContent() {
                           {prAnalysisResult.direct_impact.map((item, idx) => (
                             <div
                               key={idx}
-                              className="p-2 rounded border border-slate-800/80 bg-slate-900/60 text-xs font-mono flex items-center justify-between"
+                              className="p-2 rounded border border-[#1C1C21] bg-[#0E0E11] text-xs font-mono flex items-center justify-between"
                             >
                               <span className="text-emerald-300 font-medium truncate max-w-xs">
                                 {item.source_symbol}
                               </span>
-                              <Badge variant="outline" className="text-[9px] text-slate-400">
+                              <Badge variant="outline" className="text-[9px] text-zinc-400 border-[#26262C]">
                                 {item.edge_type || "DEPENDS_ON"}
                               </Badge>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-500 italic">No direct downstream dependents found</div>
+                        <div className="text-xs text-zinc-500">No direct downstream dependents found</div>
                       )}
                     </div>
 
                     {/* Transitive Impact (Depth = 2, 3) */}
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <Network className="h-4 w-4 text-indigo-400" />
+                        <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Network className="h-3.5 w-3.5 text-zinc-400" />
                           Transitive Blast Radius (Depth 2-3)
                         </span>
-                        <Badge variant="outline" className="text-[10px] font-mono">
+                        <Badge variant="outline" className="text-[10px] font-mono tabular-nums border-[#26262C] text-zinc-300">
                           {Array.isArray(prAnalysisResult.transitive_impact) ? prAnalysisResult.transitive_impact.length : 0} callers
                         </Badge>
                       </div>
@@ -4294,51 +4300,51 @@ function AiInsightsContent() {
                           {prAnalysisResult.transitive_impact.map((item, idx) => (
                             <div
                               key={idx}
-                              className="p-2 rounded border border-slate-800/80 bg-slate-900/60 text-xs font-mono flex items-center justify-between"
+                              className="p-2 rounded border border-[#1C1C21] bg-[#0E0E11] text-xs font-mono flex items-center justify-between"
                             >
                               <div className="flex items-center gap-2 truncate">
-                                <Badge variant="outline" className="text-[9px] text-indigo-400 border-indigo-500/40">
+                                <Badge variant="outline" className="text-[9px] text-zinc-300 border-[#26262C] tabular-nums">
                                   {item.depth} hops
                                 </Badge>
-                                <span className="text-slate-300 truncate max-w-xs">{item.source_symbol}</span>
+                                <span className="text-zinc-300 truncate max-w-xs">{item.source_symbol}</span>
                               </div>
-                              <span className="text-[10px] text-slate-500">{item.edge_type}</span>
+                              <span className="text-[10px] text-zinc-500">{item.edge_type}</span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-500 italic">No multi-hop transitive dependents found</div>
+                        <div className="text-xs text-zinc-500">No multi-hop transitive dependents found</div>
                       )}
                     </div>
                   </div>
 
                   {/* 3b. Distributed Change Intelligence & Cross-Repository Topology */}
                   {prAnalysisResult.impact_metadata?.distributed_impact && (
-                    <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/20 via-slate-950 to-purple-950/20 p-5 space-y-4 shadow-xl">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <Share2 className="h-5 w-5 text-indigo-400" />
-                          <span className="text-sm font-bold text-white uppercase tracking-wider">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1C1C21] pb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Share2 className="h-4 w-4 text-zinc-400" />
+                          <span className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
                             Distributed Change Intelligence & Cross-Repository Topology
                           </span>
                           <Badge
                             variant="outline"
-                            className={`text-xs font-mono font-bold px-2.5 py-0.5 border ${
+                            className={`text-[11px] font-mono font-semibold px-2 py-0.5 border ${
                               prAnalysisResult.impact_metadata.distributed_impact.contract_status === "COMPATIBLE"
-                                ? "bg-emerald-950/60 text-emerald-400 border-emerald-500/40"
+                                ? "bg-emerald-950/30 text-emerald-400 border-emerald-900/60"
                                 : prAnalysisResult.impact_metadata.distributed_impact.contract_status === "POTENTIALLY_BREAKING"
-                                ? "bg-amber-950/60 text-amber-400 border-amber-500/40"
-                                : "bg-rose-950/60 text-rose-400 border-rose-500/40 animate-pulse"
+                                ? "bg-amber-950/30 text-amber-400 border-amber-900/60"
+                                : "bg-rose-950/30 text-rose-400 border-rose-900/60"
                             }`}
                           >
                             Contract: {prAnalysisResult.impact_metadata.distributed_impact.contract_status}
                           </Badge>
                         </div>
 
-                        <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
-                          <div className="p-1.5 px-2.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                        <div className="flex items-center gap-2 flex-wrap text-xs font-mono tabular-nums">
+                          <div className="py-1 px-2.5 rounded bg-[#0E0E11] border border-[#26262C] text-zinc-300">
                             Direct Downstream Repos:{" "}
-                            <span className="font-bold text-white">
+                            <span className="font-semibold text-zinc-100">
                               {prAnalysisResult.impact_metadata.distributed_impact.direct_downstream_count}
                             </span>
                           </div>
@@ -4347,52 +4353,52 @@ function AiInsightsContent() {
 
                       {/* Contract Analysis Rationale */}
                       {prAnalysisResult.impact_metadata.contract_rationale && (
-                        <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs text-slate-300 flex items-start gap-2">
-                          <Info className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+                        <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] text-xs text-zinc-300 flex items-start gap-2">
+                          <Info className="h-4 w-4 text-zinc-400 shrink-0 mt-0.5" />
                           <div>
-                            <span className="font-semibold text-slate-200">Contract Analysis: </span>
-                            <span className="text-slate-300">{prAnalysisResult.impact_metadata.contract_rationale}</span>
+                            <span className="font-medium text-zinc-200">Contract Analysis: </span>
+                            <span className="text-zinc-300">{prAnalysisResult.impact_metadata.contract_rationale}</span>
                           </div>
                         </div>
                       )}
 
                       {/* Multi-Repo Risk Scores */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
-                        <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
-                          <div className="text-[10px] uppercase text-slate-500 font-bold">Repo-Local Risk</div>
-                          <div className="text-lg font-bold text-slate-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono tabular-nums text-xs">
+                        <div className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] space-y-1">
+                          <div className="text-[10px] uppercase text-zinc-500 font-semibold">Repo-Local Risk</div>
+                          <div className="text-base font-semibold text-zinc-100">
                             {(prAnalysisResult.impact_metadata.distributed_impact.local_risk_score ?? prAnalysisResult.risk_score ?? 0).toFixed(1)} / 100
                           </div>
-                          <Badge variant="outline" className="text-[9px] text-slate-400">
+                          <Badge variant="outline" className="text-[9px] text-zinc-400 border-[#26262C]">
                             Level: {prAnalysisResult.impact_metadata.distributed_impact.local_risk_level ?? "LOW"}
                           </Badge>
                         </div>
 
-                        <div className="p-3 rounded-lg border border-indigo-500/30 bg-indigo-950/20 space-y-1">
-                          <div className="text-[10px] uppercase text-indigo-400 font-bold">Distributed Risk (Max 50)</div>
-                          <div className="text-lg font-bold text-indigo-300">
+                        <div className="p-3 rounded-md border border-sky-900/50 bg-[#0E0E11] space-y-1">
+                          <div className="text-[10px] uppercase text-sky-400 font-semibold">Distributed Risk (Max 50)</div>
+                          <div className="text-base font-semibold text-sky-300">
                             {(prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_score ?? 0).toFixed(1)} / 50
                           </div>
-                          <Badge variant="outline" className="text-[9px] text-indigo-300 border-indigo-500/40">
+                          <Badge variant="outline" className="text-[9px] text-sky-300 border-sky-900/60">
                             Level: {prAnalysisResult.impact_metadata.distributed_impact.distributed_risk_level ?? "NONE"}
                           </Badge>
                         </div>
 
-                        <div className="p-3 rounded-lg border border-purple-500/30 bg-purple-950/20 space-y-1">
-                          <div className="text-[10px] uppercase text-purple-400 font-bold">Combined Multi-Repo Risk</div>
-                          <div className="text-lg font-bold text-purple-200">
+                        <div className="p-3 rounded-md border border-[#26262C] bg-[#0E0E11] space-y-1">
+                          <div className="text-[10px] uppercase text-zinc-400 font-semibold">Combined Multi-Repo Risk</div>
+                          <div className="text-base font-semibold text-zinc-100">
                             {(prAnalysisResult.impact_metadata.distributed_impact.combined_risk_score ?? 0).toFixed(1)} / 100
                           </div>
-                          <div className="text-[10px] text-slate-400 font-sans">
-                            Formula: <span className="font-mono text-slate-300">local + 0.4 &times; distributed</span>
+                          <div className="text-[10px] text-zinc-500 font-sans">
+                            Formula: <span className="font-mono text-zinc-300">local + 0.4 &times; distributed</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Downstream Impacted Repositories List */}
                       <div className="space-y-2">
-                        <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <FolderGit2 className="h-4 w-4 text-indigo-400" />
+                        <div className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <FolderGit2 className="h-3.5 w-3.5 text-zinc-400" />
                           Downstream Dependents & CI Status
                         </div>
 
@@ -4402,45 +4408,45 @@ function AiInsightsContent() {
                             {prAnalysisResult.impact_metadata.distributed_impact.downstream_impacts.map((dep, dIdx) => (
                               <div
                                 key={dIdx}
-                                className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 text-xs space-y-2 hover:border-slate-700 transition-colors"
+                                className="p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] text-xs space-y-2 hover:border-[#26262C] transition-colors"
                               >
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold font-mono text-slate-100 text-sm">
+                                    <span className="font-semibold font-mono text-zinc-100 text-xs">
                                       {dep.target_repository_name || (dep as any).repository_name || dep.target_repository_id || (dep as any).repository_id || "downstream-repo"}
                                     </span>
-                                    <Badge variant="outline" className="text-[10px] font-mono text-indigo-300 border-indigo-500/30">
+                                    <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C]">
                                       {dep.dependency_type}
                                     </Badge>
                                     <Badge
                                       variant="outline"
                                       className={`text-[10px] font-mono ${
                                         (dep.confidence || (dep as any).dependency_confidence) === "HIGH"
-                                          ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                          ? "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                                           : (dep.confidence || (dep as any).dependency_confidence) === "MEDIUM"
-                                          ? "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
-                                          : "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                                          ? "text-sky-400 border-sky-900/60 bg-sky-950/20"
+                                          : "text-amber-400 border-amber-900/60 bg-amber-950/20"
                                       }`}
                                     >
                                       Confidence: {dep.confidence || (dep as any).dependency_confidence || "LOW"}
                                     </Badge>
                                   </div>
 
-                                  <div className="flex items-center gap-2 font-mono text-xs">
-                                    <span className="text-[11px] text-slate-400">Downstream CI:</span>
+                                  <div className="flex items-center gap-2 font-mono tabular-nums text-xs">
+                                    <span className="text-[11px] text-zinc-500">Downstream CI:</span>
                                     <Badge
                                       variant="outline"
-                                      className={`text-[10px] font-bold ${
+                                      className={`text-[10px] font-semibold ${
                                         (dep.downstream_ci_status || (dep as any).ci_status) === "PASS" || (dep.downstream_ci_status || (dep as any).ci_status) === "PASSED"
-                                          ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/40"
+                                          ? "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                                           : (dep.downstream_ci_status || (dep as any).ci_status) === "FAIL" || (dep.downstream_ci_status || (dep as any).ci_status) === "FAILED"
-                                          ? "text-rose-400 border-rose-500/40 bg-rose-950/40 animate-pulse"
-                                          : "text-slate-400 border-slate-700 bg-slate-900/50"
+                                          ? "text-rose-400 border-rose-900/60 bg-rose-950/20"
+                                          : "text-zinc-400 border-[#26262C] bg-[#141418]"
                                       }`}
                                     >
                                       {dep.downstream_ci_status || (dep as any).ci_status || "NOT_FOUND"}
                                     </Badge>
-                                    <span className="text-[11px] text-slate-400 ml-1">
+                                    <span className="text-[11px] text-zinc-400 ml-1">
                                       Risk +{dep.risk_contribution ?? 0}
                                     </span>
                                   </div>
@@ -4448,18 +4454,18 @@ function AiInsightsContent() {
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono pt-1">
                                   {dep.affected_symbols && dep.affected_symbols.length > 0 && (
-                                    <div className="p-2 rounded bg-slate-950/70 border border-slate-800/80">
-                                      <span className="text-[10px] uppercase text-slate-500 block mb-1">
+                                    <div className="p-2 rounded bg-[#09090B] border border-[#1C1C21]">
+                                      <span className="text-[10px] uppercase text-zinc-500 block mb-1">
                                         Affected Downstream Symbols ({dep.affected_symbols.length})
                                       </span>
                                       <div className="flex flex-wrap gap-1">
                                         {dep.affected_symbols.slice(0, 4).map((sym, sIdx) => (
-                                          <span key={sIdx} className="px-1.5 py-0.5 rounded bg-slate-900 text-indigo-300 border border-slate-800">
+                                          <span key={sIdx} className="px-1.5 py-0.5 rounded bg-[#141418] text-zinc-200 border border-[#26262C]">
                                             {sym}
                                           </span>
                                         ))}
                                         {dep.affected_symbols.length > 4 && (
-                                          <span className="text-slate-500 text-[10px]">
+                                          <span className="text-zinc-500 text-[10px]">
                                             +{dep.affected_symbols.length - 4} more
                                           </span>
                                         )}
@@ -4468,11 +4474,11 @@ function AiInsightsContent() {
                                   )}
 
                                   {dep.evidence_files && dep.evidence_files.length > 0 && (
-                                    <div className="p-2 rounded bg-slate-950/70 border border-slate-800/80">
-                                      <span className="text-[10px] uppercase text-slate-500 block mb-1">
+                                    <div className="p-2 rounded bg-[#09090B] border border-[#1C1C21]">
+                                      <span className="text-[10px] uppercase text-zinc-500 block mb-1">
                                         Evidence Manifests & Files
                                       </span>
-                                      <div className="truncate text-slate-400">
+                                      <div className="truncate text-zinc-400">
                                         {dep.evidence_files.join(", ")}
                                       </div>
                                     </div>
@@ -4482,7 +4488,7 @@ function AiInsightsContent() {
                             ))}
                           </div>
                         ) : (
-                          <div className="p-4 rounded-lg border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                          <div className="p-4 rounded-md border border-dashed border-[#26262C] text-center text-xs text-zinc-500">
                             No downstream repositories depend on the components modified in this pull request.
                           </div>
                         )}
@@ -4565,29 +4571,29 @@ function AiInsightsContent() {
                     } : null);
 
                     return (
-                      <div className="rounded-xl border border-indigo-500/30 bg-slate-950/70 p-5 space-y-5 shadow-2xl">
+                      <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-5">
                         {/* Section Header */}
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-[#1C1C21]">
                           <div>
-                            <div className="flex items-center gap-2.5">
-                              <TestTube className="h-5 w-5 text-indigo-400" />
-                              <span className="text-sm font-bold text-white uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                              <TestTube className="h-4 w-4 text-zinc-400" />
+                              <span className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
                                 Test Intelligence & Risk-Driven Validation Engine
                               </span>
                             </div>
-                            <p className="text-xs text-slate-400 mt-1">
+                            <p className="text-xs text-zinc-400 mt-1">
                               Deterministic test prioritization combining AST symbol call graph, runtime coverage, and historical failure coupling.
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-2.5 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {/* Coverage Mechanism Badge */}
                             <Badge
                               variant="outline"
-                              className={`text-xs font-mono px-3 py-1 flex items-center gap-1.5 ${
+                              className={`text-[11px] font-mono px-2.5 py-0.5 flex items-center gap-1.5 ${
                                 coverageAvailable
-                                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
-                                  : "bg-indigo-950/40 text-indigo-300 border-indigo-500/40"
+                                  ? "bg-emerald-950/30 text-emerald-300 border-emerald-900/60"
+                                  : "bg-[#0E0E11] text-zinc-300 border-[#26262C]"
                               }`}
                             >
                               {coverageAvailable ? (
@@ -4597,7 +4603,7 @@ function AiInsightsContent() {
                                 </>
                               ) : (
                                 <>
-                                  <Info className="h-3.5 w-3.5 text-indigo-400" />
+                                  <Info className="h-3.5 w-3.5 text-zinc-400" />
                                   <span>Static AST Fallback (Graceful Degradation)</span>
                                 </>
                               )}
@@ -4606,12 +4612,12 @@ function AiInsightsContent() {
                             {/* Overall Test Strategy Confidence */}
                             <Badge
                               variant="outline"
-                              className={`text-xs font-mono px-3 py-1 ${
+                              className={`text-[11px] font-mono px-2.5 py-0.5 ${
                                 overallConf === "HIGH"
-                                  ? "bg-emerald-950/30 text-emerald-400 border-emerald-500/40"
+                                  ? "bg-emerald-950/30 text-emerald-400 border-emerald-900/60"
                                   : overallConf === "MEDIUM"
-                                  ? "bg-blue-950/30 text-blue-400 border-blue-500/40"
-                                  : "bg-amber-950/30 text-amber-400 border-amber-500/40"
+                                  ? "bg-sky-950/30 text-sky-400 border-sky-900/60"
+                                  : "bg-amber-950/30 text-amber-400 border-amber-900/60"
                               }`}
                               title={strategy?.confidence_rationale}
                             >
@@ -4621,152 +4627,152 @@ function AiInsightsContent() {
                         </div>
 
                         {/* Priority Bucket Selector Cards */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                           {/* MUST RUN */}
                           <button
                             type="button"
                             onClick={() => setTestBucketFilter("MUST_RUN")}
-                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                            className={`p-3 rounded-md border text-left transition-colors flex flex-col justify-between gap-1.5 ${
                               testBucketFilter === "MUST_RUN"
-                                ? "border-rose-500/60 bg-rose-950/30 shadow-lg shadow-rose-950/40"
-                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                                ? "border-rose-700/70 bg-rose-950/20"
+                                : "border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C]"
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-rose-300 uppercase flex items-center gap-1.5">
+                              <span className="text-[11px] font-semibold text-rose-300 uppercase flex items-center gap-1.5">
                                 <Flame className="h-3.5 w-3.5 text-rose-400" />
                                 MUST RUN
                               </span>
-                              <Badge variant="outline" className="text-xs font-mono font-bold bg-rose-500/20 text-rose-300 border-rose-500/40">
+                              <Badge variant="outline" className="text-[11px] font-mono tabular-nums font-semibold bg-rose-950/30 text-rose-300 border-rose-900/60">
                                 {mustRunList.length}
                               </Badge>
                             </div>
-                            <span className="text-[11px] text-slate-400">Score &ge; 60 or High Risk</span>
+                            <span className="text-[11px] font-mono text-zinc-500">Score &ge; 60 or High Risk</span>
                           </button>
 
                           {/* SHOULD RUN */}
                           <button
                             type="button"
                             onClick={() => setTestBucketFilter("SHOULD_RUN")}
-                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                            className={`p-3 rounded-md border text-left transition-colors flex flex-col justify-between gap-1.5 ${
                               testBucketFilter === "SHOULD_RUN"
-                                ? "border-amber-500/60 bg-amber-950/30 shadow-lg shadow-amber-950/40"
-                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                                ? "border-amber-700/70 bg-amber-950/20"
+                                : "border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C]"
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-amber-300 uppercase flex items-center gap-1.5">
+                              <span className="text-[11px] font-semibold text-amber-300 uppercase flex items-center gap-1.5">
                                 <Zap className="h-3.5 w-3.5 text-amber-400" />
                                 SHOULD RUN
                               </span>
-                              <Badge variant="outline" className="text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border-amber-500/40">
+                              <Badge variant="outline" className="text-[11px] font-mono tabular-nums font-semibold bg-amber-950/30 text-amber-300 border-amber-900/60">
                                 {shouldRunList.length}
                               </Badge>
                             </div>
-                            <span className="text-[11px] text-slate-400">30 &le; Score &lt; 60</span>
+                            <span className="text-[11px] font-mono text-zinc-500">30 &le; Score &lt; 60</span>
                           </button>
 
                           {/* OPTIONAL */}
                           <button
                             type="button"
                             onClick={() => setTestBucketFilter("OPTIONAL")}
-                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                            className={`p-3 rounded-md border text-left transition-colors flex flex-col justify-between gap-1.5 ${
                               testBucketFilter === "OPTIONAL"
-                                ? "border-blue-500/60 bg-blue-950/30 shadow-lg shadow-blue-950/40"
-                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                                ? "border-sky-700/70 bg-sky-950/20"
+                                : "border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C]"
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-blue-300 uppercase flex items-center gap-1.5">
-                                <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
+                              <span className="text-[11px] font-semibold text-sky-300 uppercase flex items-center gap-1.5">
+                                <CheckCheck className="h-3.5 w-3.5 text-sky-400" />
                                 OPTIONAL
                               </span>
-                              <Badge variant="outline" className="text-xs font-mono font-bold bg-blue-500/20 text-blue-300 border-blue-500/40">
+                              <Badge variant="outline" className="text-[11px] font-mono tabular-nums font-semibold bg-sky-950/30 text-sky-300 border-sky-900/60">
                                 {optionalList.length}
                               </Badge>
                             </div>
-                            <span className="text-[11px] text-slate-400">Score &lt; 30 (Regression)</span>
+                            <span className="text-[11px] font-mono text-zinc-500">Score &lt; 30 (Regression)</span>
                           </button>
 
                           {/* ALL / SUMMARY */}
                           <button
                             type="button"
                             onClick={() => setTestBucketFilter("ALL")}
-                            className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                            className={`p-3 rounded-md border text-left transition-colors flex flex-col justify-between gap-1.5 ${
                               testBucketFilter === "ALL"
-                                ? "border-indigo-500/60 bg-indigo-950/30 shadow-lg shadow-indigo-950/40"
-                                : "border-slate-800 bg-slate-900/50 hover:bg-slate-900"
+                                ? "border-zinc-400 bg-[#1A1A20]"
+                                : "border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C]"
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-indigo-300 uppercase flex items-center gap-1.5">
-                                <BarChart3 className="h-3.5 w-3.5 text-indigo-400" />
+                              <span className="text-[11px] font-semibold text-zinc-200 uppercase flex items-center gap-1.5">
+                                <BarChart3 className="h-3.5 w-3.5 text-zinc-400" />
                                 ALL TESTS
                               </span>
-                              <Badge variant="outline" className="text-xs font-mono font-bold bg-indigo-500/20 text-indigo-300 border-indigo-500/40">
+                              <Badge variant="outline" className="text-[11px] font-mono tabular-nums font-semibold bg-[#141418] text-zinc-200 border-[#26262C]">
                                 {totalTests}
                               </Badge>
                             </div>
-                            <span className="text-[11px] text-slate-400">Total Recommended</span>
+                            <span className="text-[11px] font-mono text-zinc-500">Total Recommended</span>
                           </button>
                         </div>
 
                         {/* Test Recommendations List */}
                         <div className="space-y-3">
-                          <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                          <div className="flex items-center justify-between text-xs text-zinc-400 font-mono tabular-nums">
                             <span>
                               Showing {activeList.length} tests in{" "}
-                              <span className="font-bold text-white uppercase">{testBucketFilter.replace("_", " ")}</span>
+                              <span className="font-semibold text-zinc-100 uppercase">{testBucketFilter.replace("_", " ")}</span>
                             </span>
                             {strategy?.confidence_rationale && (
-                              <span className="truncate max-w-md italic">{strategy.confidence_rationale}</span>
+                              <span className="truncate max-w-md font-sans text-zinc-500">{strategy.confidence_rationale}</span>
                             )}
                           </div>
 
                           {activeList.length > 0 ? (
-                            <div className="space-y-3">
+                            <div className="space-y-2.5">
                               {activeList.map((rec: TestRecommendationItem, idx: number) => (
                                 <div
                                   key={idx}
-                                  className="p-4 rounded-xl border border-slate-800 bg-slate-900/70 hover:border-slate-700/80 transition-all space-y-2.5"
+                                  className="p-3.5 rounded-md border border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C] transition-colors space-y-2.5"
                                 >
                                   {/* Row 1: Header */}
                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2.5 flex-wrap">
-                                      <span className="font-mono text-white font-bold text-sm">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-mono text-zinc-100 font-semibold text-xs">
                                         {rec.test_name}
                                       </span>
                                       {rec.test_method && (
-                                        <Badge variant="outline" className="text-[10px] font-mono text-purple-300 border-purple-500/30">
+                                        <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C]">
                                           #{rec.test_method}
                                         </Badge>
                                       )}
                                       {rec.target_symbol && (
-                                        <Badge variant="outline" className="text-[10px] font-mono text-slate-400">
+                                        <Badge variant="outline" className="text-[10px] font-mono text-zinc-400 border-[#26262C]">
                                           Targets: {rec.target_symbol}
                                         </Badge>
                                       )}
                                     </div>
 
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       {/* Priority Score */}
-                                      <div className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-slate-950 border border-slate-800 font-mono text-xs">
-                                        <span className="text-slate-500">Score:</span>
-                                        <span className="font-bold text-indigo-300">
+                                      <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#141418] border border-[#26262C] font-mono tabular-nums text-[11px]">
+                                        <span className="text-zinc-500">Score:</span>
+                                        <span className="font-semibold text-zinc-100">
                                           {typeof rec.priority_score === "number" ? rec.priority_score.toFixed(1) : rec.priority_score}
                                         </span>
-                                        <span className="text-slate-600">/ 100</span>
+                                        <span className="text-zinc-500">/ 100</span>
                                       </div>
 
                                       {/* Bucket Badge */}
                                       <Badge
                                         variant="outline"
-                                        className={`text-[10px] font-bold uppercase tracking-wider ${
+                                        className={`text-[10px] font-mono font-semibold uppercase tracking-wider ${
                                           rec.priority_bucket === "MUST_RUN"
-                                            ? "bg-rose-500/15 text-rose-300 border-rose-500/40"
+                                            ? "bg-rose-950/30 text-rose-300 border-rose-900/60"
                                             : rec.priority_bucket === "SHOULD_RUN"
-                                            ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
-                                            : "bg-blue-500/15 text-blue-300 border-blue-500/40"
+                                            ? "bg-amber-950/30 text-amber-300 border-amber-900/60"
+                                            : "bg-sky-950/30 text-sky-300 border-sky-900/60"
                                         }`}
                                       >
                                         {rec.priority_bucket}
@@ -4776,7 +4782,7 @@ function AiInsightsContent() {
                                       {rec.merge_requirement === "TEST_REQUIRED" && (
                                         <Badge
                                           variant="outline"
-                                          className="text-[10px] font-mono font-bold uppercase tracking-wider bg-rose-950/70 text-rose-300 border-rose-500/60"
+                                          className="text-[10px] font-mono font-semibold uppercase tracking-wider bg-rose-950/60 text-rose-300 border-rose-800/70"
                                         >
                                           Required for Merge
                                         </Badge>
@@ -4787,10 +4793,10 @@ function AiInsightsContent() {
                                         variant="outline"
                                         className={`text-[10px] font-mono ${
                                           rec.confidence === "HIGH"
-                                            ? "text-emerald-400 border-emerald-500/40"
+                                            ? "text-emerald-400 border-emerald-900/60"
                                             : rec.confidence === "MEDIUM"
-                                            ? "text-blue-400 border-blue-500/40"
-                                            : "text-amber-400 border-amber-500/40"
+                                            ? "text-sky-400 border-sky-900/60"
+                                            : "text-amber-400 border-amber-900/60"
                                         }`}
                                       >
                                         {rec.confidence}
@@ -4800,23 +4806,23 @@ function AiInsightsContent() {
 
                                   {/* Row 2: File Path & Evidence Sources */}
                                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                    <span className="font-mono text-slate-400 text-[11px] truncate max-w-xl">
+                                    <span className="font-mono text-zinc-400 text-[11px] truncate max-w-xl">
                                       {rec.test_file || "Module Test Suite"}
                                     </span>
 
-                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                    <div className="flex items-center gap-1.5 flex-wrap font-mono tabular-nums">
                                       {rec.runtime_coverage_verified && (
-                                        <Badge variant="outline" className="text-[10px] font-mono text-emerald-300 border-emerald-500/40 bg-emerald-950/20">
+                                        <Badge variant="outline" className="text-[10px] text-emerald-300 border-emerald-900/60 bg-emerald-950/20">
                                           Runtime Coverage
                                         </Badge>
                                       )}
                                       {rec.historical_failure_count > 0 && (
-                                        <Badge variant="outline" className="text-[10px] font-mono text-rose-300 border-rose-500/40 bg-rose-950/20">
+                                        <Badge variant="outline" className="text-[10px] text-rose-300 border-rose-900/60 bg-rose-950/20">
                                           {rec.historical_failure_count} Prior Failures
                                         </Badge>
                                       )}
                                       {rec.cochange_count > 0 && (
-                                        <Badge variant="outline" className="text-[10px] font-mono text-amber-300 border-amber-500/40 bg-amber-950/20">
+                                        <Badge variant="outline" className="text-[10px] text-amber-300 border-amber-900/60 bg-amber-950/20">
                                           {rec.cochange_count} Co-Commits
                                         </Badge>
                                       )}
@@ -4824,12 +4830,12 @@ function AiInsightsContent() {
                                         <Badge
                                           key={sIdx}
                                           variant="outline"
-                                          className={`text-[9px] font-mono uppercase ${
+                                          className={`text-[9px] uppercase ${
                                             src === "RUNTIME"
-                                              ? "text-emerald-400 border-emerald-500/30"
+                                              ? "text-emerald-400 border-emerald-900/60"
                                               : src === "HISTORICAL"
-                                              ? "text-amber-400 border-amber-500/30"
-                                              : "text-indigo-400 border-indigo-500/30"
+                                              ? "text-amber-400 border-amber-900/60"
+                                              : "text-zinc-300 border-[#26262C]"
                                           }`}
                                         >
                                           {src}
@@ -4840,13 +4846,13 @@ function AiInsightsContent() {
 
                                   {/* Row 3: Derivation Path (Change -> AST/Runtime/History -> Test) */}
                                   {Array.isArray(rec.evidence_path) && rec.evidence_path.length > 0 && (
-                                    <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80 text-[11px] font-mono text-slate-300 flex items-start gap-2">
-                                      <ArrowRight className="h-3.5 w-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                                    <div className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21] text-[11px] font-mono text-zinc-300 flex items-start gap-2">
+                                      <ArrowRight className="h-3.5 w-3.5 text-zinc-500 shrink-0 mt-0.5" />
                                       <div className="space-y-0.5 w-full">
-                                        <div className="text-[10px] uppercase font-bold text-slate-500">
+                                        <div className="text-[10px] uppercase font-semibold text-zinc-500">
                                           Derivation Path
                                         </div>
-                                        <div className="text-slate-300 leading-relaxed">
+                                        <div className="text-zinc-300 leading-relaxed">
                                           {rec.evidence_path.join(" \u2192 ")}
                                         </div>
                                       </div>
@@ -4854,15 +4860,15 @@ function AiInsightsContent() {
                                   )}
 
                                   {/* Row 4: Reason / Explanation */}
-                                  <div className="text-[11px] text-slate-400 italic">
-                                    <span className="font-semibold text-slate-300 not-italic">Rationale: </span>
+                                  <div className="text-[11px] text-zinc-400">
+                                    <span className="font-medium text-zinc-300">Rationale: </span>
                                     {rec.reason}
                                   </div>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <div className="p-8 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                            <div className="p-8 rounded-md border border-dashed border-[#26262C] text-center text-xs text-zinc-500">
                               No tests categorized under {testBucketFilter.replace("_", " ")} for this pull request.
                             </div>
                           )}
@@ -4870,36 +4876,36 @@ function AiInsightsContent() {
 
                         {/* Recent CI Test Runs & Historical Failures Ingestion Drawer */}
                         {strategy && (strategy.runtime_evidence?.length > 0 || strategy.historical_failures?.length > 0) && (
-                          <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3">
+                          <div className="rounded-md border border-[#1C1C21] bg-[#0E0E11] p-4 space-y-3">
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                                <Database className="h-4 w-4 text-purple-400" />
+                              <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <Database className="h-3.5 w-3.5 text-zinc-400" />
                                 Ingested CI Workflow Executions & Historical Failures
                               </span>
-                              <span className="text-[11px] font-mono text-slate-400">
+                              <span className="text-[11px] font-mono tabular-nums text-zinc-500">
                                 {strategy.runtime_evidence?.length || 0} CI runs &bull; {strategy.historical_failures?.length || 0} failures
                               </span>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                               {/* CI Workflow Runs */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/60 space-y-2">
-                                <div className="text-[11px] font-bold text-slate-300 uppercase">Recent CI Executions</div>
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-2">
+                                <div className="text-[11px] font-semibold text-zinc-300 uppercase">Recent CI Executions</div>
                                 {strategy.runtime_evidence && strategy.runtime_evidence.length > 0 ? (
-                                  <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono text-[11px]">
+                                  <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono tabular-nums text-[11px]">
                                     {strategy.runtime_evidence.slice(0, 5).map((run: any, rIdx: number) => (
-                                      <div key={rIdx} className="flex items-center justify-between p-1.5 rounded bg-slate-900/80 border border-slate-800/60">
-                                        <span className="text-slate-300 truncate max-w-[180px]">
+                                      <div key={rIdx} className="flex items-center justify-between p-1.5 rounded bg-[#141418] border border-[#1C1C21]">
+                                        <span className="text-zinc-300 truncate max-w-[180px]">
                                           {run.workflow || `Run #${run.workflow_run_id || rIdx + 1}`}
                                         </span>
                                         <Badge
                                           variant="outline"
                                           className={`text-[9px] ${
                                             run.conclusion === "success"
-                                              ? "text-emerald-400 border-emerald-500/40"
+                                              ? "text-emerald-400 border-emerald-900/60"
                                               : run.conclusion === "failure"
-                                              ? "text-rose-400 border-rose-500/40"
-                                              : "text-slate-400"
+                                              ? "text-rose-400 border-rose-900/60"
+                                              : "text-zinc-400 border-[#26262C]"
                                           }`}
                                         >
                                           {run.conclusion || run.status || "COMPLETED"}
@@ -4908,28 +4914,28 @@ function AiInsightsContent() {
                                     ))}
                                   </div>
                                 ) : (
-                                  <div className="text-slate-500 text-[11px] italic">No previous workflow runs ingested</div>
+                                  <div className="text-zinc-500 text-[11px]">No previous workflow runs ingested</div>
                                 )}
                               </div>
 
                               {/* Historical Failures */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/60 space-y-2">
-                                <div className="text-[11px] font-bold text-slate-300 uppercase">Historical Test Failures</div>
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-2">
+                                <div className="text-[11px] font-semibold text-zinc-300 uppercase">Historical Test Failures</div>
                                 {strategy.historical_failures && strategy.historical_failures.length > 0 ? (
-                                  <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono text-[11px]">
+                                  <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono tabular-nums text-[11px]">
                                     {strategy.historical_failures.map((hf: any, hIdx: number) => (
-                                      <div key={hIdx} className="flex items-center justify-between p-1.5 rounded bg-slate-900/80 border border-slate-800/60">
+                                      <div key={hIdx} className="flex items-center justify-between p-1.5 rounded bg-[#141418] border border-[#1C1C21]">
                                         <span className="text-rose-300 truncate max-w-[200px]">
                                           {hf.test_name || hf.name}
                                         </span>
-                                        <Badge variant="outline" className="text-[9px] text-rose-400 border-rose-500/40">
+                                        <Badge variant="outline" className="text-[9px] text-rose-400 border-rose-900/60">
                                           {hf.failure_count || 1}x failed
                                         </Badge>
                                       </div>
                                     ))}
                                   </div>
                                 ) : (
-                                  <div className="text-slate-500 text-[11px] italic">No historical failures recorded for affected files</div>
+                                  <div className="text-zinc-500 text-[11px]">No historical failures recorded for affected files</div>
                                 )}
                               </div>
                             </div>
@@ -4937,16 +4943,16 @@ function AiInsightsContent() {
                         )}
 
                         {/* 5. Post-PR Test Validation Feedback Loop */}
-                        <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/20 via-slate-950 to-purple-950/20 p-4 space-y-3">
+                        <div className="rounded-md border border-[#26262C] bg-[#0E0E11] p-4 space-y-3">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2">
                                 <Activity className="h-4 w-4 text-emerald-400" />
-                                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                                <span className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
                                   Post-PR Test Validation (Feedback Loop)
                                 </span>
                               </div>
-                              <p className="text-[11px] text-slate-400 mt-0.5">
+                              <p className="text-[11px] text-zinc-400 mt-0.5">
                                 Compares recommended test selection against actual CI test execution results to calculate selection efficiency and correlation.
                               </p>
                             </div>
@@ -4957,7 +4963,7 @@ function AiInsightsContent() {
                               size="sm"
                               onClick={handleValidateTests}
                               disabled={isValidatingTests}
-                              className="h-8 text-xs px-3 border-emerald-500/40 bg-emerald-950/30 hover:bg-emerald-900/50 text-emerald-200 transition-colors shrink-0"
+                              className="h-8 text-xs px-3 border-emerald-900/60 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-300 transition-colors shrink-0"
                             >
                               {isValidatingTests ? (
                                 <>
@@ -4974,7 +4980,7 @@ function AiInsightsContent() {
                           </div>
 
                           {validationError && (
-                            <div className="p-2.5 rounded bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs">
+                            <div className="p-2.5 rounded-md bg-rose-950/20 border border-rose-900/60 text-rose-300 text-xs">
                               {validationError}
                             </div>
                           )}
@@ -4982,36 +4988,36 @@ function AiInsightsContent() {
                           {effectiveness && (
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                               {/* Metric 1 */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#141418] space-y-1">
+                                <span className="text-[10px] uppercase font-semibold text-zinc-400">
                                   Prediction-to-Failure Correlation
                                 </span>
-                                <div className="text-xl font-bold font-mono text-emerald-400">
+                                <div className="text-lg font-semibold font-mono tabular-nums text-emerald-400">
                                   {((effectiveness.prediction_to_failure_correlation ?? 0) * 100).toFixed(0)}%
                                 </div>
-                                <span className="text-[10px] text-slate-500">Recommended failing tests / Total failed tests</span>
+                                <span className="text-[10px] text-zinc-500">Recommended failing tests / Total failed tests</span>
                               </div>
 
                               {/* Metric 2 */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#141418] space-y-1">
+                                <span className="text-[10px] uppercase font-semibold text-zinc-400">
                                   Test Selection Efficiency
                                 </span>
-                                <div className="text-xl font-bold font-mono text-indigo-400">
+                                <div className="text-lg font-semibold font-mono tabular-nums text-zinc-100">
                                   {((effectiveness.test_selection_efficiency ?? 0) * 100).toFixed(0)}%
                                 </div>
-                                <span className="text-[10px] text-slate-500">Suite runtime reduction efficiency</span>
+                                <span className="text-[10px] text-zinc-500">Suite runtime reduction efficiency</span>
                               </div>
 
                               {/* Metric 3 */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/70 space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#141418] space-y-1">
+                                <span className="text-[10px] uppercase font-semibold text-zinc-400">
                                   High Priority Missed Failures
                                 </span>
-                                <div className={`text-xl font-bold font-mono ${effectiveness.high_priority_missed_count === 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                <div className={`text-lg font-semibold font-mono tabular-nums ${effectiveness.high_priority_missed_count === 0 ? "text-emerald-400" : "text-rose-400"}`}>
                                   {effectiveness.high_priority_missed_count}
                                 </div>
-                                <span className="text-[10px] text-slate-500">Failing tests missed by MUST_RUN</span>
+                                <span className="text-[10px] text-zinc-500">Failing tests missed by MUST_RUN</span>
                               </div>
                             </div>
                           )}
@@ -5022,13 +5028,13 @@ function AiInsightsContent() {
 
                   {/* 5. Historical Change Signals */}
                   {Array.isArray(prAnalysisResult.historical_signals) && prAnalysisResult.historical_signals.length > 0 && (
-                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                    <div className="rounded-lg border border-[#26262C] bg-[#141418] p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <History className="h-4 w-4 text-amber-400" />
+                        <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <History className="h-3.5 w-3.5 text-amber-400" />
                           Historical Change Signals (Commit Churn Evidence)
                         </span>
-                        <span className="text-[11px] font-mono text-slate-400">
+                        <span className="text-[11px] font-mono tabular-nums text-zinc-400">
                           {prAnalysisResult.historical_signals.length} files tracked
                         </span>
                       </div>
@@ -5036,16 +5042,16 @@ function AiInsightsContent() {
                         {prAnalysisResult.historical_signals.map((sig, idx) => (
                           <div
                             key={idx}
-                            className="p-2.5 rounded-lg border border-slate-800 bg-slate-900/60 text-xs font-mono flex flex-col gap-1"
+                            className="p-2.5 rounded-md border border-[#1C1C21] bg-[#0E0E11] text-xs font-mono tabular-nums flex flex-col gap-1"
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-300 truncate max-w-[180px]">{sig.file_path}</span>
-                              <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-zinc-300 truncate max-w-[180px]">{sig.file_path}</span>
+                              <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-900/60 shrink-0">
                                 {sig.commit_count || (sig as any).recent_modifications_count || 0} prior commits
                               </Badge>
                             </div>
                             {sig.recent_commits && sig.recent_commits.length > 0 && (
-                              <div className="text-[10px] text-slate-500 truncate">
+                              <div className="text-[10px] text-zinc-500 truncate">
                                 Latest: {sig.recent_commits[0]}
                               </div>
                             )}
@@ -5057,12 +5063,12 @@ function AiInsightsContent() {
 
                   {/* 6. Architectural Concerns Alert */}
                   {Array.isArray(prAnalysisResult.architectural_concerns) && prAnalysisResult.architectural_concerns.length > 0 && (
-                    <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 text-xs text-rose-200 space-y-2">
-                      <div className="font-bold text-rose-100 flex items-center gap-2">
+                    <div className="p-4 rounded-lg border border-rose-900/60 bg-rose-950/20 text-xs text-rose-200 space-y-2">
+                      <div className="font-semibold text-rose-200 flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-rose-400" />
                         Architectural Concerns Flagged
                       </div>
-                      <ul className="list-disc list-inside space-y-1 text-rose-300">
+                      <ul className="list-disc list-inside space-y-1 text-rose-300/90">
                         {prAnalysisResult.architectural_concerns.map((concern, idx) => (
                           <li key={idx}>{concern}</li>
                         ))}
@@ -5072,11 +5078,11 @@ function AiInsightsContent() {
 
                   {/* 7. Grounded AI Reasoning Review Body */}
                   <div className="space-y-2">
-                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <Cpu className="h-4 w-4 text-purple-400" />
+                    <div className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <Cpu className="h-3.5 w-3.5 text-zinc-400" />
                       Grounded LLM Reasoning (Facts, Inferences & Recommendations)
                     </div>
-                    <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-line font-sans shadow-inner">
+                    <div className="p-4 rounded-md bg-[#141418] border border-[#26262C] text-xs text-zinc-200 leading-relaxed whitespace-pre-line font-sans">
                       {prAnalysisResult.summary}
                     </div>
                   </div>
@@ -5084,14 +5090,14 @@ function AiInsightsContent() {
                   {/* ========================================================= */}
                   {/* AUTOMATED AI CODE REVIEW FINDINGS (GROUNDED & DEDUPLICATED)*/}
                   {/* ========================================================= */}
-                  <div className="space-y-4 pt-2 border-t border-slate-800/80">
+                  <div className="space-y-4 pt-3 border-t border-[#1C1C21]">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <FileCheck className="h-4 w-4 text-emerald-400" />
-                        <span className="text-xs font-bold text-white uppercase tracking-wider">
+                        <span className="text-xs font-semibold text-zinc-100 uppercase tracking-wider">
                           Automated Code Review Findings
                         </span>
-                        <Badge variant="outline" className="text-[10px] font-mono text-purple-300 border-purple-500/30">
+                        <Badge variant="outline" className="text-[10px] font-mono tabular-nums text-zinc-300 border-[#26262C]">
                           {prAnalysisResult.review_findings?.length || 0} findings
                         </Badge>
                       </div>
@@ -5107,10 +5113,10 @@ function AiInsightsContent() {
                             <button
                               key={sev}
                               onClick={() => setFindingSeverityFilter(sev)}
-                              className={`px-2.5 py-1 rounded text-[10px] font-mono transition-colors flex items-center gap-1 ${
+                              className={`px-2 py-0.5 rounded text-[10px] font-mono tabular-nums transition-colors flex items-center gap-1 ${
                                 findingSeverityFilter === sev
-                                  ? "bg-purple-600 text-white font-semibold"
-                                  : "bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                                  ? "bg-zinc-100 text-zinc-950 font-semibold"
+                                  : "bg-[#141418] text-zinc-400 border border-[#26262C] hover:text-zinc-100"
                               }`}
                             >
                               <span>{sev}</span>
@@ -5130,7 +5136,7 @@ function AiInsightsContent() {
 
                         if (filtered.length === 0) {
                           return (
-                            <div className="p-6 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                            <div className="p-6 rounded-md border border-dashed border-[#26262C] text-center text-xs text-zinc-500">
                               No review findings matching severity {findingSeverityFilter}.
                             </div>
                           );
@@ -5141,7 +5147,13 @@ function AiInsightsContent() {
                             {filtered.map((finding, fIdx) => (
                               <div
                                 key={finding.id || fIdx}
-                                className="rounded-xl border border-slate-800/90 bg-slate-950/70 p-4 space-y-3 hover:border-slate-700 transition-all shadow-sm"
+                                className={`rounded-md border p-4 space-y-3 transition-colors ${
+                                  finding.severity === "CRITICAL"
+                                    ? "border-[#26262C] border-l-2 border-l-rose-500 bg-[#141418]"
+                                    : finding.severity === "HIGH"
+                                    ? "border-[#26262C] border-l-2 border-l-amber-500 bg-[#141418]"
+                                    : "border-[#26262C] bg-[#141418]"
+                                }`}
                               >
                                 {/* Header: Title, Severity, Observed/Inferred, Category */}
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -5149,16 +5161,16 @@ function AiInsightsContent() {
                                     {/* Severity Badge */}
                                     <Badge
                                       variant="outline"
-                                      className={`text-[10px] font-mono font-bold uppercase tracking-wider ${
+                                      className={`text-[10px] font-mono font-semibold uppercase tracking-wider ${
                                         finding.severity === "CRITICAL"
-                                          ? "text-rose-400 border-rose-500/50 bg-rose-950/30"
+                                          ? "text-rose-400 border-rose-900/60 bg-rose-950/20"
                                           : finding.severity === "HIGH"
-                                          ? "text-orange-400 border-orange-500/50 bg-orange-950/30"
+                                          ? "text-orange-400 border-orange-900/60 bg-orange-950/20"
                                           : finding.severity === "MEDIUM"
-                                          ? "text-amber-400 border-amber-500/50 bg-amber-950/30"
+                                          ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
                                           : finding.severity === "LOW"
-                                          ? "text-blue-400 border-blue-500/50 bg-blue-950/30"
-                                          : "text-slate-400 border-slate-700 bg-slate-900/40"
+                                          ? "text-sky-400 border-sky-900/60 bg-sky-950/20"
+                                          : "text-zinc-400 border-[#26262C] bg-[#0E0E11]"
                                       }`}
                                     >
                                       {finding.severity}
@@ -5169,8 +5181,8 @@ function AiInsightsContent() {
                                       variant="outline"
                                       className={`text-[9px] font-mono uppercase tracking-wider flex items-center gap-1 ${
                                         finding.finding_type === "OBSERVED"
-                                          ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
-                                          : "text-purple-400 border-purple-500/40 bg-purple-950/20"
+                                          ? "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
+                                          : "text-sky-300 border-sky-900/60 bg-sky-950/20"
                                       }`}
                                     >
                                       {finding.finding_type === "OBSERVED" ? (
@@ -5180,7 +5192,7 @@ function AiInsightsContent() {
                                         </>
                                       ) : (
                                         <>
-                                          <Sparkles className="h-3 w-3 text-purple-400" />
+                                          <Cpu className="h-3 w-3 text-sky-400" />
                                           AI EXPLANATION
                                         </>
                                       )}
@@ -5189,39 +5201,39 @@ function AiInsightsContent() {
                                     {/* Category Badge */}
                                     <Badge
                                       variant="outline"
-                                      className="text-[9px] font-mono text-slate-300 border-slate-800 bg-slate-900/60"
+                                      className="text-[9px] font-mono text-zinc-300 border-[#26262C] bg-[#0E0E11]"
                                     >
                                       {finding.category}
                                     </Badge>
                                   </div>
 
                                   {/* Affected Target */}
-                                  <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5 truncate max-w-sm">
-                                    <FileCode className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-                                    <span className="text-slate-300 truncate">{finding.affected_file}</span>
+                                  <div className="text-[11px] font-mono text-zinc-400 flex items-center gap-1.5 truncate max-w-sm">
+                                    <FileCode className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                                    <span className="text-zinc-300 truncate">{finding.affected_file}</span>
                                     {finding.affected_symbol && (
-                                      <span className="text-purple-300 truncate">#{finding.affected_symbol}</span>
+                                      <span className="text-zinc-400 truncate">#{finding.affected_symbol}</span>
                                     )}
                                   </div>
                                 </div>
 
                                 {/* Title & Description */}
                                 <div>
-                                  <h4 className="text-sm font-semibold text-white tracking-tight">
+                                  <h4 className="text-sm font-semibold text-zinc-100 tracking-tight">
                                     {finding.title}
                                   </h4>
-                                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                                  <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
                                     {finding.description}
                                   </p>
                                 </div>
 
                                 {/* Concrete Grounded Evidence */}
                                 {finding.evidence && (
-                                  <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] font-mono text-slate-300 space-y-1">
-                                    <div className="text-[10px] uppercase font-bold text-slate-500">
+                                  <div className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21] text-[11px] font-mono text-zinc-300 space-y-1">
+                                    <div className="text-[10px] uppercase font-semibold text-zinc-500">
                                       Concrete Evidence
                                     </div>
-                                    <div className="text-slate-300 leading-snug whitespace-pre-wrap break-words">
+                                    <div className="text-zinc-300 leading-snug whitespace-pre-wrap break-words">
                                       {finding.evidence}
                                     </div>
                                   </div>
@@ -5229,8 +5241,8 @@ function AiInsightsContent() {
 
                                 {/* Actionable Recommendation */}
                                 {finding.recommendation && (
-                                  <div className="p-2.5 rounded-lg bg-emerald-950/15 border border-emerald-500/20 text-[11px] text-emerald-200 space-y-1">
-                                    <div className="text-[10px] uppercase font-bold text-emerald-400 flex items-center gap-1">
+                                  <div className="p-2.5 rounded-md bg-emerald-950/15 border border-emerald-900/50 text-[11px] text-emerald-200 space-y-1">
+                                    <div className="text-[10px] uppercase font-semibold text-emerald-400 flex items-center gap-1">
                                       <CheckCircle2 className="h-3 w-3" />
                                       Actionable Recommendation
                                     </div>
@@ -5241,19 +5253,19 @@ function AiInsightsContent() {
                                 )}
 
                                 {/* Action Buttons */}
-                                <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-                                  <span className="text-[10px] font-mono text-slate-500">
-                                    Provenance: <span className="text-slate-300 font-semibold">{finding.finding_type === "OBSERVED" ? "Deterministic Rule" : "Grounded AI Reasoning"}</span>
+                                <div className="flex items-center justify-between pt-2 border-t border-[#1C1C21]">
+                                  <span className="text-[10px] font-mono text-zinc-500">
+                                    Provenance: <span className="text-zinc-300 font-medium">{finding.finding_type === "OBSERVED" ? "Deterministic Rule" : "Grounded AI Reasoning"}</span>
                                   </span>
                                   <div className="flex items-center gap-2">
                                     <Button
                                       type="button"
-                                      variant="outline"
+                                      variant="secondary"
                                       size="sm"
                                       onClick={() => setSelectedFindingForModal(finding)}
-                                      className="h-6 text-[10px] px-2 border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 flex items-center gap-1"
+                                      className="h-6 text-[10px] px-2 flex items-center gap-1"
                                     >
-                                      <Eye className="h-3 w-3 text-indigo-400" />
+                                      <Eye className="h-3 w-3 text-zinc-400" />
                                       Safe Context
                                     </Button>
                                     <Button
@@ -5261,9 +5273,9 @@ function AiInsightsContent() {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => handleExplainFinding(finding)}
-                                      className="h-6 text-[10px] px-2 border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 flex items-center gap-1"
+                                      className="h-6 text-[10px] px-2 border-[#26262C] bg-[#0E0E11] hover:bg-[#1C1C21] text-zinc-200 flex items-center gap-1"
                                     >
-                                      <Sparkles className="h-3 w-3 text-purple-400" />
+                                      <Cpu className="h-3 w-3 text-zinc-400" />
                                       Explain with ForgeAI
                                     </Button>
                                   </div>
@@ -5274,7 +5286,7 @@ function AiInsightsContent() {
                         );
                       })()
                     ) : (
-                      <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/40 text-xs text-slate-400 flex items-center gap-2.5">
+                      <div className="p-5 rounded-md border border-[#1C1C21] bg-[#141418] text-xs text-zinc-400 flex items-center gap-2.5">
                         <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                         <span>No automated review issues or architectural violations identified for this changeset.</span>
                       </div>
@@ -5283,10 +5295,10 @@ function AiInsightsContent() {
 
                   {/* 8. Grounded Provenance Explorer (Multi-Category) */}
                   {Array.isArray(prAnalysisResult.retrieved_chunks) && prAnalysisResult.retrieved_chunks.length > 0 && (
-                    <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                    <div className="space-y-3 pt-3 border-t border-[#1C1C21]">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                          <Layers className="h-3.5 w-3.5 text-purple-400" />
+                        <h4 className="text-xs font-semibold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 text-zinc-400" />
                           Evidence & Provenance Explorer ({prAnalysisResult.retrieved_chunks.length} records)
                         </h4>
 
@@ -5306,10 +5318,10 @@ function AiInsightsContent() {
                             <button
                               key={filter}
                               onClick={() => setProvenanceFilter(filter)}
-                              className={`px-2.5 py-1 rounded text-[10px] font-mono transition-colors ${
+                              className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
                                 provenanceFilter === filter
-                                  ? "bg-purple-600 text-white font-bold"
-                                  : "bg-slate-900 text-slate-400 hover:text-white"
+                                  ? "bg-zinc-100 text-zinc-950 font-semibold"
+                                  : "bg-[#141418] text-zinc-400 border border-[#26262C] hover:text-zinc-100"
                               }`}
                             >
                               {filter}
@@ -5322,62 +5334,62 @@ function AiInsightsContent() {
                         {filteredChunks.map((chunk: any, i: number) => (
                           <div
                             key={i}
-                            className="p-3 rounded-lg border border-slate-800 bg-slate-950 text-xs font-mono flex flex-col gap-1.5"
+                            className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] text-xs font-mono flex flex-col gap-1.5"
                           >
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <div className="flex items-center gap-2">
                                 <Badge
                                   variant="outline"
-                                  className={`text-[9px] font-bold ${
+                                  className={`text-[9px] font-semibold ${
                                     chunk.source === "PR_DIFF"
-                                      ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                      ? "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                                       : chunk.source === "GRAPH"
-                                      ? "text-purple-400 border-purple-500/40 bg-purple-950/20"
+                                      ? "text-sky-300 border-sky-900/60 bg-sky-950/20"
                                       : chunk.source === "TEST"
-                                      ? "text-blue-400 border-blue-500/40 bg-blue-950/20"
+                                      ? "text-amber-300 border-amber-900/60 bg-amber-950/20"
                                       : chunk.source === "HISTORY"
-                                      ? "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                                      ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
                                       : chunk.source === "SYNC_STATE"
-                                      ? "text-cyan-400 border-cyan-500/40 bg-cyan-950/20"
-                                      : "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
+                                      ? "text-cyan-400 border-cyan-900/60 bg-cyan-950/20"
+                                      : "text-zinc-300 border-[#26262C] bg-[#141418]"
                                   }`}
                                 >
                                   {chunk.source || "VECTOR"}
                                 </Badge>
-                                <span className="text-white font-semibold truncate max-w-sm">
+                                <span className="text-zinc-100 font-medium truncate max-w-sm">
                                   {chunk.file_path || chunk.symbol_name || "Repository Artifact"}
                                 </span>
                               </div>
 
                               {chunk.similarity !== undefined && (
-                                <span className="text-[10px] text-slate-400">
+                                <span className="text-[10px] text-zinc-400 tabular-nums">
                                   Similarity: {(chunk.similarity * 100).toFixed(1)}%
                                 </span>
                               )}
                               {chunk.depth !== undefined && (
-                                <span className="text-[10px] text-slate-400">
+                                <span className="text-[10px] text-zinc-400 tabular-nums">
                                   Depth: {chunk.depth} hops ({chunk.edge_type})
                                 </span>
                               )}
                             </div>
 
                             {chunk.content && (
-                              <div className="text-[11px] text-slate-400 bg-slate-900/80 p-2 rounded truncate">
+                              <div className="text-[11px] text-zinc-400 bg-[#141418] p-2 rounded truncate">
                                 {chunk.content}
                               </div>
                             )}
 
-                            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-900">
+                            <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-[#1C1C21]">
                               <span>
                                 Symbol:{" "}
-                                <code className="text-slate-400">
+                                <code className="text-zinc-300">
                                   {chunk.symbol_name || chunk.file_path}
                                 </code>
                               </span>
                               {chunk.commit_sha && (
-                                <span>
+                                <span className="tabular-nums">
                                   Commit:{" "}
-                                  <code className="text-slate-400">
+                                  <code className="text-zinc-300">
                                     {chunk.commit_sha.substring(0, 7)}
                                   </code>
                                 </span>
@@ -5405,7 +5417,7 @@ function AiInsightsContent() {
               <CardTitle className="text-base">Natural Language Code Search</CardTitle>
               <CardDescription>
                 Search across indexed repositories using pgvector cosine embeddings. Strict tenant isolation enforced for{" "}
-                <span className="text-purple-300">{workspaceDisplayName}</span>.
+                <span className="text-zinc-100 font-medium">{workspaceDisplayName}</span>.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -5416,13 +5428,13 @@ function AiInsightsContent() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="flex-1"
                 />
-                <Button type="submit" variant="glow" disabled={isSearching || !searchQuery.trim()}>
+                <Button type="submit" variant="default" disabled={isSearching || !searchQuery.trim()}>
                   {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search Code"}
                 </Button>
               </form>
 
               {searchError && (
-                <div className="mt-4 p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300">
+                <div className="mt-4 p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs text-rose-300">
                   {searchError}
                 </div>
               )}
@@ -5432,11 +5444,11 @@ function AiInsightsContent() {
           {searchResults.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono tabular-nums">
                   Matching Code Chunks ({searchResults.length})
                 </h3>
                 {selectedRepo && (
-                  <span className="text-[11px] text-slate-500 font-mono">
+                  <span className="text-[11px] text-zinc-500 font-mono">
                     Scoped to {selectedRepo.fullName}
                   </span>
                 )}
@@ -5444,28 +5456,28 @@ function AiInsightsContent() {
               {searchResults.map((chunk, idx) => (
                 <div
                   key={chunk.id || idx}
-                  className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-2"
+                  className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-4 space-y-2"
                 >
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <FileCode className="h-4 w-4 text-indigo-400" />
-                      <span className="font-mono text-indigo-300 font-semibold">{chunk.file_path}</span>
+                      <FileCode className="h-4 w-4 text-zinc-400" />
+                      <span className="font-mono text-zinc-100 font-semibold">{chunk.file_path}</span>
                       {chunk.symbol_name && (
-                        <Badge variant="outline" className="text-[10px] font-mono">
+                        <Badge variant="outline" className="text-[10px] font-mono border-[#26262C] bg-[#141418] text-zinc-300">
                           {chunk.symbol_type}: {chunk.symbol_name}
                         </Badge>
                       )}
                     </div>
-                    <Badge variant="outline" className="font-mono text-[10px]">
+                    <Badge variant="outline" className="font-mono tabular-nums text-[10px] border-[#26262C] text-zinc-300">
                       Similarity: {((chunk.similarity || (1 - (chunk.distance || 0))) * 100).toFixed(1)}%
                     </Badge>
                   </div>
-                  <pre className="text-xs font-mono bg-slate-950 p-3 rounded-lg text-slate-300 overflow-x-auto border border-slate-800/60 max-h-60">
+                  <pre className="text-xs font-mono bg-[#09090B] p-3 rounded-md text-zinc-300 overflow-x-auto border border-[#1C1C21] max-h-60">
                     {chunk.content}
                   </pre>
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                    <span>Commit: <code className="text-slate-400 font-mono">{chunk.commit_sha?.substring(0, 10)}</code></span>
-                    <span>Tenant ID: <code className="text-slate-400 font-mono">{chunk.organization_id}</code></span>
+                  <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 font-mono tabular-nums">
+                    <span>Commit: <code className="text-zinc-400 font-mono">{chunk.commit_sha?.substring(0, 10)}</code></span>
+                    <span>Tenant ID: <code className="text-zinc-400 font-mono">{chunk.organization_id}</code></span>
                   </div>
                 </div>
               ))}
@@ -5488,8 +5500,8 @@ function AiInsightsContent() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleImpact} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-300">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-300">
                     Target Symbols (comma separated)
                   </label>
                   <Input
@@ -5498,13 +5510,13 @@ function AiInsightsContent() {
                     onChange={(e) => setImpactSymbolsInput(e.target.value)}
                   />
                 </div>
-                <Button type="submit" variant="glow" disabled={isAnalyzingImpact || !impactSymbolsInput.trim()}>
+                <Button type="submit" variant="default" disabled={isAnalyzingImpact || !impactSymbolsInput.trim()}>
                   {isAnalyzingImpact ? <Loader2 className="h-4 w-4 animate-spin" /> : "Compute Blast Radius"}
                 </Button>
               </form>
 
               {impactError && (
-                <div className="mt-4 p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300">
+                <div className="mt-4 p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs text-rose-300">
                   {impactError}
                 </div>
               )}
@@ -5513,20 +5525,20 @@ function AiInsightsContent() {
 
           {impactResults.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono tabular-nums">
                 Impacted Upstream Dependencies ({impactResults.length})
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {impactResults.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between p-3 rounded-xl border border-slate-800 bg-slate-900/60 text-xs"
+                    className="flex items-center justify-between p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] text-xs"
                   >
                     <div>
-                      <div className="font-mono text-white font-semibold">{item.source_symbol}</div>
-                      <div className="text-[10px] text-slate-500">Depth: {item.depth ?? 1} hops</div>
+                      <div className="font-mono text-zinc-100 font-semibold">{item.source_symbol}</div>
+                      <div className="text-[10px] text-zinc-500 font-mono tabular-nums">Depth: {item.depth ?? 1} hops</div>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-mono">
+                    <Badge variant="outline" className="text-[10px] font-mono border-[#26262C] bg-[#141418] text-zinc-300">
                       {item.edge_type || "DEPENDS_ON"}
                     </Badge>
                   </div>
@@ -5547,12 +5559,12 @@ function AiInsightsContent() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Share2 className="h-5 w-5 text-indigo-400" />
+                    <Share2 className="h-4 w-4 text-zinc-400" />
                     Cross-Repository Dependency Topology
                   </CardTitle>
                   <CardDescription>
                     Deterministic static manifest discovery (pom.xml, requirements.txt, package.json, OpenAPI contracts, service URLs) strictly scoped to{" "}
-                    <span className="text-purple-300 font-semibold">{workspaceDisplayName}</span>.
+                    <span className="text-zinc-100 font-medium">{workspaceDisplayName}</span>.
                   </CardDescription>
                 </div>
 
@@ -5562,7 +5574,7 @@ function AiInsightsContent() {
                     disabled={isLoadingDependencies}
                     variant="outline"
                     size="sm"
-                    className="text-xs border-slate-800 hover:bg-slate-800"
+                    className="text-xs"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isLoadingDependencies ? "animate-spin" : ""}`} />
                     Refresh
@@ -5571,7 +5583,7 @@ function AiInsightsContent() {
                   <Button
                     onClick={handleDiscoverDependencies}
                     disabled={isDiscoveringDependencies || !selectedRepoId}
-                    variant="glow"
+                    variant="default"
                     size="sm"
                     className="text-xs"
                   >
@@ -5582,7 +5594,7 @@ function AiInsightsContent() {
                       </>
                     ) : (
                       <>
-                        <Sparkles className="h-3.5 w-3.5 mr-1.5 text-purple-300" />
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
                         Scan Manifests & Contracts
                       </>
                     )}
@@ -5592,31 +5604,31 @@ function AiInsightsContent() {
             </CardHeader>
             <CardContent className="space-y-4">
               {dependencyDiscoveryResult && (
-                <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-950/30 text-xs text-emerald-300 flex items-center gap-2">
+                <div className="p-3 rounded-md border border-emerald-900/60 bg-emerald-950/20 text-xs text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                   <span>{dependencyDiscoveryResult}</span>
                 </div>
               )}
 
               {dependencyError && (
-                <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300 flex items-center gap-2">
+                <div className="p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs text-rose-300 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
                   <span>{dependencyError}</span>
                 </div>
               )}
 
               {/* Confidence Filters */}
-              <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-slate-800/60">
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-3 border-t border-[#1C1C21]">
                 <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <span className="text-slate-400 text-[11px] mr-1">Confidence:</span>
+                  <span className="text-zinc-400 text-[11px] mr-1">Confidence:</span>
                   {(["ALL", "HIGH", "MEDIUM", "LOW"] as const).map((conf) => (
                     <button
                       key={conf}
                       onClick={() => setDependencyFilterConfidence(conf)}
                       className={`px-2.5 py-1 rounded text-[10px] font-mono transition-colors ${
                         dependencyFilterConfidence === conf
-                          ? "bg-indigo-600 text-white font-semibold"
-                          : "bg-slate-900 text-slate-400 hover:text-white"
+                          ? "bg-zinc-100 text-zinc-950 font-semibold"
+                          : "bg-[#141418] text-zinc-400 hover:text-zinc-100 border border-[#26262C]"
                       }`}
                     >
                       {conf}
@@ -5624,15 +5636,15 @@ function AiInsightsContent() {
                   ))}
                 </div>
 
-                <span className="text-[11px] text-slate-500 font-mono">
+                <span className="text-[11px] text-zinc-500 font-mono tabular-nums">
                   {orgDependencies.length} total dependencies discovered
                 </span>
               </div>
 
               {/* Dependencies List */}
               {isLoadingDependencies ? (
-                <div className="p-8 rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center gap-2 text-xs text-slate-400">
-                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                <div className="p-8 rounded-lg border border-[#1C1C21] bg-[#09090B] flex items-center justify-center gap-2 text-xs text-zinc-400">
+                  <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
                   Loading Cross-Repository Dependency Graph...
                 </div>
               ) : orgDependencies.length > 0 ? (
@@ -5646,35 +5658,35 @@ function AiInsightsContent() {
                     .map((dep, idx) => (
                       <div
                         key={dep.id || idx}
-                        className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3 hover:border-slate-700 transition-colors"
+                        className="rounded-lg border border-[#1C1C21] bg-[#09090B] p-4 space-y-3 hover:border-[#26262C] transition-colors"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-mono font-bold text-white">
+                            <span className="text-xs font-mono font-semibold text-zinc-100">
                               {dep.source_repository_name || dep.source_repository_id.substring(0, 8)}
                             </span>
-                            <ArrowRight className="h-3 w-3 text-indigo-400" />
-                            <span className="text-xs font-mono font-bold text-indigo-300">
+                            <ArrowRight className="h-3 w-3 text-zinc-500" />
+                            <span className="text-xs font-mono font-semibold text-zinc-200">
                               {dep.target_repository_name || dep.target_repository_id.substring(0, 8)}
                             </span>
-                            <Badge variant="outline" className="text-[10px] font-mono text-purple-300 border-purple-500/30">
+                            <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C] bg-[#141418]">
                               {dep.dependency_type}
                             </Badge>
                             <Badge
                               variant="outline"
                               className={`text-[10px] font-mono ${
                                 dep.confidence === "HIGH"
-                                  ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                  ? "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                                   : dep.confidence === "MEDIUM"
-                                  ? "text-indigo-400 border-indigo-500/40 bg-indigo-950/20"
-                                  : "text-amber-400 border-amber-500/40 bg-amber-950/20"
+                                  ? "text-sky-400 border-sky-900/60 bg-sky-950/20"
+                                  : "text-amber-400 border-amber-900/60 bg-amber-950/20"
                               }`}
                             >
                               Confidence: {dep.confidence}
                             </Badge>
                           </div>
 
-                          <Badge variant="outline" className="text-[10px] font-mono text-slate-400">
+                          <Badge variant="outline" className="text-[10px] font-mono text-zinc-400 border-[#26262C]">
                             State: {dep.state}
                           </Badge>
                         </div>
@@ -5682,23 +5694,23 @@ function AiInsightsContent() {
                         {/* Evidence Items */}
                         {dep.evidence && dep.evidence.length > 0 && (
                           <div className="space-y-1.5 pt-1">
-                            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                            <span className="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider font-mono tabular-nums">
                               Deterministic Evidence Snippets ({dep.evidence.length})
                             </span>
                             <div className="space-y-1.5">
                               {dep.evidence.map((ev, eIdx) => (
                                 <div
                                   key={eIdx}
-                                  className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] font-mono space-y-1"
+                                  className="p-2.5 rounded-md bg-[#0E0E11] border border-[#1C1C21] text-[11px] font-mono space-y-1"
                                 >
-                                  <div className="flex items-center justify-between text-slate-400">
-                                    <span className="text-indigo-300">{ev.file_path}</span>
-                                    <Badge variant="outline" className="text-[9px]">
+                                  <div className="flex items-center justify-between text-zinc-400">
+                                    <span className="text-zinc-200">{ev.file_path}</span>
+                                    <Badge variant="outline" className="text-[9px] border-[#26262C] text-zinc-400">
                                       {ev.evidence_type}
                                     </Badge>
                                   </div>
                                   {ev.snippet && (
-                                    <pre className="text-[10px] text-slate-300 bg-slate-900/60 p-1.5 rounded overflow-x-auto whitespace-pre-wrap">
+                                    <pre className="text-[10px] text-zinc-300 bg-[#09090B] border border-[#1C1C21] p-1.5 rounded overflow-x-auto whitespace-pre-wrap">
                                       {ev.snippet}
                                     </pre>
                                   )}
@@ -5711,10 +5723,10 @@ function AiInsightsContent() {
                     ))}
                 </div>
               ) : (
-                <div className="p-8 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500 space-y-2">
-                  <Share2 className="h-8 w-8 text-slate-600 mx-auto" />
-                  <p>No cross-repository dependencies discovered yet for this organization.</p>
-                  <p className="text-[11px] text-slate-600">
+                <div className="p-8 rounded-lg border border-dashed border-[#26262C] bg-[#09090B] text-center text-xs text-zinc-500 space-y-2">
+                  <Share2 className="h-8 w-8 text-zinc-600 mx-auto" />
+                  <p className="text-zinc-300">No cross-repository dependencies discovered yet for this organization.</p>
+                  <p className="text-[11px] text-zinc-500">
                     Click &ldquo;Scan Manifests &amp; Contracts&rdquo; to analyze Maven, Node, Python, and OpenAPI manifests.
                   </p>
                 </div>
@@ -5730,29 +5742,29 @@ function AiInsightsContent() {
       {activeTab === "remediation" && (
         <div className="space-y-6">
           {/* Workspace Header & Advisory Mode Banner */}
-          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-4.5 space-y-3">
+          <div className="rounded-lg border border-amber-900/60 bg-amber-950/15 p-4 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 shrink-0">
+                <div className="p-2 rounded-md bg-amber-950/40 border border-amber-900/60 text-amber-400 shrink-0">
                   <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white tracking-tight">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
                       Controlled AI Remediation Workspace
                     </h3>
-                    <Badge variant="outline" className="text-[10px] font-mono bg-amber-500/15 text-amber-300 border-amber-500/40 font-bold">
+                    <Badge variant="outline" className="text-[10px] font-mono bg-amber-950/30 text-amber-300 border-amber-900/60 font-semibold">
                       MODE A: ADVISORY ONLY
                     </Badge>
                   </div>
-                  <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-                    Zero autonomous repository writes. GitHub App permissions are strictly read-only (<code className="text-amber-200">contents: read</code>). All patches, plans, and actions require explicit developer review and approval.
+                  <p className="text-xs text-zinc-300 mt-0.5 leading-relaxed">
+                    Zero autonomous repository writes. GitHub App permissions are strictly read-only (<code className="text-amber-300 font-mono">contents: read</code>). All patches, plans, and actions require explicit developer review and approval.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                <Badge variant="outline" className="text-xs font-mono text-slate-400 bg-slate-900/60 border-slate-800">
+                <Badge variant="outline" className="text-[11px] font-mono text-zinc-400 bg-[#141418] border-[#26262C]">
                   Execution Safety: Strict In-Memory AST
                 </Badge>
               </div>
@@ -5760,34 +5772,34 @@ function AiInsightsContent() {
           </div>
 
           {/* Action Filter & Stats Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-slate-800 bg-slate-900/50">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border border-[#1C1C21] bg-[#0E0E11]">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-slate-400">Status:</span>
+              <span className="text-xs font-medium text-zinc-400">Status:</span>
               {(["ALL", "PROPOSED", "APPROVED", "REJECTED", "APPLIED"] as const).map((st) => (
                 <button
                   key={st}
                   onClick={() => setActionStatusFilter(st)}
                   className={`px-2.5 py-1 rounded text-[11px] font-mono font-medium transition-colors ${
                     actionStatusFilter === st
-                      ? "bg-indigo-600 text-white font-bold"
-                      : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                      ? "bg-zinc-100 text-zinc-950 font-semibold"
+                      : "bg-[#141418] text-zinc-400 hover:text-zinc-100 border border-[#26262C]"
                   }`}
                 >
                   {st}
                 </button>
               ))}
 
-              <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
+              <div className="h-4 w-px bg-[#26262C] mx-1 hidden sm:block" />
 
-              <span className="text-xs font-semibold text-slate-400 ml-1">Type:</span>
+              <span className="text-xs font-medium text-zinc-400 ml-1">Type:</span>
               {(["ALL", "FIX_SECURITY", "FIX_RELIABILITY", "ADD_TEST", "UPDATE_API_CONTRACT"] as const).map((tp) => (
                 <button
                   key={tp}
                   onClick={() => setActionTypeFilter(tp)}
                   className={`px-2.5 py-1 rounded text-[11px] font-mono font-medium transition-colors ${
                     actionTypeFilter === tp
-                      ? "bg-purple-600 text-white font-bold"
-                      : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                      ? "bg-zinc-100 text-zinc-950 font-semibold"
+                      : "bg-[#141418] text-zinc-400 hover:text-zinc-100 border border-[#26262C]"
                   }`}
                 >
                   {tp === "ALL" ? "ALL TYPES" : tp.replace("FIX_", "")}
@@ -5795,8 +5807,8 @@ function AiInsightsContent() {
               ))}
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-              <span>Total: <strong className="text-white">{localActions.length}</strong></span>
+            <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-zinc-400">
+              <span>Total: <strong className="text-zinc-100">{localActions.length}</strong></span>
               <span>&bull;</span>
               <span>Pending: <strong className="text-amber-400">{localActions.filter(a => a.status === "PROPOSED").length}</strong></span>
               <span>&bull;</span>
@@ -5807,12 +5819,12 @@ function AiInsightsContent() {
           {/* Remediation Feedback Alert */}
           {remediationFeedback && (
             <div
-              className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+              className={`p-3.5 rounded-lg border text-xs flex items-center justify-between gap-3 ${
                 remediationFeedback.type === "success"
-                  ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
+                  ? "bg-emerald-950/20 border-emerald-900/60 text-emerald-200"
                   : remediationFeedback.type === "error"
-                  ? "bg-rose-950/30 border-rose-500/40 text-rose-200"
-                  : "bg-amber-950/30 border-amber-500/40 text-amber-200"
+                  ? "bg-rose-950/20 border-rose-900/60 text-rose-200"
+                  : "bg-amber-950/20 border-amber-900/60 text-amber-200"
               }`}
             >
               <div className="flex items-center gap-2">
@@ -5827,7 +5839,7 @@ function AiInsightsContent() {
               </div>
               <button
                 onClick={() => setRemediationFeedback(null)}
-                className="text-xs font-mono text-slate-400 hover:text-white underline shrink-0"
+                className="text-xs font-mono text-zinc-400 hover:text-zinc-100 underline shrink-0"
               >
                 Dismiss
               </button>
@@ -5839,11 +5851,11 @@ function AiInsightsContent() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Left Column: Actions List (5 Cols) */}
               <div className="lg:col-span-5 space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-                  <span className="font-semibold uppercase tracking-wider text-slate-400">
+                <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
+                  <span className="font-semibold uppercase tracking-wider text-zinc-400 font-mono tabular-nums">
                     Derived Engineering Actions ({localActions.length})
                   </span>
-                  <span className="text-[11px]">Select action to inspect</span>
+                  <span className="text-[11px] text-zinc-500">Select action to inspect</span>
                 </div>
 
                 <div className="space-y-2.5 max-h-[800px] overflow-y-auto pr-1">
@@ -5856,10 +5868,10 @@ function AiInsightsContent() {
                         <div
                           key={action.action_id}
                           onClick={() => setSelectedActionId(action.action_id)}
-                          className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 ${
+                          className={`p-4 rounded-lg border transition-colors cursor-pointer space-y-2.5 ${
                             isSelected
-                              ? "border-indigo-500 bg-slate-900/90 shadow-lg shadow-indigo-950/50 ring-1 ring-indigo-500/30"
-                              : "border-slate-800 bg-slate-950/70 hover:bg-slate-900/50 hover:border-slate-700"
+                              ? "border-zinc-400 bg-[#141418]"
+                              : "border-[#1C1C21] bg-[#0E0E11] hover:bg-[#141418]/60 hover:border-[#26262C]"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -5867,16 +5879,16 @@ function AiInsightsContent() {
                               {/* Action Type Badge */}
                               <Badge
                                 variant="outline"
-                                className={`text-[10px] font-mono font-bold ${
+                                className={`text-[10px] font-mono font-semibold ${
                                   action.action_type === "FIX_SECURITY"
-                                    ? "bg-rose-950/30 text-rose-300 border-rose-500/40"
+                                    ? "bg-rose-950/30 text-rose-300 border-rose-900/60"
                                     : action.action_type === "FIX_RELIABILITY"
-                                    ? "bg-amber-950/30 text-amber-300 border-amber-500/40"
+                                    ? "bg-amber-950/30 text-amber-300 border-amber-900/60"
                                     : action.action_type === "ADD_TEST" || action.action_type === "RUN_TEST"
-                                    ? "bg-purple-950/30 text-purple-300 border-purple-500/40"
+                                    ? "bg-sky-950/30 text-sky-300 border-sky-900/60"
                                     : action.action_type === "UPDATE_API_CONTRACT"
-                                    ? "bg-blue-950/30 text-blue-300 border-blue-500/40"
-                                    : "bg-slate-800 text-slate-300 border-slate-700"
+                                    ? "bg-sky-950/30 text-sky-300 border-sky-900/60"
+                                    : "bg-[#141418] text-zinc-300 border-[#26262C]"
                                 }`}
                               >
                                 {action.action_type}
@@ -5887,12 +5899,12 @@ function AiInsightsContent() {
                                 variant="outline"
                                 className={`text-[9px] font-mono ${
                                   action.severity === "CRITICAL"
-                                    ? "text-rose-400 border-rose-500/50 bg-rose-950/20"
+                                    ? "text-rose-400 border-rose-900/60 bg-rose-950/20"
                                     : action.severity === "HIGH"
-                                    ? "text-orange-400 border-orange-500/50 bg-orange-950/20"
+                                    ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
                                     : action.severity === "MEDIUM"
-                                    ? "text-amber-400 border-amber-500/50 bg-amber-950/20"
-                                    : "text-blue-400 border-blue-500/50 bg-blue-950/20"
+                                    ? "text-amber-300 border-amber-900/60 bg-amber-950/15"
+                                    : "text-sky-400 border-sky-900/60 bg-sky-950/20"
                                 }`}
                               >
                                 {action.severity}
@@ -5902,14 +5914,14 @@ function AiInsightsContent() {
                             {/* Status Badge */}
                             <Badge
                               variant="outline"
-                              className={`text-[10px] font-mono font-bold ${
+                              className={`text-[10px] font-mono font-semibold ${
                                 action.status === "APPROVED"
-                                  ? "bg-emerald-950/40 text-emerald-300 border-emerald-500/40"
+                                  ? "bg-emerald-950/30 text-emerald-300 border-emerald-900/60"
                                   : action.status === "PROPOSED"
-                                  ? "bg-purple-950/40 text-purple-300 border-purple-500/40"
+                                  ? "bg-amber-950/25 text-amber-300 border-amber-900/60"
                                   : action.status === "APPLIED"
-                                  ? "bg-indigo-950/40 text-indigo-300 border-indigo-500/40"
-                                  : "bg-rose-950/40 text-rose-300 border-rose-500/40"
+                                  ? "bg-sky-950/30 text-sky-300 border-sky-900/60"
+                                  : "bg-rose-950/30 text-rose-300 border-rose-900/60"
                               }`}
                             >
                               {action.status}
@@ -5917,24 +5929,24 @@ function AiInsightsContent() {
                           </div>
 
                           <div>
-                            <h4 className="text-xs font-semibold text-white tracking-tight line-clamp-2">
+                            <h4 className="text-xs font-semibold text-zinc-100 tracking-tight line-clamp-2">
                               {action.title}
                             </h4>
-                            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                            <p className="text-[11px] text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
                               {action.description}
                             </p>
                           </div>
 
                           {action.affected_files && action.affected_files.length > 0 && (
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400 truncate">
-                              <FileCode className="h-3 w-3 text-indigo-400 shrink-0" />
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 truncate">
+                              <FileCode className="h-3 w-3 text-zinc-400 shrink-0" />
                               <span className="truncate">{action.affected_files[0]}</span>
                             </div>
                           )}
 
                           {/* Quick decision footer */}
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px]">
-                            <span className="text-slate-500 font-mono text-[10px]">
+                          <div className="flex items-center justify-between pt-2 border-t border-[#1C1C21] text-[11px]">
+                            <span className="text-zinc-500 font-mono tabular-nums text-[10px]">
                               ID: {action.action_id}
                             </span>
                             <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -5945,7 +5957,7 @@ function AiInsightsContent() {
                                     variant="outline"
                                     onClick={() => handleApproveAction(action.action_id)}
                                     disabled={isApprovingAction}
-                                    className="h-6 text-[10px] px-2 border-emerald-500/30 text-emerald-300 hover:bg-emerald-950/50"
+                                    className="h-6 text-[10px] px-2 border-emerald-900/60 text-emerald-300 hover:bg-emerald-950/40"
                                   >
                                     Approve
                                   </Button>
@@ -5954,7 +5966,7 @@ function AiInsightsContent() {
                                     variant="outline"
                                     onClick={() => setRejectingActionId(action.action_id)}
                                     disabled={isRejectingAction}
-                                    className="h-6 text-[10px] px-2 border-rose-500/30 text-rose-300 hover:bg-rose-950/50"
+                                    className="h-6 text-[10px] px-2 border-rose-900/60 text-rose-300 hover:bg-rose-950/40"
                                   >
                                     Reject
                                   </Button>
@@ -5984,20 +5996,20 @@ function AiInsightsContent() {
                   return (
                     <div className="space-y-4">
                       {/* Action Header Card */}
-                      <Card className="border-indigo-500/30 bg-slate-900/80 shadow-xl">
+                      <Card className="border-[#26262C] bg-[#0E0E11]">
                         <CardHeader className="pb-3">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Badge
                                   variant="outline"
-                                  className="text-xs font-mono font-bold bg-purple-500/20 text-purple-300 border-purple-500/40"
+                                  className="text-xs font-mono font-semibold bg-[#141418] text-zinc-200 border-[#26262C]"
                                 >
                                   {currentAction.action_type}
                                 </Badge>
                                 <Badge
                                   variant="outline"
-                                  className="text-[10px] font-mono text-slate-400 bg-slate-950 border-slate-800"
+                                  className="text-[10px] font-mono tabular-nums text-zinc-400 bg-[#09090B] border-[#1C1C21]"
                                 >
                                   ID: {currentAction.action_id}
                                 </Badge>
@@ -6005,19 +6017,19 @@ function AiInsightsContent() {
                                   variant="outline"
                                   className={`text-[10px] font-mono ${
                                     currentAction.status === "APPROVED"
-                                      ? "text-emerald-400 border-emerald-500/40 bg-emerald-950/20"
+                                      ? "text-emerald-400 border-emerald-900/60 bg-emerald-950/20"
                                       : currentAction.status === "PROPOSED"
-                                      ? "text-purple-400 border-purple-500/40 bg-purple-950/20"
-                                      : "text-rose-400 border-rose-500/40 bg-rose-950/20"
+                                      ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
+                                      : "text-rose-400 border-rose-900/60 bg-rose-950/20"
                                   }`}
                                 >
                                   Status: {currentAction.status}
                                 </Badge>
                               </div>
-                              <CardTitle className="text-base text-white pt-1">
+                              <CardTitle className="text-base text-zinc-100 pt-1">
                                 {currentAction.title}
                               </CardTitle>
-                              <CardDescription className="text-xs text-slate-300">
+                              <CardDescription className="text-xs text-zinc-300">
                                 {currentAction.description}
                               </CardDescription>
                             </div>
@@ -6040,7 +6052,7 @@ function AiInsightsContent() {
                                     variant="outline"
                                     onClick={() => setRejectingActionId(currentAction.action_id)}
                                     disabled={isRejectingAction}
-                                    className="border-rose-500/40 text-rose-300 hover:bg-rose-950/40 text-xs gap-1.5 h-8"
+                                    className="border-rose-900/60 text-rose-300 hover:bg-rose-950/30 text-xs gap-1.5 h-8"
                                   >
                                     <XCircle className="h-3.5 w-3.5" />
                                     Reject
@@ -6049,9 +6061,10 @@ function AiInsightsContent() {
                               ) : currentAction.status === "APPROVED" ? (
                                 <Button
                                   size="sm"
+                                  variant="default"
                                   onClick={() => handleApplyAction(currentAction.action_id)}
                                   disabled={isApplyingAction}
-                                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs gap-1.5 h-8 shadow-md shadow-indigo-600/30"
+                                  className="text-xs gap-1.5 h-8"
                                   title="Applies patch in Mode B or explains Mode A restrictions"
                                 >
                                   {isApplyingAction ? (
@@ -6073,18 +6086,18 @@ function AiInsightsContent() {
 
                         {/* Target file & symbol bar */}
                         <CardContent className="pt-0 space-y-3">
-                          <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                          <div className="p-3 rounded-md bg-[#09090B] border border-[#1C1C21] flex items-center justify-between text-xs font-mono gap-2">
                             <div className="flex items-center gap-2 truncate">
-                              <span className="text-slate-500">Target File:</span>
-                              <span className="text-indigo-300 truncate">
+                              <span className="text-zinc-500">Target File:</span>
+                              <span className="text-zinc-200 truncate">
                                 {currentAction.affected_files && currentAction.affected_files.length > 0
                                   ? currentAction.affected_files[0]
                                   : "Repository Core"}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-slate-500">Confidence:</span>
-                              <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+                              <span className="text-zinc-500">Confidence:</span>
+                              <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-900/60">
                                 {currentAction.confidence}
                               </Badge>
                             </div>
@@ -6094,15 +6107,15 @@ function AiInsightsContent() {
 
                       {/* Modal for rejecting action with explicit reason */}
                       {rejectingActionId === currentAction.action_id && (
-                        <div className="p-4 rounded-xl border border-rose-500/40 bg-rose-950/30 space-y-3">
+                        <div className="p-4 rounded-lg border border-rose-900/60 bg-rose-950/20 space-y-3">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-rose-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-rose-300 uppercase tracking-wider flex items-center gap-1.5">
                               <AlertTriangle className="h-4 w-4 text-rose-400" />
                               Reject Remediation Action
                             </span>
                             <button
                               onClick={() => setRejectingActionId(null)}
-                              className="text-xs text-slate-400 hover:text-white"
+                              className="text-xs text-zinc-400 hover:text-zinc-100"
                             >
                               Cancel
                             </button>
@@ -6111,14 +6124,14 @@ function AiInsightsContent() {
                             placeholder="State reason for rejecting remediation action (recorded in audit log)..."
                             value={rejectReasonInput}
                             onChange={(e) => setRejectReasonInput(e.target.value)}
-                            className="text-xs bg-slate-950 border-slate-800 text-white"
+                            className="text-xs bg-[#09090B] border-[#26262C] text-zinc-100"
                           />
                           <div className="flex justify-end gap-2">
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => setRejectingActionId(null)}
-                              className="h-7 text-xs border-slate-700 text-slate-300"
+                              className="h-7 text-xs"
                             >
                               Cancel
                             </Button>
@@ -6136,26 +6149,26 @@ function AiInsightsContent() {
 
                       {/* 1. Structured Remediation Plan */}
                       {plan ? (
-                        <Card className="border-slate-800 bg-slate-900/60">
+                        <Card className="border-[#1C1C21] bg-[#0E0E11]">
                           <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
-                              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                                <Workflow className="h-4 w-4 text-purple-400" />
+                              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                                <Workflow className="h-4 w-4 text-zinc-400" />
                                 Remediation Plan: {plan.title}
                               </CardTitle>
                               {plan.is_multi_repo && (
-                                <Badge variant="outline" className="text-[10px] font-mono text-blue-300 border-blue-500/40 bg-blue-950/30">
+                                <Badge variant="outline" className="text-[10px] font-mono text-sky-300 border-sky-900/60 bg-sky-950/20">
                                   Multi-Repository Coordinated
                                 </Badge>
                               )}
                             </div>
-                            <CardDescription className="text-xs text-slate-400 mt-1">
+                            <CardDescription className="text-xs text-zinc-400 mt-1">
                               {plan.summary}
                             </CardDescription>
                           </CardHeader>
                           <CardContent className="space-y-2.5 pt-0">
                             {plan.coordinated_repos && plan.coordinated_repos.length > 0 && (
-                              <div className="p-2.5 rounded bg-blue-950/20 border border-blue-500/30 text-xs text-blue-300 flex items-center gap-2">
+                              <div className="p-2.5 rounded-md bg-sky-950/20 border border-sky-900/60 text-xs text-sky-300 flex items-center gap-2">
                                 <Share2 className="h-3.5 w-3.5 shrink-0" />
                                 <span>Coordinated Repositories: {plan.coordinated_repos.join(", ")}</span>
                               </div>
@@ -6165,25 +6178,25 @@ function AiInsightsContent() {
                               {plan.steps && plan.steps.map((step, sIdx) => (
                                 <div
                                   key={sIdx}
-                                  className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs space-y-1.5"
+                                  className="p-3 rounded-md bg-[#09090B] border border-[#1C1C21] text-xs space-y-1.5"
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
-                                      <span className="h-5 w-5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] font-mono font-bold flex items-center justify-center">
+                                      <span className="h-5 w-5 rounded bg-[#141418] border border-[#26262C] text-zinc-300 text-[10px] font-mono tabular-nums font-semibold flex items-center justify-center shrink-0">
                                         {step.step_number}
                                       </span>
-                                      <span className="font-semibold text-white font-mono text-[11px]">
+                                      <span className="font-semibold text-zinc-100 font-mono text-[11px]">
                                         {step.target_file} {step.target_symbol && `(${step.target_symbol})`}
                                       </span>
                                     </div>
-                                    <Badge variant="outline" className="text-[9px] font-mono text-slate-400">
+                                    <Badge variant="outline" className="text-[9px] font-mono text-zinc-400 border-[#26262C]">
                                       {step.status}
                                     </Badge>
                                   </div>
-                                  <p className="text-slate-300 text-xs leading-relaxed pl-7">
+                                  <p className="text-zinc-300 text-xs leading-relaxed pl-7">
                                     {step.change_description}
                                   </p>
-                                  <div className="pl-7 text-[10px] font-mono text-slate-500 flex items-center gap-1.5">
+                                  <div className="pl-7 text-[10px] font-mono text-zinc-500 flex items-center gap-1.5">
                                     <ShieldCheck className="h-3 w-3 text-emerald-400 shrink-0" />
                                     <span>Verification: {step.validation_strategy}</span>
                                   </div>
@@ -6193,23 +6206,23 @@ function AiInsightsContent() {
                           </CardContent>
                         </Card>
                       ) : (
-                        <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/50 text-xs text-slate-500 italic flex items-center gap-2">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <div className="p-4 rounded-lg border border-[#1C1C21] bg-[#09090B] text-xs text-zinc-500 flex items-center gap-2">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />
                           <span>Loading structured remediation plan steps...</span>
                         </div>
                       )}
 
                       {/* 2. Proposed Patch & In-Memory AST Validation */}
                       {patch ? (
-                        <Card className="border-slate-800 bg-slate-900/60">
+                        <Card className="border-[#1C1C21] bg-[#0E0E11]">
                           <CardHeader className="pb-3">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
                                 <FileDiff className="h-4 w-4 text-emerald-400" />
                                 Proposed Unified Diff Patch
                               </CardTitle>
                               <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[10px] font-mono text-slate-400">
+                                <Badge variant="outline" className="text-[10px] font-mono text-zinc-400 border-[#26262C]">
                                   Target: {patch.target_file}
                                 </Badge>
                                 <Button
@@ -6217,7 +6230,7 @@ function AiInsightsContent() {
                                   variant="outline"
                                   onClick={() => handleValidatePatch(currentAction.action_id)}
                                   disabled={isValidatingPatch}
-                                  className="h-7 text-xs px-2.5 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50 gap-1.5"
+                                  className="h-7 text-xs px-2.5 border-emerald-900/60 text-emerald-300 hover:bg-emerald-950/30 gap-1.5"
                                 >
                                   {isValidatingPatch ? (
                                     <>
@@ -6233,7 +6246,7 @@ function AiInsightsContent() {
                                 </Button>
                               </div>
                             </div>
-                            <CardDescription className="text-xs text-slate-400 mt-1">
+                            <CardDescription className="text-xs text-zinc-400 mt-1">
                               {patch.rationale}
                             </CardDescription>
                           </CardHeader>
@@ -6241,14 +6254,14 @@ function AiInsightsContent() {
                             {/* Validation Result Box */}
                             {validationResult && (
                               <div
-                                className={`p-3 rounded-lg border text-xs font-mono space-y-1.5 ${
+                                className={`p-3 rounded-md border text-xs font-mono space-y-1.5 ${
                                   validationResult.valid
-                                    ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-200"
-                                    : "bg-rose-950/20 border-rose-500/30 text-rose-200"
+                                    ? "bg-emerald-950/20 border-emerald-900/60 text-emerald-200"
+                                    : "bg-rose-950/20 border-rose-900/60 text-rose-200"
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
-                                  <span className="font-bold flex items-center gap-1.5">
+                                  <span className="font-semibold flex items-center gap-1.5">
                                     {validationResult.valid ? (
                                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                                     ) : (
@@ -6256,13 +6269,13 @@ function AiInsightsContent() {
                                     )}
                                     Static Post-Patch Safety Validation: {validationResult.valid ? "PASSED" : "FAILED"}
                                   </span>
-                                  <span className="text-[10px] text-slate-400">Zero Shell Script Execution</span>
+                                  <span className="text-[10px] text-zinc-400">Zero Shell Script Execution</span>
                                 </div>
                                 {validationResult.details && (
-                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-slate-300 pt-1">
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-zinc-300 pt-1 tabular-nums">
                                     <div>AST Valid: <strong className="text-emerald-400">Yes</strong></div>
-                                    <div>Hunks: <strong className="text-white">{validationResult.details.applied_hunks}</strong></div>
-                                    <div>Lines Changed: <strong className="text-white">{validationResult.details.changed_lines}</strong></div>
+                                    <div>Hunks: <strong className="text-zinc-100">{validationResult.details.applied_hunks}</strong></div>
+                                    <div>Lines Changed: <strong className="text-zinc-100">{validationResult.details.changed_lines}</strong></div>
                                     <div>Secrets Detected: <strong className="text-emerald-400">0</strong></div>
                                   </div>
                                 )}
@@ -6270,9 +6283,9 @@ function AiInsightsContent() {
                             )}
 
                             {/* Colorized Unified Diff Viewer */}
-                            <div className="rounded-lg bg-slate-950 border border-slate-800 p-3 overflow-x-auto font-mono text-xs max-h-72">
+                            <div className="rounded-md bg-[#09090B] border border-[#1C1C21] p-3 overflow-x-auto font-mono text-xs max-h-72">
                               {patch.unified_diff.split("\n").map((line, lIdx) => {
-                                let lineCls = "text-slate-300";
+                                let lineCls = "text-zinc-300";
                                 let bgCls = "";
                                 if (line.startsWith("+") && !line.startsWith("+++")) {
                                   lineCls = "text-emerald-400";
@@ -6281,10 +6294,10 @@ function AiInsightsContent() {
                                   lineCls = "text-rose-400";
                                   bgCls = "bg-rose-950/25";
                                 } else if (line.startsWith("@@")) {
-                                  lineCls = "text-cyan-400 font-semibold";
-                                  bgCls = "bg-cyan-950/20";
+                                  lineCls = "text-sky-400 font-semibold";
+                                  bgCls = "bg-sky-950/20";
                                 } else if (line.startsWith("---") || line.startsWith("+++")) {
-                                  lineCls = "text-slate-400 font-bold";
+                                  lineCls = "text-zinc-400 font-semibold";
                                 }
                                 return (
                                   <div key={lIdx} className={`px-2 py-0.5 rounded-sm whitespace-pre ${lineCls} ${bgCls}`}>
@@ -6299,15 +6312,15 @@ function AiInsightsContent() {
 
                       {/* 3. Before vs After Differential Re-Analysis */}
                       {effectiveness && (
-                        <Card className="border-slate-800 bg-slate-900/60">
+                        <Card className="border-[#1C1C21] bg-[#0E0E11]">
                           <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
-                              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                                <Scale className="h-4 w-4 text-indigo-400" />
+                              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2">
+                                <Scale className="h-4 w-4 text-zinc-400" />
                                 Deterministic Before vs After Differential Re-Analysis
                               </CardTitle>
                               {effectiveness.is_effective && (
-                                <Badge variant="outline" className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold">
+                                <Badge variant="outline" className="text-[10px] font-mono bg-emerald-950/30 text-emerald-300 border-emerald-900/60 font-semibold">
                                   VERIFIED EFFECTIVE
                                 </Badge>
                               )}
@@ -6316,50 +6329,50 @@ function AiInsightsContent() {
                           <CardContent className="space-y-3 pt-0">
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               {/* Risk Delta Card */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70 space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-1">
+                                <span className="text-[10px] uppercase font-semibold text-zinc-400">
                                   Deterministic Risk Score
                                 </span>
-                                <div className="flex items-center gap-2 font-mono">
-                                  <span className="text-slate-400 line-through">{(effectiveness.before_risk_score ?? 0).toFixed(1)}</span>
-                                  <ArrowRight className="h-3 w-3 text-slate-500" />
-                                  <span className="text-base font-bold text-emerald-400">
+                                <div className="flex items-center gap-2 font-mono tabular-nums">
+                                  <span className="text-zinc-400 line-through">{(effectiveness.before_risk_score ?? 0).toFixed(1)}</span>
+                                  <ArrowRight className="h-3 w-3 text-zinc-500" />
+                                  <span className="text-base font-semibold text-emerald-400">
                                     {(effectiveness.after_risk_score ?? 0).toFixed(1)}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-emerald-400 font-mono">
+                                <span className="text-[10px] text-emerald-400 font-mono tabular-nums">
                                   &minus;{(effectiveness.risk_delta ?? 0).toFixed(1)} pts reduced
                                 </span>
                               </div>
 
                               {/* Findings Delta */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70 space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-1">
+                                <span className="text-[10px] uppercase font-semibold text-zinc-400">
                                   Security & Reliability Findings
                                 </span>
-                                <div className="text-xs font-mono text-slate-300">
-                                  Fixed: <strong className="text-emerald-400">{effectiveness.findings_fixed.length}</strong> &bull; Persisted: <strong className="text-slate-400">{effectiveness.findings_persisted.length}</strong>
+                                <div className="text-xs font-mono tabular-nums text-zinc-300">
+                                  Fixed: <strong className="text-emerald-400">{effectiveness.findings_fixed.length}</strong> &bull; Persisted: <strong className="text-zinc-400">{effectiveness.findings_persisted.length}</strong>
                                 </div>
-                                <span className="text-[10px] text-slate-500">
+                                <span className="text-[10px] text-zinc-500 font-mono tabular-nums">
                                   New Findings Introduced: <strong className="text-emerald-400">0</strong>
                                 </span>
                               </div>
 
                               {/* Merge Readiness Delta */}
-                              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70 space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
+                              <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-1">
+                                <span className="text-[10px] uppercase font-semibold text-zinc-400">
                                   Merge Readiness Progression
                                 </span>
-                                <div className="text-xs font-mono font-bold text-indigo-300 truncate">
+                                <div className="text-xs font-mono font-semibold text-zinc-100 truncate">
                                   {effectiveness.merge_readiness_delta}
                                 </div>
-                                <span className="text-[10px] text-slate-500">
+                                <span className="text-[10px] text-zinc-500 font-mono tabular-nums">
                                   Tests Added: {effectiveness.tests_added}
                                 </span>
                               </div>
                             </div>
 
-                            <p className="text-xs text-slate-300 font-mono bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
+                            <p className="text-xs text-zinc-300 font-mono bg-[#09090B] p-2.5 rounded-md border border-[#1C1C21]">
                               {effectiveness.remediation_summary}
                             </p>
                           </CardContent>
@@ -6368,10 +6381,10 @@ function AiInsightsContent() {
 
                       {/* 4. Immutable Audit Trail (action_events) */}
                       {events && events.length > 0 && (
-                        <Card className="border-slate-800 bg-slate-900/60">
+                        <Card className="border-[#1C1C21] bg-[#0E0E11]">
                           <CardHeader className="pb-3">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                              <History className="h-4 w-4 text-slate-400" />
+                            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-2 font-mono tabular-nums">
+                              <History className="h-4 w-4 text-zinc-400" />
                               Immutable Audit Trail ({events.length} Events)
                             </CardTitle>
                           </CardHeader>
@@ -6379,26 +6392,26 @@ function AiInsightsContent() {
                             {events.map((ev, evIdx) => (
                               <div
                                 key={evIdx}
-                                className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 text-[11px] font-mono flex items-center justify-between"
+                                className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21] text-[11px] font-mono flex items-center justify-between"
                               >
                                 <div className="flex items-center gap-2">
                                   <Badge
                                     variant="outline"
-                                    className={`text-[9px] font-bold ${
+                                    className={`text-[9px] font-semibold ${
                                       ev.event_type === "APPROVED"
-                                        ? "text-emerald-400 border-emerald-500/40"
+                                        ? "text-emerald-400 border-emerald-900/60"
                                         : ev.event_type === "REJECTED"
-                                        ? "text-rose-400 border-rose-500/40"
+                                        ? "text-rose-400 border-rose-900/60"
                                         : ev.event_type === "VALIDATED"
-                                        ? "text-blue-400 border-blue-500/40"
-                                        : "text-purple-400 border-purple-500/40"
+                                        ? "text-sky-400 border-sky-900/60"
+                                        : "text-zinc-300 border-[#26262C]"
                                     }`}
                                   >
                                     {ev.event_type}
                                   </Badge>
-                                  <span className="text-slate-300">by {ev.actor_id}</span>
+                                  <span className="text-zinc-300">by {ev.actor_id}</span>
                                 </div>
-                                <span className="text-[10px] text-slate-500">
+                                <span className="text-[10px] text-zinc-500 tabular-nums">
                                   {ev.created_at ? new Date(ev.created_at).toLocaleTimeString() : "Recent"}
                                 </span>
                               </div>
@@ -6412,11 +6425,11 @@ function AiInsightsContent() {
               </div>
             </div>
           ) : (
-            <div className="p-12 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500 space-y-3">
-              <Sliders className="h-10 w-10 text-slate-600 mx-auto" />
+            <div className="p-12 rounded-lg border border-dashed border-[#26262C] bg-[#0E0E11] text-center text-xs text-zinc-500 space-y-3">
+              <Sliders className="h-9 w-9 text-zinc-600 mx-auto" />
               <div className="space-y-1">
-                <p className="text-slate-300 font-semibold text-sm">No Engineering Actions Derived Yet</p>
-                <p className="text-slate-500 max-w-md mx-auto">
+                <p className="text-zinc-200 font-semibold text-sm">No Engineering Actions Derived Yet</p>
+                <p className="text-zinc-500 max-w-md mx-auto">
                   Run &ldquo;Automatic PR Intelligence&rdquo; on an active Pull Request to evaluate security vulnerabilities, reliability risks, missing tests, and contract breaking changes.
                 </p>
               </div>
@@ -6424,7 +6437,7 @@ function AiInsightsContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => setActiveTab("pr")}
-                className="text-xs border-indigo-500/30 text-indigo-300 hover:bg-indigo-950/50"
+                className="text-xs"
               >
                 Go to PR Intelligence
               </Button>
@@ -6439,34 +6452,34 @@ function AiInsightsContent() {
       {activeTab === "autodocs" && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Header Action Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border border-sky-500/20 bg-slate-900/60 backdrop-blur-md">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg border border-[#1C1C21] bg-[#0E0E11]">
             <div>
-              <div className="flex items-center gap-2.5">
-                <BookOpen className="h-5 w-5 text-sky-400" />
-                <h2 className="text-lg font-bold text-white tracking-tight">
+              <div className="flex items-center gap-2 flex-wrap">
+                <BookOpen className="h-4 w-4 text-zinc-400" />
+                <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
                   Automated Documentation & System Design
                 </h2>
-                <Badge variant="outline" className="border-sky-500/30 text-sky-300 text-xs font-mono">
+                <Badge variant="outline" className="border-[#26262C] bg-[#141418] text-zinc-300 text-[11px] font-mono">
                   v1.0 Engine
                 </Badge>
               </div>
-              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+              <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
                 4 deterministic documents (Overview, API, Data Model, Dependencies) + Grounded LLM System Design with verified citations. Managed through DRAFT &rarr; APPROVED &rarr; APPLIED lifecycle.
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={fetchDocuments}
                 disabled={isLoadingDocs}
-                className="gap-2 text-xs border-slate-700 hover:text-white"
+                className="gap-2 text-xs"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isLoadingDocs ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
               <Button
-                variant="glow"
+                variant="default"
                 size="sm"
                 onClick={handleGenerateDocuments}
                 disabled={isGeneratingDocs || !selectedRepoId}
@@ -6479,7 +6492,7 @@ function AiInsightsContent() {
                   </>
                 ) : (
                   <>
-                    <Zap className="h-3.5 w-3.5 text-amber-300" />
+                    <Zap className="h-3.5 w-3.5" />
                     Generate Repository Docs
                   </>
                 )}
@@ -6489,13 +6502,13 @@ function AiInsightsContent() {
 
           {/* Feedback Banners */}
           {docActionSuccess && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-3 text-xs text-emerald-300">
+            <div className="flex items-center gap-2 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
               <Check className="h-4 w-4 shrink-0 text-emerald-400" />
               <span>{docActionSuccess}</span>
             </div>
           )}
           {docActionError && (
-            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+            <div className="flex items-center gap-2 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-xs text-rose-300">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
               <span>{docActionError}</span>
             </div>
@@ -6503,15 +6516,15 @@ function AiInsightsContent() {
 
           {/* Previous AI Data Banner */}
           {documents.some((d) => d.provenance?.showing_previous_ai_data) && (
-            <div className="flex items-center gap-3 rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 p-4 text-xs text-amber-200 shadow-md">
-              <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-400 shrink-0">
-                <AlertTriangle className="h-5 w-5" />
+            <div className="flex items-center gap-3 rounded-lg border border-amber-900/60 bg-amber-950/20 p-4 text-xs text-amber-200">
+              <div className="p-2 rounded-md bg-amber-950/50 border border-amber-900/60 text-amber-400 shrink-0">
+                <AlertTriangle className="h-4 w-4" />
               </div>
               <div>
-                <p className="font-bold text-amber-300 text-sm">
+                <p className="font-semibold text-amber-300 text-sm">
                   This is the previous data — AI API is not working currently.
                 </p>
-                <p className="text-slate-300 mt-0.5">
+                <p className="text-zinc-300 mt-0.5">
                   The live AI API is currently unreachable. Displaying the most recent AI-analyzed System Design & Architecture document.
                 </p>
               </div>
@@ -6522,16 +6535,16 @@ function AiInsightsContent() {
           {isLoadingDocs ? (
             <AutoDocsGridSkeleton />
           ) : documents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-16 rounded-2xl border border-dashed border-slate-800 bg-slate-900/20 text-center space-y-4">
-              <BookOpen className="h-12 w-12 text-slate-600" />
+            <div className="flex flex-col items-center justify-center p-14 rounded-lg border border-dashed border-[#26262C] bg-[#0E0E11] text-center space-y-4">
+              <BookOpen className="h-10 w-10 text-zinc-600" />
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-white">No Generated Documents Yet</h3>
-                <p className="text-xs text-slate-400 max-w-md">
+                <h3 className="text-sm font-semibold text-zinc-100">No Generated Documents Yet</h3>
+                <p className="text-xs text-zinc-400 max-w-md">
                   Click &ldquo;Generate Repository Docs&rdquo; above to automatically create the 5 repository documents and System Design specification for this repo.
                 </p>
               </div>
               <Button
-                variant="glow"
+                variant="default"
                 size="sm"
                 onClick={handleGenerateDocuments}
                 disabled={isGeneratingDocs || !selectedRepoId}
@@ -6551,15 +6564,15 @@ function AiInsightsContent() {
                 const isStale = doc.status === "STALE";
 
                 return (
-                  <Card key={doc.id} className="border-slate-800 bg-slate-900/40 hover:border-slate-700 transition-all flex flex-col justify-between">
+                  <Card key={doc.id} className="border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C] transition-colors flex flex-col justify-between">
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between gap-2">
                         <Badge
                           variant="outline"
                           className={`text-[10px] font-mono uppercase ${
                             isSystemDesign
-                              ? "border-purple-500/30 text-purple-300 bg-purple-950/20"
-                              : "border-sky-500/30 text-sky-300 bg-sky-950/20"
+                              ? "border-[#26262C] text-zinc-200 bg-[#141418]"
+                              : "border-sky-900/60 text-sky-300 bg-sky-950/20"
                           }`}
                         >
                           {doc.doc_type}
@@ -6568,35 +6581,35 @@ function AiInsightsContent() {
                           variant="outline"
                           className={`text-[10px] font-mono ${
                             isApplied
-                              ? "border-emerald-500/40 text-emerald-300 bg-emerald-950/30"
+                              ? "border-emerald-900/60 text-emerald-300 bg-emerald-950/20"
                               : isApproved
-                              ? "border-sky-500/40 text-sky-300 bg-sky-950/30"
+                              ? "border-sky-900/60 text-sky-300 bg-sky-950/20"
                               : isStale
-                              ? "border-amber-500/40 text-amber-300 bg-amber-950/30"
-                              : "border-slate-600 text-slate-400"
+                              ? "border-amber-900/60 text-amber-300 bg-amber-950/20"
+                              : "border-[#26262C] text-zinc-400"
                           }`}
                         >
                           {doc.status}
                         </Badge>
                       </div>
-                      <CardTitle className="text-sm font-semibold text-white font-mono mt-2 truncate">
+                      <CardTitle className="text-sm font-semibold text-zinc-100 font-mono mt-2 truncate">
                         {doc.target_path}
                       </CardTitle>
-                      <CardDescription className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-1 font-mono">
-                        <GitCommit className="h-3 w-3 text-slate-500" />
+                      <CardDescription className="text-[11px] text-zinc-400 flex items-center gap-1.5 mt-1 font-mono tabular-nums">
+                        <GitCommit className="h-3 w-3 text-zinc-500" />
                         sha: {doc.commit_sha ? doc.commit_sha.slice(0, 8) : "HEAD"}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3 pt-0">
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-2.5">
+                      <div className="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#1C1C21] pt-2.5 font-mono tabular-nums">
                         <span>Citations: {doc.citations?.length || 0} files</span>
-                        <span className="font-mono text-[10px] text-slate-500 truncate max-w-[120px]">
+                        <span className="text-[10px] text-zinc-500 truncate max-w-[120px]">
                           hash: {doc.content_hash?.slice(0, 8)}
                         </span>
                       </div>
 
                       {doc.provenance && (
-                        <div className="text-[10px] text-slate-500 bg-slate-950/50 p-2 rounded-lg border border-slate-800/60 font-mono">
+                        <div className="text-[10px] text-zinc-500 bg-[#09090B] p-2 rounded-md border border-[#1C1C21] font-mono">
                           {doc.provenance.generator === "ai_grounded" ? (
                             <span>AI: {doc.provenance.model || "Gemini"} ({doc.provenance.provider})</span>
                           ) : (
@@ -6606,7 +6619,7 @@ function AiInsightsContent() {
                       )}
 
                       {/* Action buttons */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                      <div className="flex items-center gap-2 pt-2 border-t border-[#1C1C21]">
                         <Button
                           variant="outline"
                           size="sm"
@@ -6619,11 +6632,10 @@ function AiInsightsContent() {
 
                         {isDraft && (
                           <Button
-                            variant="glow"
                             size="sm"
                             disabled={processingDocId === doc.id}
                             onClick={() => handleApproveDocument(doc.id)}
-                            className="text-xs h-8 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+                            className="text-xs h-8 px-2.5 gap-1 bg-emerald-600 hover:bg-emerald-500 text-white"
                           >
                             {processingDocId === doc.id ? (
                               <RefreshCw className="h-3 w-3 animate-spin" />
@@ -6636,7 +6648,7 @@ function AiInsightsContent() {
 
                         {isApproved && (
                           <Button
-                            variant="glow"
+                            variant="default"
                             size="sm"
                             disabled={processingDocId === doc.id}
                             onClick={() => handleApplyDocument(doc.id)}
@@ -6653,7 +6665,7 @@ function AiInsightsContent() {
 
                         {isApplied && doc.pr_url && (
                           <a href={doc.pr_url} target="_blank" rel="noopener noreferrer">
-                            <Button variant="outline" size="sm" className="text-xs h-8 px-2 border-emerald-500/30 text-emerald-300">
+                            <Button variant="outline" size="sm" className="text-xs h-8 px-2 border-emerald-900/60 text-emerald-300">
                               <ExternalLink className="h-3 w-3" />
                             </Button>
                           </a>
@@ -6674,22 +6686,22 @@ function AiInsightsContent() {
       {activeTab === "commitguard" && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Header Action Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl border border-rose-500/20 bg-slate-900/60 backdrop-blur-md">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg border border-[#1C1C21] bg-[#0E0E11]">
             <div>
-              <div className="flex items-center gap-2.5">
-                <ShieldCheck className="h-5 w-5 text-emerald-400" />
-                <h2 className="text-lg font-bold text-white tracking-tight">
+              <div className="flex items-center gap-2 flex-wrap">
+                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                <h2 className="text-base font-semibold text-zinc-100 tracking-tight">
                   Autonomous Push-Triggered Commit Guard
                 </h2>
-                <Badge variant="outline" className="border-rose-500/30 text-rose-300 text-xs font-mono">
+                <Badge variant="outline" className="border-[#26262C] bg-[#141418] text-zinc-300 text-[11px] font-mono">
                   Real-Time Audit & Alert
                 </Badge>
               </div>
-              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+              <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
                 Every developer push triggers incremental indexing, secret leak scanning, vulnerability analysis, system design auto-refresh, and immediate email alerts on critical findings.
               </p>
             </div>
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <SmtpTestBanner
                 repoName={selectedRepo?.fullName || selectedRepo?.name || "ForgeAI"}
                 onNotification={addToast}
@@ -6699,7 +6711,7 @@ function AiInsightsContent() {
                 size="sm"
                 onClick={handleCheckForNewCommits}
                 disabled={isCheckingNewCommits || !selectedRepoId}
-                className="gap-2 text-xs border-emerald-500/30 text-emerald-300 hover:bg-emerald-950/30"
+                className="gap-2 text-xs border-emerald-900/60 text-emerald-300 hover:bg-emerald-950/30"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isCheckingNewCommits ? "animate-spin" : ""}`} />
                 {isCheckingNewCommits ? "Checking GitHub..." : "Check for New Commits Now"}
@@ -6709,13 +6721,13 @@ function AiInsightsContent() {
                 size="sm"
                 onClick={fetchCommitReports}
                 disabled={isLoadingCommitReports}
-                className="gap-2 text-xs border-slate-700 hover:text-white"
+                className="gap-2 text-xs"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isLoadingCommitReports ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
               <Button
-                variant="glow"
+                variant="default"
                 size="sm"
                 onClick={handleAnalyzeCommitOnDemand}
                 disabled={isOnDemandAnalyzing || !selectedRepoId}
@@ -6728,7 +6740,7 @@ function AiInsightsContent() {
                   </>
                 ) : (
                   <>
-                    <Play className="h-3.5 w-3.5 text-sky-400" />
+                    <Play className="h-3.5 w-3.5" />
                     Scan Commit On-Demand
                   </>
                 )}
@@ -6738,13 +6750,13 @@ function AiInsightsContent() {
 
           {/* Feedback Banners */}
           {docActionSuccess && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-3 text-xs text-emerald-300">
+            <div className="flex items-center gap-2 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
               <Check className="h-4 w-4 shrink-0 text-emerald-400" />
               <span>{docActionSuccess}</span>
             </div>
           )}
           {docActionError && (
-            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+            <div className="flex items-center gap-2 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-xs text-rose-300">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
               <span>{docActionError}</span>
             </div>
@@ -6752,15 +6764,15 @@ function AiInsightsContent() {
 
           {/* Previous AI Data Banner */}
           {documents.some((d) => d.provenance?.showing_previous_ai_data) && (
-            <div className="flex items-center gap-3 rounded-xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 p-4 text-xs text-amber-200 shadow-md">
-              <div className="p-2 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-400 shrink-0">
-                <AlertTriangle className="h-5 w-5" />
+            <div className="flex items-center gap-3 rounded-lg border border-amber-900/60 bg-amber-950/20 p-4 text-xs text-amber-200">
+              <div className="p-2 rounded-md bg-amber-950/50 border border-amber-900/60 text-amber-400 shrink-0">
+                <AlertTriangle className="h-4 w-4" />
               </div>
               <div>
-                <p className="font-bold text-amber-300 text-sm">
+                <p className="font-semibold text-amber-300 text-sm">
                   This is the previous data — AI API is not working currently.
                 </p>
-                <p className="text-slate-300 mt-0.5">
+                <p className="text-zinc-300 mt-0.5">
                   The live AI API is currently unreachable. Displaying the most recent AI-analyzed System Design & Architecture document.
                 </p>
               </div>
@@ -6769,36 +6781,36 @@ function AiInsightsContent() {
 
           {/* Metric Stats Banner */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card className="border-slate-800 bg-slate-900/40 p-4">
-              <div className="text-xs text-slate-400">Total Scanned Commits</div>
-              <div className="text-2xl font-bold text-white mt-1">{commitReports.length}</div>
+            <Card className="border-[#1C1C21] bg-[#0E0E11] p-4">
+              <div className="text-xs text-zinc-400">Total Scanned Commits</div>
+              <div className="text-2xl font-semibold font-mono tabular-nums text-zinc-100 mt-1">{commitReports.length}</div>
             </Card>
-            <Card className="border-rose-500/20 bg-rose-950/10 p-4">
-              <div className="text-xs text-rose-300">Critical Alerts Triggered</div>
-              <div className="text-2xl font-bold text-rose-400 mt-1">
+            <Card className="border-[#1C1C21] bg-[#0E0E11] p-4">
+              <div className="text-xs text-zinc-400">Critical Alerts Triggered</div>
+              <div className="text-2xl font-semibold font-mono tabular-nums text-rose-400 mt-1">
                 {commitReports.filter((r) => r.status === "CRITICAL_ALERT").length}
               </div>
             </Card>
-            <Card className="border-amber-500/20 bg-amber-950/10 p-4">
-              <div className="text-xs text-amber-300">Secret Leaks Detected</div>
-              <div className="text-2xl font-bold text-amber-400 mt-1">
+            <Card className="border-[#1C1C21] bg-[#0E0E11] p-4">
+              <div className="text-xs text-zinc-400">Secret Leaks Detected</div>
+              <div className="text-2xl font-semibold font-mono tabular-nums text-amber-400 mt-1">
                 {commitReports.reduce((acc, r) => acc + (r.secrets_detected || 0), 0)}
               </div>
             </Card>
-            <Card className="border-sky-500/20 bg-sky-950/10 p-4">
-              <div className="text-xs text-sky-300">Alert Emails Sent / Dry-run</div>
-              <div className="text-2xl font-bold text-sky-400 mt-1">
+            <Card className="border-[#1C1C21] bg-[#0E0E11] p-4">
+              <div className="text-xs text-zinc-400">Alert Emails Sent / Dry-run</div>
+              <div className="text-2xl font-semibold font-mono tabular-nums text-sky-400 mt-1">
                 {commitReports.filter((r) => r.alert_sent).length}
               </div>
             </Card>
           </div>
 
           {/* Reports Table */}
-          <Card className="border-slate-800 bg-slate-900/40">
-            <CardHeader className="border-b border-slate-800/80 pb-3">
+          <Card className="border-[#1C1C21] bg-[#0E0E11]">
+            <CardHeader className="border-b border-[#1C1C21] pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold text-white">Commit Security & Alert Ledger</CardTitle>
-                <Badge variant="outline" className="text-xs text-slate-400 font-mono">
+                <CardTitle className="text-sm font-semibold text-zinc-100">Commit Security & Alert Ledger</CardTitle>
+                <Badge variant="outline" className="text-xs text-zinc-400 font-mono tabular-nums border-[#26262C]">
                   {commitReports.length} records
                 </Badge>
               </div>
@@ -6810,14 +6822,14 @@ function AiInsightsContent() {
                 </div>
               ) : commitReports.length === 0 ? (
                 <div className="p-12 text-center space-y-3">
-                  <ShieldCheck className="h-10 w-10 text-slate-600 mx-auto" />
-                  <p className="text-sm text-slate-300 font-semibold">No Commit Reports Recorded Yet</p>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  <ShieldCheck className="h-9 w-9 text-zinc-600 mx-auto" />
+                  <p className="text-sm text-zinc-200 font-semibold">No Commit Reports Recorded Yet</p>
+                  <p className="text-xs text-zinc-500 max-w-md mx-auto">
                     Push code to this repository via git or click &ldquo;Scan Commit On-Demand&rdquo; to analyze the current head commit.
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-800/60">
+                <div className="divide-y divide-[#1C1C21]">
                   {commitReports.map((report) => {
                     const isCritical = report.status === "CRITICAL_ALERT";
                     const isWarning = report.status === "WARNING";
@@ -6825,38 +6837,38 @@ function AiInsightsContent() {
                     return (
                       <div
                         key={report.id}
-                        className="p-4 hover:bg-slate-900/60 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
+                        className="p-4 hover:bg-[#141418]/60 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4"
                       >
                         <div className="space-y-1.5 flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Badge
                               variant="outline"
-                              className={`text-[10px] font-mono font-bold uppercase ${
+                              className={`text-[10px] font-mono font-semibold uppercase ${
                                 isCritical
-                                  ? "border-rose-500/40 text-rose-300 bg-rose-950/30"
+                                  ? "border-rose-900/60 text-rose-300 bg-rose-950/20"
                                   : isWarning
-                                  ? "border-amber-500/40 text-amber-300 bg-amber-950/30"
-                                  : "border-emerald-500/40 text-emerald-300 bg-emerald-950/30"
+                                  ? "border-amber-900/60 text-amber-300 bg-amber-950/20"
+                                  : "border-emerald-900/60 text-emerald-300 bg-emerald-950/20"
                               }`}
                             >
                               {report.status}
                             </Badge>
-                            <span className="font-mono text-xs text-sky-400 font-bold">
+                            <span className="font-mono tabular-nums text-xs text-sky-400 font-semibold">
                               {report.commit_sha ? report.commit_sha.slice(0, 8) : "HEAD"}
                             </span>
-                            <span className="text-xs text-slate-400 font-mono">
+                            <span className="text-xs text-zinc-400 font-mono">
                               ({report.ref || "main"})
                             </span>
                             {report.author_name && (
-                              <span className="text-xs text-slate-300">
+                              <span className="text-xs text-zinc-300">
                                 by {report.author_name}
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-200 line-clamp-1 font-sans">
+                          <p className="text-xs text-zinc-200 line-clamp-1 font-sans">
                             {report.commit_message || "Commit push"}
                           </p>
-                          <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
+                          <div className="flex items-center gap-3 text-[11px] font-mono tabular-nums text-zinc-400 flex-wrap">
                             <span className={report.secrets_detected > 0 ? "text-amber-400 font-semibold" : ""}>
                               Secrets: {report.secrets_detected}
                             </span>
@@ -6864,7 +6876,7 @@ function AiInsightsContent() {
                             <span>Reliability: {report.reliability_issues}</span>
                             <span>Risk Score: {report.risk_score?.toFixed(1) || "0.0"}</span>
                             {report.alert_sent && (
-                              <Badge variant="outline" className="text-[9px] border-sky-500/30 text-sky-300 gap-1 py-0">
+                              <Badge variant="outline" className="text-[9px] border-sky-900/60 text-sky-300 gap-1 py-0">
                                 <Mail className="h-2.5 w-2.5" />
                                 Alert: {report.alert_status}
                               </Badge>
@@ -6877,7 +6889,7 @@ function AiInsightsContent() {
                             variant="outline"
                             size="sm"
                             onClick={() => setSelectedCommitReport(report)}
-                            className="text-xs gap-1.5 h-8 border-slate-700 hover:text-white"
+                            className="text-xs gap-1.5 h-8"
                           >
                             <Eye className="h-3 w-3" />
                             View Full Report
@@ -6897,30 +6909,30 @@ function AiInsightsContent() {
       {/* MODAL: GENERATED DOCUMENT PREVIEW & ACTIONS                               */}
       {/* ========================================================================= */}
       {selectedDocPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-4xl rounded-2xl border border-sky-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-4xl rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-4">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="text-[10px] font-mono uppercase border-sky-500/40 text-sky-300 bg-sky-950/30">
+                  <Badge variant="outline" className="text-[10px] font-mono uppercase border-sky-900/60 text-sky-300 bg-sky-950/20">
                     {selectedDocPreview.doc_type}
                   </Badge>
-                  <Badge variant="outline" className="text-[10px] font-mono border-slate-700 text-slate-300">
+                  <Badge variant="outline" className="text-[10px] font-mono border-[#26262C] text-zinc-300 bg-[#141418]">
                     {selectedDocPreview.status}
                   </Badge>
-                  <span className="font-mono text-xs text-slate-400">
+                  <span className="font-mono tabular-nums text-xs text-zinc-400">
                     commit: {selectedDocPreview.commit_sha ? selectedDocPreview.commit_sha.slice(0, 8) : "HEAD"}
                   </span>
                 </div>
-                <h3 className="text-base font-bold text-white font-mono mt-1.5">
+                <h3 className="text-base font-semibold text-zinc-100 font-mono mt-1.5">
                   {selectedDocPreview.target_path}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedDocPreview(null)}
-                className="text-slate-400 hover:text-white rounded-lg p-1 hover:bg-slate-900"
+                className="text-zinc-400 hover:text-zinc-100 rounded-md p-1 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -6928,7 +6940,7 @@ function AiInsightsContent() {
 
             {/* Warning Banner in Modal */}
             {selectedDocPreview.provenance?.showing_previous_ai_data && (
-              <div className="p-3.5 rounded-xl border border-amber-500/50 bg-amber-950/40 text-amber-200 text-xs flex items-center gap-2.5">
+              <div className="p-3.5 rounded-lg border border-amber-900/60 bg-amber-950/20 text-amber-200 text-xs flex items-center gap-2.5">
                 <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
                 <span className="font-semibold">This is the previous data — AI API is not working currently.</span>
               </div>
@@ -6936,13 +6948,13 @@ function AiInsightsContent() {
 
             {/* Citations List */}
             {selectedDocPreview.citations && selectedDocPreview.citations.length > 0 && (
-              <div className="space-y-1.5 bg-slate-900/40 p-3 rounded-xl border border-slate-800">
-                <div className="text-xs font-semibold text-slate-300">Verified Citations:</div>
+              <div className="space-y-1.5 bg-[#09090B] p-3 rounded-lg border border-[#1C1C21]">
+                <div className="text-xs font-semibold text-zinc-300">Verified Citations:</div>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
                   {selectedDocPreview.citations.map((c, idx) => (
                     <span
                       key={idx}
-                      className="font-mono text-[10px] bg-slate-950 border border-slate-700/80 px-2 py-0.5 rounded text-sky-300"
+                      className="font-mono text-[10px] bg-[#141418] border border-[#26262C] px-2 py-0.5 rounded text-sky-300"
                     >
                       {c.file_path}@{c.commit_sha ? c.commit_sha.slice(0, 7) : "HEAD"}
                     </span>
@@ -6961,8 +6973,8 @@ function AiInsightsContent() {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between border-t border-slate-800/80 pt-4">
-              <div className="text-[11px] text-slate-500 font-mono">
+            <div className="flex items-center justify-between border-t border-[#1C1C21] pt-4">
+              <div className="text-[11px] text-zinc-500 font-mono tabular-nums">
                 Hash: {selectedDocPreview.content_hash}
               </div>
               <div className="flex items-center gap-2">
@@ -6970,7 +6982,7 @@ function AiInsightsContent() {
                   variant="outline"
                   size="sm"
                   onClick={() => setSelectedDocPreview(null)}
-                  className="text-xs border-slate-700 text-slate-300"
+                  className="text-xs"
                 >
                   Close
                 </Button>
@@ -6982,12 +6994,11 @@ function AiInsightsContent() {
                       size="sm"
                       disabled={processingDocId === selectedDocPreview.id}
                       onClick={() => handleRejectDocument(selectedDocPreview.id)}
-                      className="text-xs border-rose-500/30 text-rose-300 hover:bg-rose-950/20"
+                      className="text-xs border-rose-900/60 text-rose-300 hover:bg-rose-950/20"
                     >
                       Reject
                     </Button>
                     <Button
-                      variant="glow"
                       size="sm"
                       disabled={processingDocId === selectedDocPreview.id}
                       onClick={() => handleApproveDocument(selectedDocPreview.id)}
@@ -7000,7 +7011,7 @@ function AiInsightsContent() {
 
                 {selectedDocPreview.status === "APPROVED" && (
                   <Button
-                    variant="glow"
+                    variant="default"
                     size="sm"
                     disabled={processingDocId === selectedDocPreview.id}
                     onClick={() => handleApplyDocument(selectedDocPreview.id)}
@@ -7013,7 +7024,7 @@ function AiInsightsContent() {
 
                 {selectedDocPreview.status === "APPLIED" && selectedDocPreview.pr_url && (
                   <a href={selectedDocPreview.pr_url} target="_blank" rel="noopener noreferrer">
-                    <Button variant="glow" size="sm" className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-500">
+                    <Button size="sm" className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white">
                       <ExternalLink className="h-3.5 w-3.5" />
                       View Pull Request
                     </Button>
@@ -7029,82 +7040,82 @@ function AiInsightsContent() {
       {/* MODAL: COMMIT ANALYSIS REPORT PREVIEW & AUDIT                             */}
       {/* ========================================================================= */}
       {selectedCommitReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-4xl rounded-2xl border border-rose-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-4xl rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-4">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge
                     variant="outline"
-                    className={`text-[10px] font-mono font-bold uppercase ${
+                    className={`text-[10px] font-mono font-semibold uppercase ${
                       selectedCommitReport.status === "CRITICAL_ALERT"
-                        ? "border-rose-500/40 text-rose-300 bg-rose-950/30"
+                        ? "border-rose-900/60 text-rose-300 bg-rose-950/20"
                         : selectedCommitReport.status === "WARNING"
-                        ? "border-amber-500/40 text-amber-300 bg-amber-950/30"
-                        : "border-emerald-500/40 text-emerald-300 bg-emerald-950/30"
+                        ? "border-amber-900/60 text-amber-300 bg-amber-950/20"
+                        : "border-emerald-900/60 text-emerald-300 bg-emerald-950/20"
                     }`}
                   >
                     {selectedCommitReport.status}
                   </Badge>
-                  <span className="font-mono text-xs text-sky-400 font-bold">
+                  <span className="font-mono tabular-nums text-xs text-sky-400 font-semibold">
                     sha: {selectedCommitReport.commit_sha}
                   </span>
-                  <span className="text-xs text-slate-400 font-mono">
+                  <span className="text-xs text-zinc-400 font-mono">
                     ref: {selectedCommitReport.ref || "main"}
                   </span>
                 </div>
-                <div className="text-xs text-slate-400 mt-1 flex items-center gap-3">
-                  <span>Author: <strong className="text-white">{selectedCommitReport.author_name || "Unknown"}</strong> ({selectedCommitReport.author_email || "no-email"})</span>
-                  <span>Scanned: {new Date(selectedCommitReport.created_at).toLocaleString()}</span>
+                <div className="text-xs text-zinc-400 mt-1 flex items-center gap-3 flex-wrap">
+                  <span>Author: <strong className="text-zinc-100">{selectedCommitReport.author_name || "Unknown"}</strong> ({selectedCommitReport.author_email || "no-email"})</span>
+                  <span className="font-mono tabular-nums">Scanned: {new Date(selectedCommitReport.created_at).toLocaleString()}</span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedCommitReport(null)}
-                className="text-slate-400 hover:text-white rounded-lg p-1 hover:bg-slate-900"
+                className="text-zinc-400 hover:text-zinc-100 rounded-md p-1 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Commit Message */}
-            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs text-slate-200">
-              <div className="text-[10px] text-slate-500 font-mono uppercase mb-1">Commit Message</div>
+            <div className="bg-[#09090B] p-3 rounded-lg border border-[#1C1C21] text-xs text-zinc-200">
+              <div className="text-[10px] text-zinc-500 font-mono uppercase mb-1">Commit Message</div>
               <p className="font-sans">{selectedCommitReport.commit_message || "No commit message"}</p>
             </div>
 
             {/* Email Alert Banner */}
-            <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between text-xs flex-wrap gap-2">
+            <div className="p-3 rounded-lg border border-[#1C1C21] bg-[#09090B] flex items-center justify-between text-xs flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-sky-400" />
-                <span>Notification Dispatch Status: <strong className="text-white">{selectedCommitReport.alert_status}</strong></span>
+                <span className="text-zinc-300">Notification Dispatch Status: <strong className="text-zinc-100">{selectedCommitReport.alert_status}</strong></span>
               </div>
               {selectedCommitReport.alert_recipient && (
-                <span className="text-slate-400 font-mono text-[11px]">Recipient: {selectedCommitReport.alert_recipient}</span>
+                <span className="text-zinc-400 font-mono text-[11px]">Recipient: {selectedCommitReport.alert_recipient}</span>
               )}
             </div>
 
             {/* Redacted Findings */}
             {selectedCommitReport.findings && selectedCommitReport.findings.length > 0 && (
               <div className="space-y-2">
-                <div className="text-xs font-semibold text-slate-300">
+                <div className="text-xs font-semibold text-zinc-300 font-mono tabular-nums">
                   Detected Findings ({selectedCommitReport.findings.length}):
                 </div>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {selectedCommitReport.findings.map((f: any, idx: number) => (
-                    <div key={idx} className="p-3 rounded-xl border border-rose-500/20 bg-rose-950/20 text-xs space-y-1">
+                    <div key={idx} className="p-3 rounded-lg border border-rose-900/60 bg-rose-950/15 text-xs space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-white">{f.title || f.category || "Issue"}</span>
-                        <Badge variant="outline" className="text-[10px] text-rose-300 border-rose-500/30 uppercase">
+                        <span className="font-semibold text-zinc-100">{f.title || f.category || "Issue"}</span>
+                        <Badge variant="outline" className="text-[10px] text-rose-300 border-rose-900/60 uppercase font-mono">
                           {f.severity || "HIGH"}
                         </Badge>
                       </div>
-                      <div className="text-[11px] text-slate-400 font-mono">
+                      <div className="text-[11px] text-zinc-400 font-mono tabular-nums">
                         {f.file_path}{f.line_number ? `:${f.line_number}` : ""}
                       </div>
                       {f.redacted_evidence && (
-                        <div className="font-mono text-[10px] text-amber-300 bg-black/40 p-2 rounded border border-amber-500/20">
+                        <div className="font-mono text-[10px] text-amber-300 bg-[#09090B] p-2 rounded-md border border-[#1C1C21]">
                           {f.redacted_evidence}
                         </div>
                       )}
@@ -7123,8 +7134,8 @@ function AiInsightsContent() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between border-t border-slate-800/80 pt-4">
-              <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
+            <div className="flex items-center justify-between border-t border-[#1C1C21] pt-4">
+              <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono tabular-nums flex-wrap">
                 <span>Risk Score: {selectedCommitReport.risk_score?.toFixed(1) || "0.0"}</span>
                 <span>Secrets: {selectedCommitReport.secrets_detected}</span>
                 <span>Security: {selectedCommitReport.security_issues}</span>
@@ -7134,7 +7145,7 @@ function AiInsightsContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectedCommitReport(null)}
-                className="text-xs border-slate-700 text-slate-300"
+                className="text-xs"
               >
                 Close
               </Button>
@@ -7147,33 +7158,33 @@ function AiInsightsContent() {
       {/* MODAL 1: FINDING DETAIL VIEW & SAFE CODE CONTEXT (PHASE 10, 11 & 19)      */}
       {/* ========================================================================= */}
       {selectedFindingForModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-indigo-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge
                     variant={selectedFindingForModal.severity === "CRITICAL" ? "destructive" : "outline"}
-                    className={`text-[10px] font-mono font-bold uppercase tracking-wider ${
+                    className={`text-[10px] font-mono font-semibold uppercase tracking-wider ${
                       selectedFindingForModal.severity === "HIGH"
-                        ? "text-amber-400 border-amber-500/40 bg-amber-950/30"
+                        ? "text-amber-400 border-amber-900/60 bg-amber-950/20"
                         : selectedFindingForModal.severity === "MEDIUM"
-                        ? "text-yellow-400 border-yellow-500/40 bg-yellow-950/30"
+                        ? "text-amber-300 border-amber-900/60 bg-amber-950/15"
                         : ""
                     }`}
                   >
                     {selectedFindingForModal.severity}
                   </Badge>
-                  <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/40 bg-emerald-950/20 flex items-center gap-1">
+                  <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-900/60 bg-emerald-950/20 flex items-center gap-1">
                     <ShieldCheck className="h-3 w-3" />
                     DETERMINISTIC
                   </Badge>
-                  <span className="font-mono text-xs text-slate-400 uppercase tracking-wider">
+                  <span className="font-mono text-xs text-zinc-400 uppercase tracking-wider">
                     {selectedFindingForModal.category}
                   </span>
                 </div>
-                <h3 className="text-base font-bold text-white tracking-tight">
+                <h3 className="text-base font-semibold text-zinc-100 tracking-tight">
                   {selectedFindingForModal.title}
                 </h3>
               </div>
@@ -7184,7 +7195,7 @@ function AiInsightsContent() {
                   setAiExplanation(null);
                   setExplainError(null);
                 }}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -7192,20 +7203,20 @@ function AiInsightsContent() {
 
             {/* Location & Rule Metadata */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs font-mono">
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block">Rule ID</span>
-                <span className="font-semibold text-slate-200">{selectedFindingForModal.rule_id || "SEC_GENERAL_PATTERN"}</span>
+              <div className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21]">
+                <span className="text-[10px] text-zinc-500 uppercase block">Rule ID</span>
+                <span className="font-semibold text-zinc-200">{selectedFindingForModal.rule_id || "SEC_GENERAL_PATTERN"}</span>
               </div>
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block">Location</span>
-                <span className="font-semibold text-indigo-300 truncate block">
+              <div className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21]">
+                <span className="text-[10px] text-zinc-500 uppercase block">Location</span>
+                <span className="font-semibold text-zinc-100 truncate block tabular-nums">
                   {selectedFindingForModal.file_path || selectedFindingForModal.affected_file || "unknown"}
                   {selectedFindingForModal.line_number ? `:${selectedFindingForModal.line_number}` : ""}
                 </span>
               </div>
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                <span className="text-[10px] text-slate-500 uppercase block">Merge Blocker</span>
-                <span className={`font-semibold ${selectedFindingForModal.is_blocker ? "text-rose-400" : "text-slate-400"}`}>
+              <div className="p-2.5 rounded-md bg-[#09090B] border border-[#1C1C21]">
+                <span className="text-[10px] text-zinc-500 uppercase block">Merge Blocker</span>
+                <span className={`font-semibold ${selectedFindingForModal.is_blocker ? "text-rose-400" : "text-zinc-400"}`}>
                   {selectedFindingForModal.is_blocker ? "BLOCKING" : "ADVISORY"}
                 </span>
               </div>
@@ -7213,10 +7224,10 @@ function AiInsightsContent() {
 
             {/* Redacted Evidence Box (Strict Zero Raw Secret Leakage) */}
             <div className="space-y-1.5">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
                 Redacted Deterministic Evidence
               </span>
-              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 font-mono text-xs text-purple-300 break-all select-all">
+              <div className="p-3 rounded-md bg-[#09090B] border border-[#1C1C21] font-mono text-xs text-amber-300 break-all select-all">
                 {selectedFindingForModal.redacted_evidence || selectedFindingForModal.evidence || "[REDACTED]"}
               </div>
             </div>
@@ -7230,21 +7241,21 @@ function AiInsightsContent() {
 
               return (
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 font-semibold">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 font-semibold">
                     <span>Safe Code Context (Target Line &plusmn; 3)</span>
                     <span className="text-emerald-400">Zero Raw Secrets</span>
                   </div>
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-3 font-mono text-xs overflow-x-auto max-h-48 divide-y divide-slate-800/40">
+                  <div className="rounded-md border border-[#1C1C21] bg-[#09090B] p-3 font-mono text-xs overflow-x-auto max-h-48 divide-y divide-[#1C1C21]/60">
                     {contextLines.map((cl, idx) => (
                       <div
                         key={idx}
                         className={`flex items-start gap-3 py-0.5 px-1 rounded ${
                           cl.isTarget
-                            ? "bg-rose-950/40 text-rose-200 border-l-2 border-rose-500 font-bold"
-                            : "text-slate-400"
+                            ? "bg-rose-950/30 text-rose-200 border-l-2 border-rose-500 font-semibold"
+                            : "text-zinc-400"
                         }`}
                       >
-                        <span className="w-8 text-right text-slate-600 select-none shrink-0">{cl.num}</span>
+                        <span className="w-8 text-right text-zinc-600 font-mono tabular-nums select-none shrink-0">{cl.num}</span>
                         <pre className="whitespace-pre overflow-x-auto flex-1 font-mono text-xs">{cl.text || " "}</pre>
                       </div>
                     ))}
@@ -7256,15 +7267,15 @@ function AiInsightsContent() {
             {/* Grounded AI Explanation Layer (Phase 19) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-semibold flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-zinc-400" />
                   ForgeAI Grounded Reasoning Layer
                 </span>
                 {!aiExplanation && !isExplainingFinding && (
                   <Button
                     type="button"
                     size="sm"
-                    variant="glow"
+                    variant="default"
                     onClick={() => handleExplainFinding(selectedFindingForModal)}
                     className="h-7 text-xs px-3"
                   >
@@ -7274,38 +7285,38 @@ function AiInsightsContent() {
               </div>
 
               {isExplainingFinding ? (
-                <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-950/20 text-xs text-purple-300 flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+                <div className="p-4 rounded-md border border-[#1C1C21] bg-[#09090B] text-xs text-zinc-300 flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
                   Generating grounded contextual explanation from deterministic rule...
                 </div>
               ) : explainError ? (
-                <div className="p-3 rounded-lg border border-rose-500/30 bg-rose-950/30 text-xs text-rose-300">
+                <div className="p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs text-rose-300">
                   {explainError}
                 </div>
               ) : aiExplanation ? (
-                <div className="p-4 rounded-xl border border-purple-500/30 bg-slate-900/90 space-y-3 text-xs">
+                <div className="p-4 rounded-lg border border-[#1C1C21] bg-[#09090B] space-y-3 text-xs">
                   <div>
-                    <h4 className="font-bold text-white text-xs mb-1">What Happened?</h4>
-                    <p className="text-slate-300 leading-relaxed">{aiExplanation.what_happened}</p>
+                    <h4 className="font-semibold text-zinc-100 text-xs mb-1">What Happened?</h4>
+                    <p className="text-zinc-300 leading-relaxed">{aiExplanation.what_happened}</p>
                   </div>
                   <div>
-                    <h4 className="font-bold text-amber-300 text-xs mb-1">Why It Is Risky</h4>
-                    <p className="text-slate-300 leading-relaxed">{aiExplanation.why_it_is_risky}</p>
+                    <h4 className="font-semibold text-amber-300 text-xs mb-1">Why It Is Risky</h4>
+                    <p className="text-zinc-300 leading-relaxed">{aiExplanation.why_it_is_risky}</p>
                   </div>
                   <div>
-                    <h4 className="font-bold text-rose-300 text-xs mb-1">Potential Production Impact</h4>
-                    <p className="text-slate-300 leading-relaxed">{aiExplanation.production_impact}</p>
+                    <h4 className="font-semibold text-rose-300 text-xs mb-1">Potential Production Impact</h4>
+                    <p className="text-zinc-300 leading-relaxed">{aiExplanation.production_impact}</p>
                   </div>
                   <div>
-                    <h4 className="font-bold text-emerald-300 text-xs mb-1">Recommended Remediation</h4>
-                    <p className="text-slate-300 leading-relaxed">{aiExplanation.how_to_fix}</p>
+                    <h4 className="font-semibold text-emerald-300 text-xs mb-1">Recommended Remediation</h4>
+                    <p className="text-zinc-300 leading-relaxed">{aiExplanation.how_to_fix}</p>
                   </div>
                   {aiExplanation.remediation_guidance && aiExplanation.remediation_guidance.length > 0 && (
-                    <div className="space-y-1 pt-1 border-t border-slate-800">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                    <div className="space-y-1 pt-2 border-t border-[#1C1C21]">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
                         Step-by-Step Remediation Guidance:
                       </span>
-                      <ul className="list-disc list-inside space-y-0.5 text-slate-300 text-[11px]">
+                      <ul className="list-disc list-inside space-y-0.5 text-zinc-300 text-[11px]">
                         {aiExplanation.remediation_guidance.map((step, sIdx) => (
                           <li key={sIdx}>{step}</li>
                         ))}
@@ -7317,8 +7328,8 @@ function AiInsightsContent() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800/80">
-              <span className="text-[11px] font-mono text-slate-500">
+            <div className="flex items-center justify-between pt-3 border-t border-[#1C1C21]">
+              <span className="text-[11px] font-mono text-zinc-500">
                 Verification status: <span className="text-amber-400 font-semibold">Pending Re-Scan</span>
               </span>
               <Button
@@ -7343,19 +7354,19 @@ function AiInsightsContent() {
       {/* MODAL 2: RE-SCAN DIFFERENTIAL COMPARISON (PHASE 13)                       */}
       {/* ========================================================================= */}
       {isRescanModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-emerald-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-3">
               <div className="flex items-center gap-2.5">
-                <RefreshCw className="h-5 w-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white tracking-tight">
+                <RefreshCw className="h-4 w-4 text-emerald-400" />
+                <h3 className="text-base font-semibold text-zinc-100 tracking-tight">
                   Authoritative Differential Re-Scan
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsRescanModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -7363,46 +7374,46 @@ function AiInsightsContent() {
 
             {isRescanning ? (
               <div className="py-12 text-center space-y-3">
-                <Loader2 className="h-8 w-8 animate-spin text-emerald-400 mx-auto" />
-                <p className="text-xs text-slate-300 font-mono">
+                <Loader2 className="h-7 w-7 animate-spin text-zinc-400 mx-auto" />
+                <p className="text-xs text-zinc-300 font-mono">
                   Executing authoritative re-scan pipeline and verifying finding removal...
                 </p>
               </div>
             ) : rescanResult ? (
               <div className="space-y-4">
                 {/* 3 Metric Comparison Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono tabular-nums text-xs">
                   {/* Risk Score Delta */}
-                  <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/70 space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Deterministic Risk</span>
+                  <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-1">
+                    <span className="text-[10px] uppercase font-semibold text-zinc-400">Deterministic Risk</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-slate-400 line-through">{rescanResult.before_risk_score.toFixed(1)}</span>
-                      <ArrowRight className="h-3 w-3 text-slate-500" />
-                      <span className="text-base font-bold text-emerald-400">{rescanResult.after_risk_score.toFixed(1)}</span>
+                      <span className="text-zinc-400 line-through">{rescanResult.before_risk_score.toFixed(1)}</span>
+                      <ArrowRight className="h-3 w-3 text-zinc-500" />
+                      <span className="text-base font-semibold text-emerald-400">{rescanResult.after_risk_score.toFixed(1)}</span>
                     </div>
                     <span className="text-[10px] text-emerald-400">&minus;{rescanResult.risk_delta.toFixed(1)} pts reduced</span>
                   </div>
 
                   {/* Findings Delta */}
-                  <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/70 space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Critical Findings</span>
+                  <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-1">
+                    <span className="text-[10px] uppercase font-semibold text-zinc-400">Critical Findings</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-slate-400 line-through">{rescanResult.before_critical_count}</span>
-                      <ArrowRight className="h-3 w-3 text-slate-500" />
-                      <span className="text-base font-bold text-emerald-400">{rescanResult.after_critical_count}</span>
+                      <span className="text-zinc-400 line-through">{rescanResult.before_critical_count}</span>
+                      <ArrowRight className="h-3 w-3 text-zinc-500" />
+                      <span className="text-base font-semibold text-emerald-400">{rescanResult.after_critical_count}</span>
                     </div>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-zinc-400">
                       Resolved: <strong className="text-emerald-400">{rescanResult.findings_resolved.length}</strong>
                     </span>
                   </div>
 
                   {/* Merge Readiness Delta */}
-                  <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/70 space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Merge Readiness</span>
-                    <div className="text-xs font-bold text-indigo-300 truncate">
+                  <div className="p-3 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-1">
+                    <span className="text-[10px] uppercase font-semibold text-zinc-400">Merge Readiness</span>
+                    <div className="text-xs font-semibold text-zinc-100 truncate">
                       {rescanResult.merge_readiness_delta}
                     </div>
-                    <span className="text-[10px] text-slate-500">
+                    <span className="text-[10px] text-zinc-500">
                       Status: {rescanResult.is_clean ? "CLEAN" : "UPDATED"}
                     </span>
                   </div>
@@ -7410,14 +7421,14 @@ function AiInsightsContent() {
 
                 {/* Resolved Findings List */}
                 {rescanResult.findings_resolved.length > 0 && (
-                  <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 space-y-2">
-                    <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5 font-mono">
+                  <div className="p-3 rounded-md border border-emerald-900/60 bg-emerald-950/20 space-y-2">
+                    <div className="text-xs font-semibold text-emerald-300 flex items-center gap-1.5 font-mono tabular-nums">
                       <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                       Confirmed Resolved Findings ({rescanResult.findings_resolved.length})
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {rescanResult.findings_resolved.map((rule, idx) => (
-                        <Badge key={idx} variant="outline" className="text-[10px] font-mono text-emerald-300 border-emerald-500/40 bg-emerald-950/40">
+                        <Badge key={idx} variant="outline" className="text-[10px] font-mono text-emerald-300 border-emerald-900/60 bg-emerald-950/30">
                           &check; {rule}
                         </Badge>
                       ))}
@@ -7426,16 +7437,16 @@ function AiInsightsContent() {
                 )}
 
                 {/* Summary Notice */}
-                <p className="text-xs font-mono text-slate-300 bg-slate-900 p-3 rounded-xl border border-slate-800 leading-relaxed">
+                <p className="text-xs font-mono text-zinc-300 bg-[#09090B] p-3 rounded-md border border-[#1C1C21] leading-relaxed">
                   {rescanResult.summary}
                 </p>
-                <div className="text-[11px] text-slate-500 italic">
+                <div className="text-[11px] text-zinc-500">
                   Note: ForgeAI marks findings as fixed solely through deterministic re-analysis, never through unverified LLM claims.
                 </div>
               </div>
             ) : null}
 
-            <div className="flex justify-end pt-2 border-t border-slate-800">
+            <div className="flex justify-end pt-2 border-t border-[#1C1C21]">
               <Button
                 type="button"
                 variant="outline"
@@ -7454,16 +7465,16 @@ function AiInsightsContent() {
       {/* MODAL 3: ON-DEMAND SECRET SCAN RESULTS (PHASE 15 & 16)                    */}
       {/* ========================================================================= */}
       {isSecretScanModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-purple-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-3">
               <div className="flex items-center gap-2.5">
-                <KeyRound className="h-5 w-5 text-purple-400" />
+                <KeyRound className="h-4 w-4 text-zinc-400" />
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">
+                  <h3 className="text-base font-semibold text-zinc-100 tracking-tight">
                     On-Demand Secret Exposure Scan
                   </h3>
-                  <div className="text-[11px] font-mono text-slate-400">
+                  <div className="text-[11px] font-mono text-zinc-400">
                     High-Entropy Heuristics &bull; Zero Raw Secret Leakage Guaranteed
                   </div>
                 </div>
@@ -7471,7 +7482,7 @@ function AiInsightsContent() {
               <button
                 type="button"
                 onClick={() => setIsSecretScanModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -7479,36 +7490,36 @@ function AiInsightsContent() {
 
             {isSecretScanning ? (
               <div className="py-12 text-center space-y-3">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-400 mx-auto" />
-                <p className="text-xs text-slate-300 font-mono">
+                <Loader2 className="h-7 w-7 animate-spin text-zinc-400 mx-auto" />
+                <p className="text-xs text-zinc-300 font-mono">
                   Scanning repository snapshot and active PR changes for exposed credentials...
                 </p>
               </div>
             ) : secretScanResult ? (
               <div className="space-y-4">
                 {/* Metrics Pill Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">Secrets Found</span>
-                    <span className={`text-base font-bold ${secretScanResult.secrets_found > 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono tabular-nums text-xs">
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">Secrets Found</span>
+                    <span className={`text-base font-semibold ${secretScanResult.secrets_found > 0 ? "text-rose-400" : "text-emerald-400"}`}>
                       {secretScanResult.secrets_found}
                     </span>
                   </div>
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">Critical</span>
-                    <span className="text-base font-bold text-rose-400">
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">Critical</span>
+                    <span className="text-base font-semibold text-rose-400">
                       {secretScanResult.critical_count}
                     </span>
                   </div>
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">Files Scanned</span>
-                    <span className="text-base font-bold text-white">
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">Files Scanned</span>
+                    <span className="text-base font-semibold text-zinc-100">
                       {secretScanResult.files_scanned}
                     </span>
                   </div>
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">Scan Duration</span>
-                    <span className="text-base font-bold text-indigo-300">
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">Scan Duration</span>
+                    <span className="text-base font-semibold text-zinc-100">
                       {(secretScanResult.scan_time_ms ?? 0).toFixed(0)}ms
                     </span>
                   </div>
@@ -7518,39 +7529,39 @@ function AiInsightsContent() {
                 {secretScanResult.findings && secretScanResult.findings.length > 0 ? (
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {secretScanResult.findings.map((sf, idx) => (
-                      <div key={idx} className="p-3 rounded-xl border border-rose-500/40 bg-rose-950/20 text-xs space-y-1.5 font-mono">
+                      <div key={idx} className="p-3 rounded-lg border border-rose-900/60 bg-rose-950/15 text-xs space-y-1.5 font-mono">
                         <div className="flex items-center justify-between">
-                          <span className="text-rose-300 font-bold">{sf.title}</span>
+                          <span className="text-rose-300 font-semibold">{sf.title}</span>
                           <Badge variant="destructive" className="text-[9px] uppercase">
                             ACTIVE EXPOSURE
                           </Badge>
                         </div>
-                        <div className="text-slate-400 text-[11px]">
-                          Location: <span className="text-slate-200">{sf.file_path}:{sf.line_number || 1}</span>
+                        <div className="text-zinc-400 text-[11px] tabular-nums">
+                          Location: <span className="text-zinc-200">{sf.file_path}:{sf.line_number || 1}</span>
                         </div>
-                        <div className="p-2 rounded bg-slate-950 border border-slate-800 text-purple-300 text-[11px]">
-                          Evidence: <span className="font-bold">{sf.redacted_evidence}</span>
+                        <div className="p-2 rounded-md bg-[#09090B] border border-[#1C1C21] text-amber-300 text-[11px]">
+                          Evidence: <span className="font-semibold">{sf.redacted_evidence}</span>
                         </div>
-                        <div className="text-[11px] text-slate-300">
+                        <div className="text-[11px] text-zinc-300">
                           Action: <span className="text-emerald-400">{sf.remediation}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/50 text-center text-xs text-emerald-400 font-mono flex items-center justify-center gap-2">
+                  <div className="p-6 rounded-lg border border-[#1C1C21] bg-[#09090B] text-center text-xs text-emerald-400 font-mono flex items-center justify-center gap-2">
                     <CheckCircle2 className="h-4 w-4" />
                     Zero exposed credentials or secret keys detected across analyzed files.
                   </div>
                 )}
 
-                <p className="text-xs text-slate-400 font-mono bg-slate-900 p-2.5 rounded border border-slate-800">
+                <p className="text-xs text-zinc-400 font-mono bg-[#09090B] p-2.5 rounded-md border border-[#1C1C21]">
                   {secretScanResult.summary}
                 </p>
               </div>
             ) : null}
 
-            <div className="flex justify-end pt-2 border-t border-slate-800">
+            <div className="flex justify-end pt-2 border-t border-[#1C1C21]">
               <Button
                 type="button"
                 variant="outline"
@@ -7569,16 +7580,16 @@ function AiInsightsContent() {
       {/* MODAL 4: DEPENDENCY SECURITY STATUS (PHASE 17)                            */}
       {/* ========================================================================= */}
       {isDepSecurityModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-blue-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-3">
               <div className="flex items-center gap-2.5">
-                <Boxes className="h-5 w-5 text-blue-400" />
+                <Boxes className="h-4 w-4 text-sky-400" />
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">
+                  <h3 className="text-base font-semibold text-zinc-100 tracking-tight">
                     Dependency Security & CVE Intelligence
                   </h3>
-                  <div className="text-[11px] font-mono text-slate-400">
+                  <div className="text-[11px] font-mono text-zinc-400">
                     Truthful Evidence Reporting &bull; Maven, npm, Python Ecosystems
                   </div>
                 </div>
@@ -7586,7 +7597,7 @@ function AiInsightsContent() {
               <button
                 type="button"
                 onClick={() => setIsDepSecurityModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -7594,8 +7605,8 @@ function AiInsightsContent() {
 
             {isLoadingDepSecurity ? (
               <div className="py-12 text-center space-y-3">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-400 mx-auto" />
-                <p className="text-xs text-slate-300 font-mono">
+                <Loader2 className="h-7 w-7 animate-spin text-zinc-400 mx-auto" />
+                <p className="text-xs text-zinc-300 font-mono">
                   Checking dependency manifest security status...
                 </p>
               </div>
@@ -7603,32 +7614,32 @@ function AiInsightsContent() {
               <div className="space-y-4">
                 {/* 4 Status Badges */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">Status</span>
-                    <Badge variant="outline" className="text-[10px] font-mono text-blue-300 border-blue-500/40 bg-blue-950/20">
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">Status</span>
+                    <Badge variant="outline" className="text-[10px] font-mono text-sky-300 border-sky-900/60 bg-sky-950/20">
                       {dependencySecurity.status}
                     </Badge>
                   </div>
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">Code-Level Security</span>
-                    <span className="font-bold text-emerald-400">{dependencySecurity.code_level_security}</span>
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">Code-Level Security</span>
+                    <span className="font-semibold text-emerald-400">{dependencySecurity.code_level_security}</span>
                   </div>
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">Secret Scanning</span>
-                    <span className="font-bold text-emerald-400">{dependencySecurity.secret_scanning}</span>
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">Secret Scanning</span>
+                    <span className="font-semibold text-emerald-400">{dependencySecurity.secret_scanning}</span>
                   </div>
-                  <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900">
-                    <span className="text-[10px] uppercase text-slate-500 block">CVE Database</span>
-                    <span className={`font-bold ${dependencySecurity.dependency_cve_database === "CONFIGURED" ? "text-emerald-400" : "text-amber-400"}`}>
+                  <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B]">
+                    <span className="text-[10px] uppercase text-zinc-500 block">CVE Database</span>
+                    <span className={`font-semibold ${dependencySecurity.dependency_cve_database === "CONFIGURED" ? "text-emerald-400" : "text-amber-400"}`}>
                       {dependencySecurity.dependency_cve_database}
                     </span>
                   </div>
                 </div>
 
                 {/* Ecosystem Notice */}
-                <div className="p-3.5 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200 space-y-1 leading-relaxed">
-                  <div className="font-bold text-blue-100 flex items-center gap-1.5 font-mono">
-                    <Info className="h-4 w-4 text-blue-400" />
+                <div className="p-3.5 rounded-lg border border-sky-900/60 bg-sky-950/20 text-xs text-sky-200 space-y-1 leading-relaxed">
+                  <div className="font-semibold text-sky-100 flex items-center gap-1.5 font-mono">
+                    <Info className="h-4 w-4 text-sky-400" />
                     Truthful Partial Evidence Contract
                   </div>
                   <p>
@@ -7636,13 +7647,13 @@ function AiInsightsContent() {
                   </p>
                 </div>
 
-                <p className="text-xs font-mono text-slate-300 bg-slate-900 p-2.5 rounded border border-slate-800">
+                <p className="text-xs font-mono text-zinc-300 bg-[#09090B] p-2.5 rounded-md border border-[#1C1C21]">
                   {dependencySecurity.summary}
                 </p>
               </div>
             ) : null}
 
-            <div className="flex justify-end pt-2 border-t border-slate-800">
+            <div className="flex justify-end pt-2 border-t border-[#1C1C21]">
               <Button
                 type="button"
                 variant="outline"
@@ -7661,16 +7672,16 @@ function AiInsightsContent() {
       {/* MODAL 5: ANALYSIS HISTORY TIMELINE (PHASE 27)                             */}
       {/* ========================================================================= */}
       {isHistoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl rounded-2xl border border-indigo-500/30 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-3">
               <div className="flex items-center gap-2.5">
-                <History className="h-5 w-5 text-indigo-400" />
+                <History className="h-4 w-4 text-zinc-400" />
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">
+                  <h3 className="text-base font-semibold text-zinc-100 tracking-tight">
                     Authoritative Analysis History & Progression
                   </h3>
-                  <div className="text-[11px] font-mono text-slate-400">
+                  <div className="text-[11px] font-mono text-zinc-400">
                     Chronological Differential Audit Trail
                   </div>
                 </div>
@@ -7678,7 +7689,7 @@ function AiInsightsContent() {
               <button
                 type="button"
                 onClick={() => setIsHistoryModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -7686,29 +7697,29 @@ function AiInsightsContent() {
 
             {isLoadingHistory ? (
               <div className="py-12 text-center space-y-3">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-400 mx-auto" />
-                <p className="text-xs text-slate-300 font-mono">
+                <Loader2 className="h-7 w-7 animate-spin text-zinc-400 mx-auto" />
+                <p className="text-xs text-zinc-300 font-mono">
                   Loading analysis history for entity...
                 </p>
               </div>
             ) : analysisHistory && analysisHistory.length > 0 ? (
               <div className="space-y-3 max-h-80 overflow-y-auto font-mono text-xs">
                 {analysisHistory.map((item, idx) => (
-                  <div key={idx} className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2">
+                  <div key={idx} className="p-3.5 rounded-md border border-[#1C1C21] bg-[#09090B] space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-white">Analysis #{item.analysis_id.substring(0, 8)}</span>
-                        <Badge variant="outline" className="text-[9px]">
+                      <div className="flex items-center gap-2 tabular-nums">
+                        <span className="font-semibold text-zinc-100">Analysis #{item.analysis_id.substring(0, 8)}</span>
+                        <Badge variant="outline" className="text-[9px] border-[#26262C] text-zinc-300">
                           Risk: {item.risk_score.toFixed(1)} ({item.risk_level})
                         </Badge>
                       </div>
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-zinc-500 tabular-nums">
                         {new Date(item.created_at).toLocaleTimeString()}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2 text-[11px]">
-                      <span className="text-slate-400">Merge Decision:</span>
+                      <span className="text-zinc-400">Merge Decision:</span>
                       <strong className={item.merge_readiness.includes("BLOCKED") ? "text-rose-400" : "text-emerald-400"}>
                         {item.merge_readiness}
                       </strong>
@@ -7718,7 +7729,7 @@ function AiInsightsContent() {
                       <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 flex-wrap">
                         <span>Resolved:</span>
                         {item.resolved_findings_from_previous.map((r, rIdx) => (
-                          <span key={rIdx} className="px-1.5 py-0.5 rounded bg-emerald-950/40 border border-emerald-500/30">
+                          <span key={rIdx} className="px-1.5 py-0.5 rounded bg-emerald-950/30 border border-emerald-900/60">
                             &check; {r}
                           </span>
                         ))}
@@ -7729,7 +7740,7 @@ function AiInsightsContent() {
                       <div className="text-[11px] text-amber-400 flex items-center gap-1.5 flex-wrap">
                         <span>New:</span>
                         {item.new_findings_from_previous.map((n, nIdx) => (
-                          <span key={nIdx} className="px-1.5 py-0.5 rounded bg-amber-950/40 border border-amber-500/30">
+                          <span key={nIdx} className="px-1.5 py-0.5 rounded bg-amber-950/30 border border-amber-900/60">
                             + {n}
                           </span>
                         ))}
@@ -7739,12 +7750,12 @@ function AiInsightsContent() {
                 ))}
               </div>
             ) : (
-              <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/50 text-center text-xs text-slate-400 font-mono">
+              <div className="p-6 rounded-md border border-[#1C1C21] bg-[#09090B] text-center text-xs text-zinc-400 font-mono">
                 No previous analysis iterations recorded yet for this entity.
               </div>
             )}
 
-            <div className="flex justify-end pt-2 border-t border-slate-800">
+            <div className="flex justify-end pt-2 border-t border-[#1C1C21]">
               <Button
                 type="button"
                 variant="outline"
@@ -7763,18 +7774,18 @@ function AiInsightsContent() {
       {/* MODAL 6: AI API UNAVAILABLE / LAST ANALYSIS NOTIFICATION MODAL             */}
       {/* ========================================================================= */}
       {aiApiErrorModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-lg rounded-2xl border border-amber-500/40 bg-slate-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-lg border border-[#26262C] bg-[#0E0E11] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 border-b border-[#1C1C21] pb-3">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-400">
-                  <AlertTriangle className="h-6 w-6" />
+                <div className="p-2 rounded-md bg-amber-950/40 border border-amber-900/60 text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">
+                  <h3 className="text-base font-semibold text-zinc-100 tracking-tight">
                     AI Service Notification
                   </h3>
-                  <div className="text-[11px] font-mono text-slate-400">
+                  <div className="text-[11px] font-mono text-zinc-400">
                     AI Service Status: Unreachable / Offline
                   </div>
                 </div>
@@ -7782,20 +7793,20 @@ function AiInsightsContent() {
               <button
                 type="button"
                 onClick={() => setAiApiErrorModal((prev) => ({ ...prev, isOpen: false }))}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-900 transition-colors"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#141418] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-950/30 text-amber-200">
+              <div className="p-3.5 rounded-lg border border-amber-900/60 bg-amber-950/20 text-amber-200">
                 <p className="text-sm font-semibold text-amber-200">
                   {aiApiErrorModal.message}
                 </p>
                 {aiApiErrorModal.hasLastAnalysis && (
-                  <p className="text-xs text-amber-300/90 mt-2 font-mono">
-                    Showing last analysis recorded on: <span className="font-bold underline">{aiApiErrorModal.timestamp}</span>
+                  <p className="text-xs text-amber-300/90 mt-2 font-mono tabular-nums">
+                    Showing last analysis recorded on: <span className="font-semibold underline">{aiApiErrorModal.timestamp}</span>
                     {aiApiErrorModal.repoName && <span> for <strong>{aiApiErrorModal.repoName}</strong></span>}
                     {aiApiErrorModal.prNumber && <span> (PR #{aiApiErrorModal.prNumber})</span>}.
                   </p>
@@ -7803,37 +7814,38 @@ function AiInsightsContent() {
               </div>
 
               {aiApiErrorModal.errorMessage && (
-                <div className="p-2.5 rounded-lg border border-slate-800 bg-slate-900 text-[11px] font-mono text-slate-400">
-                  <span className="text-slate-500">Error trace:</span> {aiApiErrorModal.errorMessage}
+                <div className="p-2.5 rounded-md border border-[#1C1C21] bg-[#09090B] text-[11px] font-mono text-zinc-400">
+                  <span className="text-zinc-500">Error trace:</span> {aiApiErrorModal.errorMessage}
                 </div>
               )}
 
-              <p className="text-xs text-slate-400 leading-relaxed">
+              <p className="text-xs text-zinc-400 leading-relaxed">
                 {aiApiErrorModal.hasLastAnalysis
                   ? "ForgeAI automatically preserved your last successful analysis from cache so you can continue reviewing security assessments, AST graphs, and test recommendations without disruption."
                   : "The AI engine is currently unreachable. Please verify that your AI Service Docker container is running and healthy."}
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#1C1C21]">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setAiApiErrorModal((prev) => ({ ...prev, isOpen: false }))}
-                className="text-xs px-4 border-slate-700 hover:bg-slate-900 text-slate-300"
+                className="text-xs px-4"
               >
                 {aiApiErrorModal.hasLastAnalysis ? "Inspect Last Analysis" : "Close"}
               </Button>
               <Button
                 type="button"
+                variant="default"
                 size="sm"
                 onClick={() => {
                   setAiApiErrorModal((prev) => ({ ...prev, isOpen: false }));
                   handleAnalyzePr();
                 }}
                 disabled={isAnalyzingPr || !selectedRepoId || !selectedPrNumber}
-                className="text-xs px-4 bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5"
+                className="text-xs px-4 flex items-center gap-1.5"
               >
                 {isAnalyzingPr ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <RefreshCw className="h-3.5 w-3.5 mr-1" />}
                 Retry AI API
@@ -7848,12 +7860,12 @@ function AiInsightsContent() {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto p-3.5 rounded-xl border shadow-2xl backdrop-blur-md flex items-start gap-2.5 animate-in slide-in-from-bottom-3 duration-200 ${
+            className={`pointer-events-auto p-3.5 rounded-lg border shadow-2xl bg-[#0E0E11] flex items-start gap-2.5 animate-in slide-in-from-bottom-3 duration-200 ${
               toast.type === "success"
-                ? "border-emerald-500/50 bg-slate-950/95 text-emerald-300"
+                ? "border-emerald-900/70 text-emerald-300"
                 : toast.type === "error"
-                ? "border-rose-500/50 bg-slate-950/95 text-rose-300"
-                : "border-sky-500/50 bg-slate-950/95 text-sky-300"
+                ? "border-rose-900/70 text-rose-300"
+                : "border-[#26262C] text-zinc-200"
             }`}
           >
             <div className="shrink-0 mt-0.5">
@@ -7866,16 +7878,16 @@ function AiInsightsContent() {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <h5 className="text-xs font-bold text-white leading-tight">{toast.title}</h5>
-              <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">{toast.message}</p>
-              <span className="text-[9px] text-slate-500 font-mono mt-1 block">
+              <h5 className="text-xs font-semibold text-zinc-100 leading-tight">{toast.title}</h5>
+              <p className="text-[11px] text-zinc-300 mt-0.5 leading-snug">{toast.message}</p>
+              <span className="text-[9px] text-zinc-500 font-mono tabular-nums mt-1 block">
                 {toast.timestamp.toLocaleTimeString()}
               </span>
             </div>
             <button
               type="button"
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-              className="text-slate-400 hover:text-white shrink-0 p-0.5"
+              className="text-zinc-400 hover:text-zinc-100 shrink-0 p-0.5"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -7890,8 +7902,8 @@ export default function AiInsightsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-400 font-mono text-xs space-y-3">
-          <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-zinc-400 font-mono text-xs space-y-3">
+          <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
           <p>Loading ForgeAI Engineering Health Intelligence...</p>
         </div>
       }

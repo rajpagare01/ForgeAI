@@ -49,9 +49,9 @@ export default function TraceabilityRedirectPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-        <p className="text-sm text-slate-400">Loading Traceability Spine...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+        <p className="text-xs font-mono text-zinc-400">Loading Traceability Spine...</p>
       </div>
     );
   }
@@ -59,22 +59,22 @@ export default function TraceabilityRedirectPage() {
   if (hasNoProjects) {
     return (
       <div className="p-8 max-w-2xl mx-auto space-y-6">
-        <Card className="border-slate-800 bg-slate-900/60 backdrop-blur-xl">
-          <CardHeader>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-2">
-              <Layers className="h-6 w-6" />
+        <Card className="p-5 border-[#1C1C21] bg-[#0E0E11]">
+          <CardHeader className="p-0 pb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[#141418] border border-[#26262C] text-zinc-300 mb-3">
+              <Layers className="h-5 w-5" />
             </div>
-            <CardTitle className="text-xl">No Governance Projects Found</CardTitle>
-            <CardDescription>
-              To view the Traceability Spine (Requirements → Tasks → PRs → AI Blast Radius), create a project first.
+            <CardTitle className="text-base font-semibold text-zinc-100">No Governed Projects Found</CardTitle>
+            <CardDescription className="text-xs text-zinc-400">
+              To inspect the Traceability Spine (Requirements → Tasks → PRs → AI Blast Radius), create a project first.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="p-0">
             <Link href="/projects">
-              <Button variant="glow" className="gap-2">
-                <Plus className="h-4 w-4" />
+              <Button size="sm" className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
+                <Plus className="h-3.5 w-3.5" />
                 Go to Projects & Create One
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           </CardContent>

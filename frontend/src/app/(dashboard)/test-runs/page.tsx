@@ -11,24 +11,17 @@ import {
   PlayCircle,
   FileCode,
   AlertTriangle,
-  Terminal,
-  Search,
   Filter,
   RefreshCw,
   Loader2,
   AlertCircle,
   Sparkles,
   GitBranch,
-  GitPullRequest,
   Upload,
   ExternalLink,
   Copy,
   Check,
-  Send,
-  Wrench,
-  FileDiff,
   ShieldCheck,
-  Flame,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -181,7 +174,6 @@ export default function TestRunsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      // 1. Fetch repositories concurrently to map real repository names
       let repoMap: Record<string, string> = {};
       try {
         const repoData = await apiClient.get<any[]>("/api/v1/repositories");
@@ -207,7 +199,6 @@ export default function TestRunsPage() {
         console.warn("Could not load repositories for test runs name mapping:", rErr);
       }
 
-      // 2. Fetch test runs
       const data = await apiClient.get<any[]>("/api/v1/test-runs");
       if (Array.isArray(data)) {
         const mapped: TestRun[] = data.map((r) => {
@@ -296,7 +287,7 @@ export default function TestRunsPage() {
     }
   };
 
-  // TEST-UPGRADE-01: Sync GitHub Actions CI
+  // Sync GitHub Actions CI
   const handleSyncWorkflowRuns = async () => {
     const targetRepo = selectedRepoFilter !== "ALL"
       ? repositories.find((r) => r.id === selectedRepoFilter)
@@ -324,7 +315,7 @@ export default function TestRunsPage() {
     }
   };
 
-  // TEST-UPGRADE-02: AI Test Failure Root-Cause Diagnosis
+  // AI Test Failure Root-Cause Diagnosis
   const handleDiagnoseFailure = async (testCase: TestCaseResult) => {
     if (!selectedRun) return;
     setDiagnosingTestName(testCase.name || testCase.testCaseName || "test");
@@ -378,7 +369,7 @@ export default function TestRunsPage() {
     }
   };
 
-  // TEST-UPGRADE-04.2: Upload JUnit XML / Record Run
+  // Upload JUnit XML / Record Run
   const handleRecordRunSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recordRepoId) {
@@ -388,7 +379,6 @@ export default function TestRunsPage() {
 
     setIsSubmittingRun(true);
     try {
-      // 1. Create Test Run
       const runRes = await apiClient.post<any>("/api/v1/test-runs", {
         repositoryId: recordRepoId,
         commitSha: (() => {
@@ -410,7 +400,6 @@ export default function TestRunsPage() {
       const newRunId = runRes?.id;
       if (!newRunId) throw new Error("Failed to initialize TestRun on Testing Service");
 
-      // 2. Ingest JUnit Report if provided
       if (recordXmlContent.trim()) {
         try {
           await apiClient.post(`/api/v1/test-runs/${newRunId}/reports/junit`, recordXmlContent, {
@@ -421,7 +410,6 @@ export default function TestRunsPage() {
         }
       }
 
-      // 3. Complete Run
       await apiClient.post(`/api/v1/test-runs/${newRunId}/complete`, {
         status: "COMPLETED",
       });
@@ -437,7 +425,7 @@ export default function TestRunsPage() {
     }
   };
 
-  // TEST-UPGRADE-03: AI Unit Test Generator
+  // AI Unit Test Generator
   const handleGenerateUnitTests = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!genRepoId) {
@@ -469,7 +457,7 @@ export default function TestRunsPage() {
     }
   };
 
-  // Safe In-App Test Verification Runner (TEST-UPGRADE-03)
+  // Safe In-App Test Verification Runner
   const handleRunAndVerifySuite = async () => {
     if (!generatedSuite || !genRepoId) return;
     setIsVerifyingSuite(true);
@@ -486,7 +474,6 @@ export default function TestRunsPage() {
       );
       setVerifiedResults(resp);
 
-      // Record automatically into Testing Service
       try {
         const selectedRepo = repositories.find((r) => r.id === genRepoId);
         const fallbackSha = (selectedRepo?.latestObservedSha && /^[0-9a-f]{40}$/i.test(selectedRepo.latestObservedSha))
@@ -521,7 +508,7 @@ export default function TestRunsPage() {
     }
   };
 
-  // 1-Click Fix PR for a failing test in the Verification results (TEST-UPGRADE-02 & 04)
+  // 1-Click Fix PR for a failing test in the Verification results
   const handleApplyFixPr = async (diag: DiagnosisResult) => {
     if (!genRepoId) return;
     setApplyingFixForTest(diag.test_name);
@@ -546,43 +533,6 @@ export default function TestRunsPage() {
       setError(formatUserError(err, "Unable to open the remediation pull request on GitHub right now."));
     } finally {
       setApplyingFixForTest(null);
-    }
-  };
-
-  // Execute Generated Suite in Testing Service
-  const handleExecuteGeneratedSuite = async () => {
-    if (!generatedSuite || !genRepoId) return;
-    setIsExecutingSuite(true);
-    try {
-      const selectedRepo = repositories.find((r) => r.id === genRepoId);
-      const fallbackSha = (selectedRepo?.latestObservedSha && /^[0-9a-f]{40}$/i.test(selectedRepo.latestObservedSha))
-        ? selectedRepo.latestObservedSha
-        : (Date.now().toString(16) + "0".repeat(40)).slice(0, 40);
-
-      const runRes = await apiClient.post<any>("/api/v1/test-runs", {
-        repositoryId: genRepoId,
-        commitSha: fallbackSha,
-        branch: "main",
-      });
-      const runId = runRes?.id;
-      if (runId) {
-        await apiClient.post(`/api/v1/test-runs/${runId}/results/batch`, {
-          results: generatedSuite.test_cases.map((tc) => ({
-            testCaseName: tc.name,
-            className: generatedSuite.source_file.replace(/[/.]/g, "_"),
-            status: "PASSED",
-            durationMs: 150,
-          })),
-        });
-        await apiClient.post(`/api/v1/test-runs/${runId}/complete`, { status: "PASSED" });
-      }
-      showNotification("✓ Generated test suite executed & passing run recorded in Testing Service!");
-      await fetchRuns();
-    } catch (err: any) {
-      console.error("Failed to record generated suite in Testing Service:", err);
-      setError(formatUserError(err, "Unable to record the test suite execution right now."));
-    } finally {
-      setIsExecutingSuite(false);
     }
   };
 
@@ -626,158 +576,157 @@ export default function TestRunsPage() {
     ? filteredRuns.reduce((acc, r) => acc + (r.durationMs || 0), 0) / totalRuns
     : 0;
   const meanDurationFormatted = (meanDurationMs / 1000).toFixed(1) + "s";
-
-  // Flaky test / regression detection
   const hasRecentFailures = filteredRuns.slice(0, 5).some((r) => r.status === "FAILED");
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-6 w-6 text-emerald-400" />
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              CI Test Runs & Suite Ingestion
-            </h1>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Deterministic staging verification reports received from GitHub Actions via Testing Service for{" "}
-            <span className="text-emerald-300 font-medium">
-              {isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Workspace"}
-            </span>.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {repositories.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
-              <Filter className="h-3 w-3 text-slate-400" />
-              <select
-                aria-label="Filter Test Runs by Repository"
-                value={selectedRepoFilter}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedRepoFilter(val);
-                  if (typeof window !== "undefined" && val !== "ALL") {
-                    localStorage.setItem("forgeai_selected_repo_id", val);
-                  }
-                }}
-                className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer"
-              >
-                <option value="ALL" className="bg-slate-900 text-white">
-                  All Repositories ({repositories.length})
-                </option>
-                {repositories.map((repo) => (
-                  <option key={repo.id} value={repo.id} className="bg-slate-900 text-white">
-                    {repo.fullName}
-                  </option>
-                ))}
-              </select>
+    <div className="space-y-6">
+      {/* Header Toolbar */}
+      <div className="relative rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.06]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
+                CI Test Runs & Ingestion
+              </h1>
             </div>
-          )}
+            <p className="text-xs text-zinc-400">
+              Deterministic verification telemetry received from GitHub Actions via Testing Service for{" "}
+              <span className="text-zinc-200 font-medium">
+                {isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Workspace"}
+              </span>.
+            </p>
+          </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncWorkflowRuns}
-            disabled={isSyncingCi || isLoading}
-            className="text-xs gap-1.5 border-slate-700 bg-slate-900/60 hover:bg-slate-800"
-          >
-            {isSyncingCi ? <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" /> : <GitBranch className="h-3.5 w-3.5 text-sky-400" />}
-            Sync GitHub Actions CI
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {repositories.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-[#09090B] border border-[#26262C] rounded-md px-2.5 py-1 text-xs">
+                <Filter className="h-3 w-3 text-zinc-500" />
+                <select
+                  aria-label="Filter Test Runs by Repository"
+                  value={selectedRepoFilter}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedRepoFilter(val);
+                    if (typeof window !== "undefined" && val !== "ALL") {
+                      localStorage.setItem("forgeai_selected_repo_id", val);
+                    }
+                  }}
+                  className="bg-transparent text-xs text-zinc-200 font-medium focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL" className="bg-[#09090B] text-zinc-200">
+                    All Repositories ({repositories.length})
+                  </option>
+                  {repositories.map((repo) => (
+                    <option key={repo.id} value={repo.id} className="bg-[#09090B] text-zinc-200">
+                      {repo.fullName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowRecordRunModal(true)}
-            className="text-xs gap-1.5 border-slate-700 bg-slate-900/60 hover:bg-slate-800"
-          >
-            <Upload className="h-3.5 w-3.5 text-purple-400" />
-            Upload JUnit XML
-          </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncWorkflowRuns}
+              disabled={isSyncingCi || isLoading}
+              className="h-8 text-xs gap-1.5 border-[#26262C] bg-[#141418] text-zinc-300"
+            >
+              {isSyncingCi ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5 text-zinc-400" />}
+              Sync GitHub Actions
+            </Button>
 
-          <Button
-            variant="glow"
-            size="sm"
-            onClick={() => setShowGenerateTestsModal(true)}
-            className="text-xs gap-1.5"
-          >
-            Test Studio
-          </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRecordRunModal(true)}
+              className="h-8 text-xs gap-1.5 border-[#26262C] bg-[#141418] text-zinc-300"
+            >
+              <Upload className="h-3.5 w-3.5 text-zinc-400" />
+              Upload JUnit XML
+            </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchRuns}
-            disabled={isLoading}
-            className="text-xs gap-1.5"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+            <Button
+              size="sm"
+              onClick={() => setShowGenerateTestsModal(true)}
+              className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Test Studio
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchRuns}
+              disabled={isLoading}
+              className="h-8 text-xs gap-1 border-[#26262C]"
+            >
+              <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Success Notification Banner */}
       {successToast && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3 text-xs text-emerald-300 animate-in fade-in duration-200">
+        <div className="flex items-center gap-2 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
           <span>{successToast}</span>
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+        <div className="flex items-center gap-2 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-xs text-rose-300">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
-          <div className="text-xs text-slate-400">Total Runs Ingested</div>
-          <div className="text-xl font-bold text-white font-mono">{totalRuns}</div>
-          <div className="text-[10px] text-slate-500">Live staging reports</div>
+      {/* 4-Column Metrics Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-1">
+          <div className="text-xs text-zinc-400">Total Runs Ingested</div>
+          <div className="text-xl font-semibold text-zinc-100 font-mono tabular-nums">{totalRuns}</div>
+          <div className="text-[11px] text-zinc-500 font-mono">Live staging reports</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
-          <div className="text-xs text-slate-400">Pass Rate</div>
-          <div className="text-xl font-bold text-emerald-400 font-mono">{passRate}%</div>
-          <div className="text-[10px] text-emerald-400">{passedRuns} passed / {failedRuns} failed</div>
+        <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-1">
+          <div className="text-xs text-zinc-400">Pass Rate</div>
+          <div className="text-xl font-semibold text-emerald-400 font-mono tabular-nums">{passRate}%</div>
+          <div className="text-[11px] text-zinc-500 font-mono">{passedRuns} passed / {failedRuns} failed</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
-          <div className="text-xs text-slate-400">Mean Duration</div>
-          <div className="text-xl font-bold text-sky-400 font-mono">{meanDurationFormatted}</div>
-          <div className="text-[10px] text-slate-500">Containerized JVM suites</div>
+        <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-1">
+          <div className="text-xs text-zinc-400">Mean Duration</div>
+          <div className="text-xl font-semibold text-zinc-100 font-mono tabular-nums">{meanDurationFormatted}</div>
+          <div className="text-[11px] text-zinc-500 font-mono">Containerized suites</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-1">
-          <div className="text-xs text-slate-400">CI Health Status</div>
+        <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-1">
+          <div className="text-xs text-zinc-400">CI Health Status</div>
           <div className="flex items-center gap-1.5 mt-0.5">
             {hasRecentFailures ? (
-              <span className="text-xs font-bold text-rose-400 flex items-center gap-1 font-mono">
+              <span className="text-xs font-semibold text-rose-400 flex items-center gap-1 font-mono">
                 <AlertTriangle className="h-3.5 w-3.5 text-rose-400" /> Regressions Detected
               </span>
             ) : (
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 font-mono">
+              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1 font-mono">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> All Suites Green
               </span>
             )}
           </div>
-          <div className="text-[10px] text-slate-500">Real-time GitHub Actions</div>
+          <div className="text-[11px] text-zinc-500 font-mono">Real-time GitHub Actions</div>
         </div>
       </div>
 
       {/* Visual Pass/Fail Trend Timeline Bar */}
       {filteredRuns.length > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-2">
+        <div className="rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-3.5 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-300 flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 text-slate-400" />
+            <span className="font-medium text-zinc-300 flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5 text-zinc-400" />
               CI Verification Run History (Most Recent First)
             </span>
-            <div className="flex items-center gap-3 text-[11px] text-slate-400">
+            <div className="flex items-center gap-3 text-[11px] text-zinc-400 font-mono">
               <span className="flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" /> Passed
               </span>
@@ -785,7 +734,7 @@ export default function TestRunsPage() {
                 <span className="h-2 w-2 rounded-full bg-rose-400" /> Failed
               </span>
               <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-amber-400" /> In Progress
+                <span className="h-2 w-2 rounded-full bg-amber-400" /> Running
               </span>
             </div>
           </div>
@@ -795,12 +744,12 @@ export default function TestRunsPage() {
                 key={r.id || idx}
                 onClick={() => openInspector(r)}
                 title={`Run ${r.id.substring(0, 8)} (${r.branch}) - ${r.status} (${r.passedCount}/${r.totalCount})`}
-                className={`h-7 flex-1 min-w-[28px] max-w-[40px] rounded flex items-center justify-center transition-all hover:scale-105 cursor-pointer ${
+                className={`h-6 flex-1 min-w-[26px] max-w-[36px] rounded flex items-center justify-center transition-all cursor-pointer ${
                   r.status === "PASSED"
-                    ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/40"
+                    ? "bg-emerald-950/40 border border-emerald-900 text-emerald-300 hover:bg-emerald-900/50"
                     : r.status === "FAILED"
-                    ? "bg-rose-500/20 border border-rose-500/50 text-rose-300 hover:bg-rose-500/40"
-                    : "bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/40"
+                    ? "bg-rose-950/40 border border-rose-900 text-rose-300 hover:bg-rose-900/50"
+                    : "bg-amber-950/40 border border-amber-900 text-amber-300 hover:bg-amber-900/50"
                 }`}
               >
                 <span className="text-[10px] font-mono font-bold">#{filteredRuns.length - idx}</span>
@@ -811,90 +760,94 @@ export default function TestRunsPage() {
       )}
 
       {/* Ingested Test Runs Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent Verification Runs</CardTitle>
-          <CardDescription>
-            Click any run to inspect test suites, execution metrics, and trigger AI failure diagnosis.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center p-12 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin text-emerald-400 mb-2" />
-              <p className="text-xs">Fetching CI test runs from Gateway...</p>
-            </div>
-          ) : filteredRuns.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center text-slate-400">
-              <CheckCircle2 className="h-10 w-10 text-slate-600 mb-3" />
-              <p className="text-xs font-medium text-white">No test runs ingested yet</p>
-              <p className="text-xs text-slate-500 max-w-sm mt-1">
-                Click <strong>"Sync GitHub Actions CI"</strong> or <strong>"Upload JUnit XML"</strong> to ingest automated test telemetry.
-              </p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Run ID</TableHead>
-                  <TableHead>Repository</TableHead>
-                  <TableHead>Branch / PR</TableHead>
-                  <TableHead>Commit SHA</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Passed / Total</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Ingested At</TableHead>
+      <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
+          <div>
+            <CardTitle className="text-xs font-semibold text-zinc-200">Recent Verification Runs</CardTitle>
+            <CardDescription className="text-[11px] text-zinc-500">
+              Click any run to inspect test suites, execution metrics, and trigger AI failure diagnosis.
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="font-mono text-[10px] text-zinc-400 border-[#26262C]">{filteredRuns.length}</Badge>
+        </div>
+
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center p-12 text-zinc-400">
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mb-2" />
+            <p className="text-xs font-mono">Fetching CI test runs from Gateway...</p>
+          </div>
+        ) : filteredRuns.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center text-zinc-400">
+            <CheckCircle2 className="h-8 w-8 text-zinc-600 mb-2" />
+            <p className="text-xs font-medium text-zinc-200">No test runs ingested yet</p>
+            <p className="text-xs text-zinc-500 max-w-sm mt-1">
+              Click <strong>&quot;Sync GitHub Actions&quot;</strong> or <strong>&quot;Upload JUnit XML&quot;</strong> to ingest automated test telemetry.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="border-[#1C1C21] hover:bg-transparent">
+                <TableHead className="text-xs font-medium text-zinc-400">Run ID</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Repository</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Branch / PR</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Commit SHA</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Status</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Passed / Total</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Duration</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Ingested At</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRuns.map((run) => (
+                <TableRow
+                  key={run.id}
+                  className="cursor-pointer hover:bg-[#141418] transition-colors border-[#1C1C21]"
+                  onClick={() => openInspector(run)}
+                >
+                  <TableCell className="font-mono text-xs font-semibold text-zinc-200">
+                    {run.id.length > 12 ? `${run.id.substring(0, 10)}...` : run.id}
+                  </TableCell>
+                  <TableCell className="text-xs font-medium text-zinc-200">
+                    {run.repositoryFullName}
+                  </TableCell>
+                  <TableCell className="text-xs text-zinc-400 font-mono">
+                    {run.prNumber ? `PR #${run.prNumber}` : run.branch}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-zinc-400">
+                    {run.commitSha.substring(0, 7)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        run.status === "PASSED"
+                          ? "outline"
+                          : run.status === "FAILED"
+                          ? "destructive"
+                          : "outline"
+                      }
+                      className={`text-[10px] font-mono ${
+                        run.status === "PASSED" ? "text-emerald-400 border-emerald-900 bg-emerald-950/20" : ""
+                      }`}
+                    >
+                      {run.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs font-mono tabular-nums">
+                    <span className="text-emerald-400 font-semibold">{run.passedCount}</span>
+                    <span className="text-zinc-600"> / {run.totalCount}</span>
+                  </TableCell>
+                  <TableCell className="text-xs text-zinc-400 font-mono tabular-nums">
+                    {run.durationMs && run.durationMs > 0 ? `${(run.durationMs / 1000).toFixed(2)}s` : "—"}
+                  </TableCell>
+                  <TableCell className="text-xs text-zinc-400 font-mono">
+                    {formatDate(run.createdAt)}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRuns.map((run) => (
-                  <TableRow
-                    key={run.id}
-                    className="cursor-pointer hover:bg-slate-800/40 transition-colors"
-                    onClick={() => openInspector(run)}
-                  >
-                    <TableCell className="font-mono text-xs font-bold text-indigo-300">
-                      {run.id.length > 12 ? `${run.id.substring(0, 10)}...` : run.id}
-                    </TableCell>
-                    <TableCell className="text-xs font-medium text-slate-200">
-                      {run.repositoryFullName}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-400">
-                      {run.prNumber ? `PR #${run.prNumber}` : run.branch}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-400">
-                      {run.commitSha.substring(0, 7)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          run.status === "PASSED"
-                            ? "success"
-                            : run.status === "FAILED"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                        className="text-[10px]"
-                      >
-                        {run.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs font-mono">
-                      <span className="text-emerald-400 font-bold">{run.passedCount}</span>
-                      <span className="text-slate-500"> / {run.totalCount}</span>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-400 font-mono">
-                      {run.durationMs && run.durationMs > 0 ? `${(run.durationMs / 1000).toFixed(2)}s` : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-400">
-                      {formatDate(run.createdAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
 
       {/* Inspector Modal with AI Failure Diagnosis & Fix PR */}
@@ -912,42 +865,42 @@ export default function TestRunsPage() {
             </div>
           </DialogHeader>
 
-          <div className="space-y-4 my-4 max-h-[70vh] overflow-y-auto pr-1">
-            <div className="grid grid-cols-3 gap-2 text-xs bg-slate-900 p-3 rounded-lg border border-slate-800">
+          <div className="space-y-4 my-3 max-h-[70vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-3 gap-2 text-xs bg-[#141418] p-3 rounded-md border border-[#1C1C21]">
               <div>
-                <span className="text-slate-500">Repository: </span>
-                <span className="text-white font-mono">{selectedRun.repositoryFullName}</span>
+                <span className="text-zinc-500">Repository: </span>
+                <span className="text-zinc-200 font-mono">{selectedRun.repositoryFullName}</span>
               </div>
               <div>
-                <span className="text-slate-500">Commit: </span>
-                <span className="text-white font-mono">{selectedRun.commitSha.substring(0, 8)}</span>
+                <span className="text-zinc-500">Commit: </span>
+                <span className="text-zinc-200 font-mono">{selectedRun.commitSha.substring(0, 8)}</span>
               </div>
               <div>
-                <span className="text-slate-500">Duration: </span>
-                <span className="text-white font-mono">
+                <span className="text-zinc-500">Duration: </span>
+                <span className="text-zinc-200 font-mono">
                   {selectedRun.durationMs && selectedRun.durationMs > 0 ? `${(selectedRun.durationMs / 1000).toFixed(2)}s` : "—"}
                 </span>
               </div>
             </div>
 
             {loadingResults ? (
-              <div className="flex items-center justify-center p-8 text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin text-emerald-400 mr-2" />
-                <span className="text-xs">Loading test cases...</span>
+              <div className="flex items-center justify-center p-8 text-zinc-400">
+                <Loader2 className="h-5 w-5 animate-spin text-zinc-400 mr-2" />
+                <span className="text-xs font-mono">Loading test cases...</span>
               </div>
             ) : testResults.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 border border-slate-800 rounded-lg">
+              <div className="p-6 text-center text-xs text-zinc-500 border border-dashed border-[#26262C] rounded-md">
                 No individual test case results stored for this run.
               </div>
             ) : (
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-slate-300">
+              <div className="space-y-1.5">
+                <div className="text-xs font-semibold text-zinc-300">
                   Individual Test Results ({testResults.length})
                 </div>
                 {testResults.map((t, idx) => (
                   <div
                     key={t.id || idx}
-                    className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-2 text-xs"
+                    className="p-3 rounded-md bg-[#141418] border border-[#1C1C21] space-y-2 text-xs"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -957,16 +910,16 @@ export default function TestRunsPage() {
                           <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
                         )}
                         <div>
-                          <div className="font-mono text-white font-medium">
+                          <div className="font-mono text-zinc-200 font-medium">
                             {t.testCaseName || t.name || `Test Case ${idx + 1}`}
                           </div>
                           {(t.className || t.classname) && (
-                            <div className="text-[11px] text-slate-500 font-mono">{t.className || t.classname}</div>
+                            <div className="text-[11px] text-zinc-500 font-mono">{t.className || t.classname}</div>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={t.status === "PASSED" ? "success" : "destructive"} className="text-[10px]">
+                        <Badge variant={t.status === "PASSED" ? "outline" : "destructive"} className={`text-[10px] font-mono ${t.status === "PASSED" ? "text-emerald-400 border-emerald-900" : ""}`}>
                           {t.status}
                         </Badge>
                         {t.status === "FAILED" && (
@@ -975,19 +928,19 @@ export default function TestRunsPage() {
                             size="sm"
                             disabled={diagnosingTestName === (t.name || t.testCaseName)}
                             onClick={() => handleDiagnoseFailure(t)}
-                            className="text-[11px] h-7 px-2.5 border-rose-500/40 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 gap-1"
+                            className="text-[11px] h-6 px-2 border-rose-900 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 gap-1"
                           >
                             {diagnosingTestName === (t.name || t.testCaseName) && (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             )}
-                            Diagnose Failure
+                            Diagnose
                           </Button>
                         )}
                       </div>
                     </div>
 
                     {(t.failureMessage || t.errorMessage) && (
-                      <div className="text-[11px] font-mono text-rose-300 bg-rose-950/40 p-2 rounded border border-rose-500/20">
+                      <div className="text-[11px] font-mono text-rose-300 bg-rose-950/30 p-2 rounded border border-rose-900/50">
                         {t.failureMessage || t.errorMessage}
                       </div>
                     )}
@@ -998,46 +951,46 @@ export default function TestRunsPage() {
 
             {/* AI Diagnosis Result Card */}
             {diagnosisResult && (
-              <div className="p-4 rounded-xl border border-indigo-500/40 bg-indigo-950/20 space-y-3 mt-4">
-                <div className="flex items-center justify-between border-b border-indigo-500/30 pb-2">
-                  <div className="flex items-center gap-2 text-xs font-bold text-indigo-300">
-                    <Sparkles className="h-4 w-4 text-indigo-400" />
+              <div className="p-4 rounded-md border border-[#26262C] bg-[#141418] space-y-3 mt-3">
+                <div className="flex items-center justify-between border-b border-[#26262C] pb-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-zinc-200">
+                    <Sparkles className="h-4 w-4 text-zinc-400" />
                     AI Root-Cause Diagnosis: {diagnosisResult.test_name}
                   </div>
                   <div className="flex items-center gap-2">
                     {diagnosisResult.failure_category && (
-                      <Badge variant="outline" className="text-[10px] font-mono text-amber-300 border-amber-500/40">
+                      <Badge variant="outline" className="text-[10px] font-mono text-amber-400 border-amber-900">
                         {diagnosisResult.failure_category}
                       </Badge>
                     )}
-                    <Badge variant="outline" className="text-[10px] font-mono text-indigo-300 border-indigo-500/40">
+                    <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C]">
                       Confidence: {diagnosisResult.confidence}
                     </Badge>
-                    <Badge variant="outline" className="text-[10px] font-mono text-slate-400">
+                    <Badge variant="outline" className="text-[10px] font-mono text-zinc-400 border-[#26262C]">
                       {diagnosisResult.suspected_file}:{diagnosisResult.suspected_line}
                     </Badge>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold text-slate-300">Root Cause:</div>
-                  <p className="text-xs text-slate-200 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                  <div className="text-xs font-semibold text-zinc-300">Root Cause:</div>
+                  <p className="text-xs text-zinc-200 bg-[#09090B] p-2.5 rounded border border-[#1C1C21]">
                     {diagnosisResult.root_cause}
                   </p>
                 </div>
 
                 {diagnosisResult.why_it_failed_detail && (
                   <div className="space-y-1">
-                    <div className="text-xs font-semibold text-slate-300">Technical Analysis (Why It Failed):</div>
-                    <p className="text-xs text-slate-300 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800 leading-relaxed">
+                    <div className="text-xs font-semibold text-zinc-300">Technical Analysis (Why It Failed):</div>
+                    <p className="text-xs text-zinc-300 bg-[#09090B] p-2.5 rounded border border-[#1C1C21] leading-relaxed">
                       {diagnosisResult.why_it_failed_detail}
                     </p>
                   </div>
                 )}
 
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold text-slate-300">Remediation Steps:</div>
-                  <ul className="text-xs text-slate-300 space-y-1 list-disc list-inside bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                  <div className="text-xs font-semibold text-zinc-300">Remediation Steps:</div>
+                  <ul className="text-xs text-zinc-300 space-y-1 list-disc list-inside bg-[#09090B] p-2.5 rounded border border-[#1C1C21]">
                     {diagnosisResult.remediation_steps.map((step, sIdx) => (
                       <li key={sIdx}>{step}</li>
                     ))}
@@ -1045,11 +998,11 @@ export default function TestRunsPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                  <div className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
                     <span>Proposed Patch Diff:</span>
-                    <span className="text-[10px] font-mono text-slate-500">{diagnosisResult.proposed_fix_title}</span>
+                    <span className="text-[10px] font-mono text-zinc-500">{diagnosisResult.proposed_fix_title}</span>
                   </div>
-                  <pre className="text-[11px] font-mono text-emerald-300 bg-slate-950 p-3 rounded-lg border border-slate-800 overflow-x-auto whitespace-pre">
+                  <pre className="text-[11px] font-mono text-emerald-300 bg-[#09090B] p-3 rounded border border-[#1C1C21] overflow-x-auto whitespace-pre">
                     {diagnosisResult.proposed_fix_diff}
                   </pre>
                 </div>
@@ -1060,18 +1013,17 @@ export default function TestRunsPage() {
                       href={openedPrUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-mono font-semibold"
+                      className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-mono font-semibold"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       View Remediation Pull Request ({openedPrUrl})
                     </a>
                   ) : (
                     <Button
-                      variant="glow"
                       size="sm"
                       onClick={handleOpenFixPr}
                       disabled={isOpeningPr}
-                      className="text-xs gap-1.5"
+                      className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                     >
                       {isOpeningPr ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
                       Open Fix Pull Request
@@ -1083,7 +1035,7 @@ export default function TestRunsPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setSelectedRun(null)}>
+            <Button variant="outline" size="sm" onClick={() => setSelectedRun(null)} className="h-8 text-xs border-[#26262C]">
               Close
             </Button>
           </DialogFooter>
@@ -1104,15 +1056,15 @@ export default function TestRunsPage() {
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleRecordRunSubmit} className="space-y-4 my-3">
+        <form onSubmit={handleRecordRunSubmit} className="space-y-3.5 my-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Target Repository</label>
+              <label className="text-xs font-medium text-zinc-300">Target Repository</label>
               <select
                 aria-label="Target Repository"
                 value={recordRepoId}
                 onChange={(e) => setRecordRepoId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none"
+                className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2 text-xs text-zinc-200 focus:outline-none"
                 required
               >
                 {repositories.map((r) => (
@@ -1123,7 +1075,7 @@ export default function TestRunsPage() {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Branch</label>
+              <label className="text-xs font-medium text-zinc-300">Branch</label>
               <Input
                 value={recordBranch}
                 onChange={(e) => setRecordBranch(e.target.value)}
@@ -1134,7 +1086,7 @@ export default function TestRunsPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">Commit SHA</label>
+            <label className="text-xs font-medium text-zinc-300">Commit SHA</label>
             <Input
               value={recordCommitSha}
               onChange={(e) => setRecordCommitSha(e.target.value)}
@@ -1144,22 +1096,22 @@ export default function TestRunsPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-300">JUnit XML Report Content</label>
+            <label className="text-xs font-medium text-zinc-300">JUnit XML Report Content</label>
             <textarea
               value={recordXmlContent}
               onChange={(e) => setRecordXmlContent(e.target.value)}
               rows={8}
-              className="w-full font-mono text-[11px] bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-300 focus:outline-none"
+              className="w-full font-mono text-[11px] bg-[#09090B] border border-[#26262C] rounded-md p-2.5 text-zinc-300 focus:outline-none"
               placeholder="<?xml version='1.0' encoding='UTF-8'?>..."
               required
             />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => setShowRecordRunModal(false)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowRecordRunModal(false)} className="h-8 text-xs border-[#26262C]">
               Cancel
             </Button>
-            <Button type="submit" variant="glow" size="sm" disabled={isSubmittingRun || !recordRepoId}>
+            <Button type="submit" size="sm" disabled={isSubmittingRun || !recordRepoId} className="h-8 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium">
               {isSubmittingRun ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Upload className="h-3.5 w-3.5 mr-1" />}
               Ingest & Record Run
             </Button>
@@ -1185,12 +1137,12 @@ export default function TestRunsPage() {
           <form onSubmit={handleGenerateUnitTests} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-300">Repository</label>
+                <label className="text-xs font-medium text-zinc-300">Repository</label>
                 <select
                   aria-label="Repository"
                   value={genRepoId}
                   onChange={(e) => setGenRepoId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none"
+                  className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2 text-xs text-zinc-200 focus:outline-none"
                   required
                 >
                   {repositories.map((r) => (
@@ -1201,12 +1153,12 @@ export default function TestRunsPage() {
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-300">Test Framework</label>
+                <label className="text-xs font-medium text-zinc-300">Test Framework</label>
                 <select
                   aria-label="Test Framework"
                   value={genFramework}
                   onChange={(e) => setGenFramework(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none"
+                  className="w-full bg-[#09090B] border border-[#26262C] rounded-md p-2 text-xs text-zinc-200 focus:outline-none"
                 >
                   <option value="AUTO">AUTO (Detect from file)</option>
                   <option value="JUNIT5">JUnit 5 (Java)</option>
@@ -1219,7 +1171,7 @@ export default function TestRunsPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Target Source File (optional)</label>
+              <label className="text-xs font-medium text-zinc-300">Target Source File (optional)</label>
               <Input
                 value={genFilePath}
                 onChange={(e) => setGenFilePath(e.target.value)}
@@ -1228,7 +1180,7 @@ export default function TestRunsPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-300">Requirement Focus</label>
+              <label className="text-xs font-medium text-zinc-300">Requirement Focus</label>
               <Input
                 value={genRequirementTitle}
                 onChange={(e) => setGenRequirementTitle(e.target.value)}
@@ -1238,10 +1190,9 @@ export default function TestRunsPage() {
 
             <Button
               type="submit"
-              variant="glow"
               size="sm"
               disabled={isGeneratingTests || !genRepoId}
-              className="w-full text-xs gap-1.5"
+              className="w-full h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
             >
               {isGeneratingTests ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Generate Test Suite
@@ -1250,14 +1201,14 @@ export default function TestRunsPage() {
 
           {/* Generated Suite Output */}
           {generatedSuite && (
-            <div className="p-4 rounded-xl border border-slate-800 bg-slate-950 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div className="p-4 rounded-md border border-[#26262C] bg-[#141418] space-y-3.5">
+              <div className="flex items-center justify-between border-b border-[#26262C] pb-2">
                 <div>
-                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                  <h4 className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
                     <FileCode className="h-4 w-4 text-emerald-400" />
                     {generatedSuite.test_file_path}
                   </h4>
-                  <span className="text-[10px] text-slate-400 font-mono">
+                  <span className="text-[10px] text-zinc-400 font-mono">
                     Framework: {generatedSuite.framework} | Source: {generatedSuite.source_file}
                   </span>
                 </div>
@@ -1269,7 +1220,7 @@ export default function TestRunsPage() {
                     setCopiedCode(true);
                     setTimeout(() => setCopiedCode(false), 2000);
                   }}
-                  className="text-xs h-7 gap-1"
+                  className="text-xs h-7 gap-1 border-[#26262C]"
                 >
                   {copiedCode ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                   {copiedCode ? "Copied" : "Copy"}
@@ -1278,25 +1229,19 @@ export default function TestRunsPage() {
 
               {/* Test Cases Pill List */}
               <div className="space-y-1.5">
-                <span className="text-[11px] font-semibold text-slate-300">Generated Test Cases:</span>
+                <span className="text-[11px] font-medium text-zinc-300">Generated Test Cases:</span>
                 <div className="grid grid-cols-1 gap-1.5">
                   {generatedSuite.test_cases.map((tc, tcIdx) => (
                     <div
                       key={tcIdx}
-                      className="p-2 rounded bg-slate-900 border border-slate-800 flex items-center justify-between text-xs"
+                      className="p-2 rounded bg-[#09090B] border border-[#1C1C21] flex items-center justify-between text-xs"
                     >
-                      <span className="font-mono text-indigo-300">{tc.name}</span>
+                      <span className="font-mono text-zinc-200">{tc.name}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-400">{tc.description}</span>
+                        <span className="text-[11px] text-zinc-400">{tc.description}</span>
                         <Badge
                           variant="outline"
-                          className={`text-[9px] font-mono ${
-                            tc.category === "SECURITY"
-                              ? "text-purple-400 border-purple-500/40"
-                              : tc.category === "EDGE_CASE"
-                              ? "text-amber-400 border-amber-500/40"
-                              : "text-emerald-400 border-emerald-500/40"
-                          }`}
+                          className="text-[9px] font-mono text-zinc-400 border-[#26262C]"
                         >
                           {tc.category}
                         </Badge>
@@ -1307,25 +1252,25 @@ export default function TestRunsPage() {
               </div>
 
               {/* Code Preview */}
-              <pre className="text-[11px] font-mono text-slate-300 bg-slate-900/90 p-3 rounded-lg border border-slate-800 max-h-48 overflow-y-auto whitespace-pre">
+              <pre className="text-[11px] font-mono text-zinc-300 bg-[#09090B] p-3 rounded border border-[#1C1C21] max-h-48 overflow-y-auto whitespace-pre">
                 {generatedSuite.test_code}
               </pre>
 
-              {/* Action Buttons: Run & Verify Runner & GitHub PR */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#26262C]">
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   onClick={handleRunAndVerifySuite}
                   disabled={isVerifyingSuite}
-                  className="text-xs gap-1.5 bg-indigo-950/40 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/50"
+                  className="h-8 text-xs gap-1.5 border-[#26262C] text-zinc-200"
                 >
                   {isVerifyingSuite ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <PlayCircle className="h-3.5 w-3.5 text-indigo-400" />
+                    <PlayCircle className="h-3.5 w-3.5 text-zinc-400" />
                   )}
-                  2. Run & Verify Suite Now
+                  Run & Verify Suite Now
                 </Button>
 
                 <div className="flex items-center gap-2">
@@ -1334,21 +1279,20 @@ export default function TestRunsPage() {
                       href={committedPrUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-mono font-semibold"
+                      className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-mono font-semibold"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                       View Test Suite PR
                     </a>
                   ) : (
                     <Button
-                      variant="glow"
                       size="sm"
                       onClick={handleCommitTestsPr}
                       disabled={isCommittingPr}
-                      className="text-xs gap-1"
+                      className="h-8 text-xs gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                     >
                       {isCommittingPr ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
-                      3. Commit Test Suite via GitHub PR
+                      Commit via PR
                     </Button>
                   )}
                 </div>
@@ -1356,17 +1300,17 @@ export default function TestRunsPage() {
 
               {/* Safe In-App Test Verification Results Panel */}
               {verifiedResults && (
-                <div className="p-4 rounded-xl border border-indigo-500/40 bg-indigo-950/20 space-y-3 mt-3">
-                  <div className="flex items-center justify-between border-b border-indigo-500/30 pb-2">
+                <div className="p-4 rounded-md border border-[#26262C] bg-[#141418] space-y-3 mt-3">
+                  <div className="flex items-center justify-between border-b border-[#26262C] pb-2">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                      <span className="text-xs font-bold text-white">Safe Verification Runner Results</span>
+                      <span className="text-xs font-semibold text-zinc-100">Verification Runner Results</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] font-mono text-slate-300">
+                      <Badge variant="outline" className="text-[10px] font-mono text-zinc-300 border-[#26262C]">
                         {verifiedResults.framework}
                       </Badge>
-                      <Badge variant="success" className="text-[10px] font-mono">
+                      <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-900">
                         {verifiedResults.passed_tests} Passed
                       </Badge>
                       {verifiedResults.failed_tests > 0 && (
@@ -1374,7 +1318,7 @@ export default function TestRunsPage() {
                           {verifiedResults.failed_tests} Failed
                         </Badge>
                       )}
-                      <span className="text-[10px] font-mono text-slate-400">
+                      <span className="text-[10px] font-mono text-zinc-400">
                         {(verifiedResults.duration_ms / 1000).toFixed(2)}s
                       </span>
                     </div>
@@ -1385,10 +1329,10 @@ export default function TestRunsPage() {
                     {verifiedResults.results.map((r, rIdx) => (
                       <div
                         key={rIdx}
-                        className={`p-3 rounded-lg border text-xs space-y-2 ${
+                        className={`p-3 rounded border text-xs space-y-2 ${
                           r.status === "PASSED"
-                            ? "bg-emerald-950/10 border-emerald-500/20"
-                            : "bg-rose-950/20 border-rose-500/30"
+                            ? "bg-[#09090B] border-[#1C1C21]"
+                            : "bg-rose-950/20 border-rose-900"
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -1398,51 +1342,50 @@ export default function TestRunsPage() {
                             ) : (
                               <AlertCircle className="h-3.5 w-3.5 text-rose-400" />
                             )}
-                            <span className="font-mono font-semibold text-white">{r.name}</span>
+                            <span className="font-mono font-semibold text-zinc-200">{r.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-slate-400">{r.duration_ms}ms</span>
-                            <Badge variant={r.status === "PASSED" ? "success" : "destructive"} className="text-[10px]">
+                            <span className="text-[10px] font-mono text-zinc-400">{r.duration_ms}ms</span>
+                            <Badge variant={r.status === "PASSED" ? "outline" : "destructive"} className="text-[10px] font-mono">
                               {r.status}
                             </Badge>
                           </div>
                         </div>
 
-                        {/* Error stack if failed */}
                         {r.error_message && (
-                          <div className="text-[11px] font-mono text-rose-300 bg-rose-950/40 p-2 rounded border border-rose-500/20">
+                          <div className="text-[11px] font-mono text-rose-300 bg-rose-950/30 p-2 rounded border border-rose-900/50">
                             {r.error_message}
                           </div>
                         )}
 
                         {/* AI Root-Cause Failure Diagnosis Card */}
                         {r.ai_failure_diagnosis && (
-                          <div className="p-3 rounded-lg bg-slate-950 border border-indigo-500/40 space-y-2.5 mt-2">
-                            <div className="flex items-center justify-between border-b border-indigo-500/20 pb-1.5">
-                              <span className="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
-                                <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
+                          <div className="p-3 rounded bg-[#09090B] border border-[#26262C] space-y-2 mt-2">
+                            <div className="flex items-center justify-between border-b border-[#1C1C21] pb-1.5">
+                              <span className="text-[11px] font-semibold text-zinc-300 flex items-center gap-1.5">
+                                <Sparkles className="h-3.5 w-3.5 text-zinc-400" />
                                 AI Root-Cause Analysis ({r.ai_failure_diagnosis.failure_category || "ASSERTION_MISMATCH"})
                               </span>
-                              <Badge variant="outline" className="text-[9px] font-mono text-slate-400">
+                              <Badge variant="outline" className="text-[9px] font-mono text-zinc-400 border-[#26262C]">
                                 {r.ai_failure_diagnosis.suspected_file}:{r.ai_failure_diagnosis.suspected_line}
                               </Badge>
                             </div>
 
-                            <p className="text-[11px] text-slate-200 bg-slate-900/70 p-2 rounded border border-slate-800">
+                            <p className="text-[11px] text-zinc-200 bg-[#141418] p-2 rounded border border-[#1C1C21]">
                               <span className="font-semibold text-amber-400">Root Cause: </span>
                               {r.ai_failure_diagnosis.root_cause}
                             </p>
 
                             {r.ai_failure_diagnosis.why_it_failed_detail && (
-                              <p className="text-[11px] text-slate-300 bg-slate-900/40 p-2 rounded border border-slate-800/80 leading-relaxed">
-                                <span className="font-semibold text-sky-400">Why It Failed: </span>
+                              <p className="text-[11px] text-zinc-300 bg-[#141418] p-2 rounded border border-[#1C1C21] leading-relaxed">
+                                <span className="font-semibold text-zinc-200">Why It Failed: </span>
                                 {r.ai_failure_diagnosis.why_it_failed_detail}
                               </p>
                             )}
 
                             <div className="space-y-1">
-                              <span className="text-[10px] font-semibold text-slate-300">Remediation Steps:</span>
-                              <ul className="text-[10px] text-slate-300 space-y-0.5 list-disc list-inside bg-slate-900/40 p-2 rounded border border-slate-800">
+                              <span className="text-[10px] font-medium text-zinc-400">Remediation Steps:</span>
+                              <ul className="text-[10px] text-zinc-300 space-y-0.5 list-disc list-inside bg-[#141418] p-2 rounded border border-[#1C1C21]">
                                 {r.ai_failure_diagnosis.remediation_steps.map((st, stIdx) => (
                                   <li key={stIdx}>{st}</li>
                                 ))}
@@ -1450,11 +1393,11 @@ export default function TestRunsPage() {
                             </div>
 
                             <div className="space-y-1">
-                              <div className="text-[10px] font-semibold text-slate-300 flex items-center justify-between">
+                              <div className="text-[10px] font-medium text-zinc-400 flex items-center justify-between">
                                 <span>Proposed Code Fix:</span>
-                                <span className="text-[9px] font-mono text-slate-500">{r.ai_failure_diagnosis.proposed_fix_title}</span>
+                                <span className="text-[9px] font-mono text-zinc-500">{r.ai_failure_diagnosis.proposed_fix_title}</span>
                               </div>
-                              <pre className="text-[10px] font-mono text-emerald-300 bg-slate-900 p-2.5 rounded border border-slate-800 overflow-x-auto whitespace-pre">
+                              <pre className="text-[10px] font-mono text-emerald-300 bg-[#141418] p-2 rounded border border-[#1C1C21] overflow-x-auto whitespace-pre">
                                 {r.ai_failure_diagnosis.proposed_fix_diff}
                               </pre>
                             </div>
@@ -1465,18 +1408,17 @@ export default function TestRunsPage() {
                                   href={fixPrUrlMap[r.name]}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-mono font-semibold"
+                                  className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 font-mono font-semibold"
                                 >
                                   <ExternalLink className="h-3 w-3" />
                                   View Fix PR ({fixPrUrlMap[r.name]})
                                 </a>
                               ) : (
                                 <Button
-                                  variant="glow"
                                   size="sm"
                                   disabled={applyingFixForTest === r.name}
                                   onClick={() => handleApplyFixPr(r.ai_failure_diagnosis!)}
-                                  className="text-[11px] h-7 gap-1"
+                                  className="h-7 text-[11px] gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                                 >
                                   {applyingFixForTest === r.name && (
                                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -1497,7 +1439,7 @@ export default function TestRunsPage() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setShowGenerateTestsModal(false)}>
+          <Button variant="outline" size="sm" onClick={() => setShowGenerateTestsModal(false)} className="h-8 text-xs border-[#26262C]">
             Close
           </Button>
         </DialogFooter>

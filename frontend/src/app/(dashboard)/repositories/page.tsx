@@ -6,7 +6,6 @@ import {
   Repository,
   GitHubHealth,
   AvailableRepository,
-  ReconciliationReport,
   GitHubConnectionResponse,
   GitHubConnectionState,
 } from "@/types";
@@ -28,12 +27,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Check,
-  ServerOff,
-  Sparkles,
-  Layers,
   CheckSquare,
   Square,
-  ArrowRight,
   Trash2,
 } from "lucide-react";
 
@@ -195,7 +190,7 @@ export default function RepositoriesPage() {
     }
   }, [fetchData, isTenantLoading]);
 
-  // Auto-detect GitHub App Setup Callback from URL (?installation_id=..., ?state=..., ?installed=true, ?error=...)
+  // Auto-detect GitHub App Setup Callback from URL
   useEffect(() => {
     if (typeof window === "undefined" || !activeWorkspace?.id) return;
     const params = new URLSearchParams(window.location.search);
@@ -226,10 +221,8 @@ export default function RepositoriesPage() {
         setIsConnecting(true);
         setError(null);
 
-        // Remove query parameters from URL cleanly
         window.history.replaceState({}, document.title, window.location.pathname);
 
-        // Forward to installation-callback if state exists, or connect endpoint
         const callbackEndpoint = stateParam ? "/api/v1/github/installation-callback" : "/api/v1/github/connect";
         const callbackPayload = stateParam
           ? { workspaceId: activeWorkspace.id, installationId: parsedId, state: stateParam }
@@ -255,13 +248,12 @@ export default function RepositoriesPage() {
     }
   }, [activeWorkspace?.id, fetchData]);
 
-  // Single primary user action: Connect GitHub / Continue GitHub Setup / Add Repositories
+  // Single primary user action
   const handlePrimaryAction = async () => {
     if (!activeWorkspace?.id) return;
     setError(null);
     setSuccess(null);
 
-    // Case 1: GitHub user is not authenticated yet -> launch GitHub OAuth
     if (!connection?.githubUserConnected) {
       setConnectionState("AUTHENTICATING_GITHUB");
       setIsConnecting(true);
@@ -288,7 +280,6 @@ export default function RepositoriesPage() {
       return;
     }
 
-    // Case 2: GitHub user is connected, but App is not installed -> launch GitHub App installation with secure state
     if (connection?.installationRequired || connection?.installationStatus !== "ACTIVE") {
       setConnectionState("GITHUB_APP_INSTALLING");
       setIsConnecting(true);
@@ -316,7 +307,6 @@ export default function RepositoriesPage() {
       return;
     }
 
-    // Case 3: App is already installed and verified -> Open Repository Import dialog
     handleOpenConnectModal();
   };
 
@@ -417,7 +407,7 @@ export default function RepositoriesPage() {
     }
   };
 
-  // Single-repo 1-click connect
+  // Single-repo connect
   const handleConnectSingle = async (fullName: string) => {
     if (!activeWorkspace?.id || !fullName) return;
     setImportingRepoName(fullName);
@@ -486,7 +476,7 @@ export default function RepositoriesPage() {
     const status = (repo.syncStatus || "SYNCED").toUpperCase();
     if (status === "SYNCED") {
       return (
-        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1 py-0.5">
+        <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-900 bg-emerald-950/20 gap-1 py-0.5">
           <CheckCircle2 className="h-3 w-3" />
           Synchronized
         </Badge>
@@ -494,7 +484,7 @@ export default function RepositoriesPage() {
     }
     if (status === "SYNCING") {
       return (
-        <Badge variant="outline" className="text-[10px] text-sky-400 border-sky-500/30 bg-sky-500/10 gap-1 py-0.5">
+        <Badge variant="outline" className="font-mono text-[10px] text-sky-400 border-sky-900 bg-sky-950/20 gap-1 py-0.5">
           <Loader2 className="h-3 w-3 animate-spin" />
           Syncing
         </Badge>
@@ -502,7 +492,7 @@ export default function RepositoriesPage() {
     }
     if (status === "STALE") {
       return (
-        <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 bg-amber-500/10 gap-1 py-0.5">
+        <Badge variant="outline" className="font-mono text-[10px] text-amber-400 border-amber-900 bg-amber-950/20 gap-1 py-0.5">
           <AlertCircle className="h-3 w-3" />
           Stale
         </Badge>
@@ -511,7 +501,7 @@ export default function RepositoriesPage() {
     return (
       <Badge
         variant="outline"
-        className="text-[10px] text-rose-400 border-rose-500/30 bg-rose-500/10 gap-1 py-0.5 cursor-help"
+        className="font-mono text-[10px] text-rose-400 border-rose-900 bg-rose-950/20 gap-1 py-0.5 cursor-help"
         title={repo.lastError || "Repository synchronization failed"}
       >
         <AlertTriangle className="h-3 w-3" />
@@ -530,57 +520,63 @@ export default function RepositoriesPage() {
     return "Add Repositories";
   };
 
+  const shouldShowLoading = isLoading || isTenantLoading;
+  const shouldShowError = !shouldShowLoading && error !== null;
+  const shouldShowEmpty = !shouldShowLoading && !shouldShowError && repositories.length === 0;
+  const shouldShowTable = !shouldShowLoading && !shouldShowError && repositories.length > 0;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <Radio className="h-6 w-6 text-sky-400" />
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              Connected Source Control Repositories
-            </h1>
+      <div className="relative rounded-lg border border-[#1C1C21] bg-[#0E0E11] p-5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/[0.06]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Radio className="h-5 w-5 text-zinc-300" />
+              <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
+                Connected Source Control Repositories
+              </h1>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Automatic GitHub App discovery, cryptographic webhook verification, and workspace traceability for{" "}
+              <span className="text-zinc-200 font-medium">{workspaceDisplayName}</span>.
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Automatic GitHub App discovery, cryptographic webhook verification, and workspace traceability for{" "}
-            <span className="text-sky-300 font-medium">{workspaceDisplayName}</span>.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={isLoading || isReconciling}
-            className="gap-2"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-            Sync Now
-          </Button>
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              disabled={isLoading || isReconciling}
+              className="h-8 text-xs gap-1.5 border-[#26262C] bg-[#141418] text-zinc-300"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              Sync Now
+            </Button>
 
-          <Button
-            variant="glow"
-            size="sm"
-            onClick={handlePrimaryAction}
-            disabled={isConnecting || isLoading}
-            className="gap-2"
-          >
-            {isConnecting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : connection?.installationStatus === "ACTIVE" ? (
-              <Plus className="h-4 w-4" />
-            ) : (
-              <GitHubIcon className="h-4 w-4" />
-            )}
-            {getPrimaryButtonText()}
-          </Button>
+            <Button
+              size="sm"
+              onClick={handlePrimaryAction}
+              disabled={isConnecting || isLoading}
+              className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
+            >
+              {isConnecting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : connection?.installationStatus === "ACTIVE" ? (
+                <Plus className="h-3.5 w-3.5" />
+              ) : (
+                <GitHubIcon className="h-3.5 w-3.5" />
+              )}
+              {getPrimaryButtonText()}
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Global Alerts */}
       {error && (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-rose-500/30 bg-rose-950/40 p-3 text-xs text-rose-300">
+        <div className="flex items-center justify-between gap-2 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-xs text-rose-300">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
@@ -597,122 +593,120 @@ export default function RepositoriesPage() {
       )}
 
       {success && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-3 text-xs text-emerald-300">
+        <div className="flex items-center gap-2 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
           <span>{success}</span>
         </div>
       )}
 
-      {/* Unified Connection Status Banner (Section 16 State Model) */}
+      {/* Unified Connection Status Banner */}
       {!connection?.githubUserConnected ? (
         /* State 1: Not connected */
-        <Card className="border-sky-500/20 bg-slate-900/50">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-6">
-            <div className="flex items-start md:items-center gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 border border-slate-700 text-slate-300">
-                <GitHubIcon className="h-6 w-6" />
+        <Card className="p-4 border-[#1C1C21] bg-[#0E0E11]">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start md:items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#141418] border border-[#26262C] text-zinc-300">
+                <GitHubIcon className="h-5 w-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="text-base font-semibold text-white">GitHub</h4>
-                  <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700">
+                  <h4 className="text-sm font-semibold text-zinc-100">GitHub</h4>
+                  <Badge variant="outline" className="font-mono text-[10px] text-zinc-400 border-[#26262C]">
                     Not connected
                   </Badge>
                 </div>
-                <p className="text-xs text-slate-400 mt-1 max-w-xl leading-relaxed">
+                <p className="text-xs text-zinc-400 mt-0.5 max-w-xl leading-relaxed">
                   Connect your GitHub account to enable automatic repository discovery, webhook verification, and workspace traceability.
                 </p>
               </div>
             </div>
 
             <Button
-              variant="glow"
               size="sm"
               onClick={handlePrimaryAction}
               disabled={isConnecting}
-              className="gap-2 shrink-0"
+              className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium shrink-0"
             >
               {isConnecting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Connecting...
                 </>
               ) : (
                 <>
-                  <GitHubIcon className="h-4 w-4" />
+                  <GitHubIcon className="h-3.5 w-3.5" />
                   Connect GitHub
                 </>
               )}
             </Button>
-          </CardContent>
+          </div>
         </Card>
       ) : connection?.installationRequired || connection?.installationStatus !== "ACTIVE" ? (
         /* State 2: OAuth connected, App missing */
-        <Card className="border-amber-500/30 bg-amber-950/20">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-6">
-            <div className="flex items-start md:items-center gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400">
-                <Sparkles className="h-6 w-6" />
+        <Card className="p-4 border-amber-900/60 bg-amber-950/20">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start md:items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-950/40 border border-amber-800 text-amber-400">
+                <ShieldAlert className="h-5 w-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="text-base font-semibold text-white">GitHub: Connected as @{connection.githubLogin}</h4>
-                  <Badge variant="outline" className="text-[10px] text-amber-300 border-amber-500/40">
+                  <h4 className="text-sm font-semibold text-zinc-100">GitHub: Connected as @{connection.githubLogin}</h4>
+                  <Badge variant="outline" className="font-mono text-[10px] text-amber-300 border-amber-800">
                     Needs repository access
                   </Badge>
                 </div>
-                <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                <p className="text-xs text-zinc-300 mt-0.5 max-w-xl leading-relaxed">
                   ForgeAI needs repository access through the GitHub App. Click below to approve repository permissions and complete your connection.
                 </p>
               </div>
             </div>
 
             <Button
-              variant="glow"
               size="sm"
               onClick={handlePrimaryAction}
-              className="gap-2 shrink-0 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold"
+              className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium shrink-0"
             >
-              <ArrowRight className="h-4 w-4" />
+              <Check className="h-3.5 w-3.5" />
               Continue GitHub Setup
             </Button>
-          </CardContent>
+          </div>
         </Card>
       ) : (
         /* State 3: App installed & Ready */
-        <Card className="border-emerald-500/30 bg-emerald-950/10">
-          <CardContent className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-5">
-            <div className="flex items-start md:items-center gap-3.5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                <ShieldCheck className="h-6 w-6" />
+        <Card className="p-4 border-[#1C1C21] bg-[#0E0E11]">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start md:items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-950/30 text-emerald-400 border border-emerald-900/60">
+                <ShieldCheck className="h-5 w-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className="text-sm font-semibold text-white">GitHub: Connected as @{connection.githubLogin}</h4>
-                  <Badge variant="success" className="text-[10px]">
-                    ForgeAI App Connected
+                  <h4 className="text-sm font-semibold text-zinc-100">GitHub: Connected as @{connection.githubLogin}</h4>
+                  <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-900">
+                    App Active
                   </Badge>
-                  <Badge variant="outline" className="text-[10px] text-sky-400 border-sky-500/30 font-mono">
+                  <Badge variant="outline" className="text-[10px] text-zinc-300 border-[#26262C] font-mono">
                     {connection.repositoriesAvailable} repositories available
                   </Badge>
-                  <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700">
+                  <Badge variant="outline" className="text-[10px] text-zinc-400 border-[#26262C] font-mono">
                     {connection.workspaceScope}
                   </Badge>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Repositories synchronized with ForgeAI. Webhooks verified with HMAC SHA-256.
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Repositories synchronized with ForgeAI. Cryptographic webhooks verified with HMAC SHA-256.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               {connection.installationId && (
                 <a
                   href={`https://github.com/settings/installations/${connection.installationId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs border-slate-700 hover:text-white">
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs border-[#26262C] hover:text-white">
                     <ExternalLink className="h-3 w-3" />
                     Configure on GitHub
                   </Button>
@@ -723,103 +717,110 @@ export default function RepositoriesPage() {
                 size="sm"
                 onClick={handleReconcile}
                 disabled={isReconciling}
-                className="gap-2 text-xs border-emerald-500/30 hover:bg-emerald-950/20"
+                className="h-8 gap-1.5 text-xs border-[#26262C] text-zinc-300"
               >
                 <RefreshCw className={`h-3 w-3 ${isReconciling ? "animate-spin" : ""}`} />
                 {isReconciling ? "Reconciling..." : "Reconcile Access"}
               </Button>
               <Button
-                variant="glow"
                 size="sm"
                 onClick={handleOpenConnectModal}
-                className="gap-2 text-xs"
+                className="h-8 gap-1.5 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add Repositories
               </Button>
             </div>
-          </CardContent>
+          </div>
         </Card>
       )}
 
-      {/* Connected Repositories Table */}
-      <Card>
-        <div className="flex items-center justify-between border-b border-slate-800 p-4">
+      {/* Connected Repositories Table Card */}
+      <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
           <div className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-sky-400" />
-            <h3 className="text-sm font-medium text-white">Connected Repositories</h3>
-            <Badge variant="outline" className="text-xs">{repositories.length}</Badge>
+            <GitBranch className="h-4 w-4 text-zinc-400" />
+            <h3 className="text-xs font-semibold text-zinc-200">Connected Repositories</h3>
+            <Badge variant="outline" className="font-mono text-[10px] text-zinc-400 border-[#26262C]">{repositories.length}</Badge>
           </div>
           {connection?.installationStatus === "ACTIVE" && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleOpenConnectModal}
-              className="gap-1 text-xs"
+              className="h-7 gap-1 text-xs border-[#26262C] text-zinc-300"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-3 w-3" />
               Add Repositories
             </Button>
           )}
         </div>
 
-        {repositories.length === 0 ? (
+        {shouldShowLoading && (
+          <div className="flex flex-col items-center justify-center p-12 text-zinc-400">
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-400 mb-2" />
+            <p className="text-xs font-mono">Loading repositories...</p>
+          </div>
+        )}
+
+        {shouldShowEmpty && (
           <div className="flex flex-col items-center justify-center p-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-800/80 text-slate-400 mb-4 border border-slate-700">
-              <GitBranch className="h-6 w-6" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[#141418] text-zinc-500 mb-3 border border-[#26262C]">
+              <GitBranch className="h-5 w-5" />
             </div>
-            <h3 className="text-base font-semibold text-white">No repositories connected yet</h3>
-            <p className="text-xs text-slate-400 max-w-sm mt-1 mb-6">
+            <h3 className="text-sm font-semibold text-zinc-200">No repositories connected yet</h3>
+            <p className="text-xs text-zinc-400 max-w-sm mt-1 mb-5">
               Connect your GitHub account or import accessible repositories to start tracking code, pull requests, and CI runs.
             </p>
             <Button
-              variant="glow"
               size="sm"
               onClick={handlePrimaryAction}
               disabled={isConnecting}
-              className="gap-2"
+              className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
             >
               {connection?.installationStatus === "ACTIVE" ? (
                 <>
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5" />
                   Add Repositories
                 </>
               ) : (
                 <>
-                  <GitHubIcon className="h-4 w-4" />
+                  <GitHubIcon className="h-3.5 w-3.5" />
                   Connect GitHub
                 </>
               )}
             </Button>
           </div>
-        ) : (
+        )}
+
+        {shouldShowTable && (
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-800 hover:bg-transparent">
-                <TableHead className="text-xs">Repository</TableHead>
-                <TableHead className="text-xs">Visibility</TableHead>
-                <TableHead className="text-xs">Default Branch</TableHead>
-                <TableHead className="text-xs">Scope</TableHead>
-                <TableHead className="text-xs">Sync Status</TableHead>
-                <TableHead className="text-xs">Last Synchronized</TableHead>
-                <TableHead className="text-xs text-right">Actions</TableHead>
+              <TableRow className="border-[#1C1C21] hover:bg-transparent">
+                <TableHead className="text-xs font-medium text-zinc-400">Repository</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Visibility</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Default Branch</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Scope</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Sync Status</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400">Last Synchronized</TableHead>
+                <TableHead className="text-xs font-medium text-zinc-400 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {repositories.map((repo) => (
-                <TableRow key={repo.id} className="border-slate-800 hover:bg-slate-900/40">
+                <TableRow key={repo.id} className="border-[#1C1C21] hover:bg-[#141418]">
                   <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-sky-400 border border-slate-700/60">
-                        {repo.isPrivate ? <Lock className="h-4 w-4 text-amber-400" /> : <Globe className="h-4 w-4" />}
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 items-center justify-center rounded bg-[#141418] text-zinc-400 border border-[#26262C]">
+                        {repo.isPrivate ? <Lock className="h-3.5 w-3.5 text-amber-400" /> : <Globe className="h-3.5 w-3.5" />}
                       </div>
                       <div>
-                        <div className="font-medium text-white text-xs">{repo.fullName}</div>
+                        <div className="font-medium text-zinc-200 text-xs">{repo.fullName}</div>
                         <a
                           href={`https://github.com/${repo.fullName}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11px] text-slate-400 hover:text-sky-400 flex items-center gap-1 mt-0.5"
+                          className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
                         >
                           View on GitHub
                           <ExternalLink className="h-2.5 w-2.5" />
@@ -830,10 +831,10 @@ export default function RepositoriesPage() {
                   <TableCell>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] ${
+                      className={`font-mono text-[10px] ${
                         repo.isPrivate
-                          ? "border-amber-500/30 text-amber-400 bg-amber-500/10"
-                          : "border-slate-700 text-slate-300"
+                          ? "border-amber-900 text-amber-400 bg-amber-950/20"
+                          : "border-[#26262C] text-zinc-400"
                       }`}
                     >
                       {repo.isPrivate ? "Private" : "Public"}
@@ -841,23 +842,23 @@ export default function RepositoriesPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs text-slate-300">{repo.defaultBranch}</span>
+                      <span className="font-mono text-xs text-zinc-300">{repo.defaultBranch}</span>
                       {repo.latestObservedSha && (
-                        <Badge variant="outline" className="text-[9px] font-mono text-slate-400 border-slate-700/60 px-1 py-0">
+                        <Badge variant="outline" className="text-[9px] font-mono text-zinc-400 border-[#26262C] px-1 py-0">
                           {repo.latestObservedSha.slice(0, 7)}
                         </Badge>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-400">
+                    <Badge variant="outline" className="font-mono text-[10px] border-[#26262C] text-zinc-400">
                       {repo.scope || "PERSONAL"}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     {renderSyncStatusBadge(repo)}
                   </TableCell>
-                  <TableCell className="text-xs text-slate-400 font-mono">
+                  <TableCell className="text-xs text-zinc-400 font-mono">
                     {repo.lastSyncAt ? formatDate(repo.lastSyncAt) : "Just now"}
                   </TableCell>
                   <TableCell className="text-right">
@@ -867,10 +868,10 @@ export default function RepositoriesPage() {
                         size="sm"
                         onClick={() => handleSyncRepository(repo.id, repo.fullName)}
                         disabled={syncingRepoId === repo.id || disconnectingRepoId === repo.id}
-                        className="text-slate-400 hover:text-sky-400 hover:bg-sky-950/20 text-xs gap-1.5 h-8 px-2.5"
+                        className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 text-xs gap-1 h-7 px-2"
                         title="Re-synchronize repository commits, pull requests, and webhooks"
                       >
-                        <RefreshCw className={`h-3.5 w-3.5 ${syncingRepoId === repo.id ? "animate-spin" : ""}`} />
+                        <RefreshCw className={`h-3 w-3 ${syncingRepoId === repo.id ? "animate-spin" : ""}`} />
                         Sync
                       </Button>
                       <Button
@@ -878,13 +879,13 @@ export default function RepositoriesPage() {
                         size="sm"
                         onClick={() => handleDisconnectRepository(repo.id, repo.fullName)}
                         disabled={disconnectingRepoId === repo.id || syncingRepoId === repo.id}
-                        className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 text-xs gap-1.5 h-8 px-2.5"
+                        className="text-zinc-400 hover:text-rose-400 hover:bg-rose-950/20 text-xs gap-1 h-7 px-2"
                         title="Disconnect repository from workspace"
                       >
                         {disconnectingRepoId === repo.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin" />
                         ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3 w-3" />
                         )}
                         Disconnect
                       </Button>
@@ -899,17 +900,17 @@ export default function RepositoriesPage() {
 
       {/* Available on GitHub Section */}
       {availableRepos.length > 0 && (
-        <Card>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 p-4">
+        <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#1C1C21]">
             <div>
               <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-sky-400" />
-                <h3 className="text-sm font-medium text-white">Available on GitHub</h3>
-                <Badge variant="outline" className="text-xs text-slate-300">
+                <Globe className="h-4 w-4 text-zinc-400" />
+                <h3 className="text-xs font-semibold text-zinc-200">Available on GitHub</h3>
+                <Badge variant="outline" className="font-mono text-[10px] text-zinc-400 border-[#26262C]">
                   {availableRepos.length}
                 </Badge>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-[11px] text-zinc-500 mt-0.5">
                 Discovered from your GitHub account. Click to connect any repository to this workspace.
               </p>
             </div>
@@ -921,56 +922,55 @@ export default function RepositoriesPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                    <ExternalLink className="h-3.5 w-3.5" />
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs border-[#26262C] text-zinc-300">
+                    <ExternalLink className="h-3 w-3" />
                     Configure on GitHub
                   </Button>
                 </a>
               )}
               {unimportedAvailable.length > 0 && (
                 <Button
-                  variant="glow"
                   size="sm"
                   onClick={handleOpenConnectModal}
-                  className="gap-1.5 text-xs"
+                  className="h-7 gap-1 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-3 w-3" />
                   Import Selected ({unimportedAvailable.length})
                 </Button>
               )}
             </div>
           </div>
 
-          <div className="divide-y divide-slate-800/60">
+          <div className="divide-y divide-[#1C1C21]">
             {availableRepos.map((repo) => {
               const isAlreadyConnected = existingRepoFullNames.has(repo.fullName.toLowerCase());
               return (
                 <div
                   key={repo.id}
-                  className="flex items-center justify-between p-4 hover:bg-slate-900/30 transition-colors"
+                  className="flex items-center justify-between py-2.5 hover:bg-[#141418] transition-colors rounded-sm px-2"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/80 text-slate-300">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-7 w-7 items-center justify-center rounded bg-[#141418] text-zinc-400 border border-[#26262C]">
                       {repo.isPrivate ? (
-                        <Lock className="h-4 w-4 text-amber-400" />
+                        <Lock className="h-3.5 w-3.5 text-amber-400" />
                       ) : (
-                        <Globe className="h-4 w-4 text-sky-400" />
+                        <Globe className="h-3.5 w-3.5 text-zinc-400" />
                       )}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-white">{repo.fullName}</span>
+                        <span className="text-xs font-semibold text-zinc-200">{repo.fullName}</span>
                         <Badge
                           variant="outline"
-                          className={`text-[10px] ${
+                          className={`font-mono text-[9px] ${
                             repo.isPrivate
-                              ? "text-amber-400 border-amber-500/30"
-                              : "text-slate-400 border-slate-700"
+                              ? "text-amber-400 border-amber-900"
+                              : "text-zinc-500 border-[#26262C]"
                           }`}
                         >
                           {repo.isPrivate ? "Private" : "Public"}
                         </Badge>
-                        <span className="text-[11px] text-slate-500 font-mono">
+                        <span className="text-[10px] text-zinc-500 font-mono">
                           branch: {repo.defaultBranch}
                         </span>
                       </div>
@@ -978,10 +978,10 @@ export default function RepositoriesPage() {
                         href={`https://github.com/${repo.fullName}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-slate-400 hover:text-sky-400 flex items-center gap-1 mt-0.5"
+                        className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
                       >
                         github.com/{repo.fullName}
-                        <ExternalLink className="h-3 w-3" />
+                        <ExternalLink className="h-2.5 w-2.5" />
                       </a>
                     </div>
                   </div>
@@ -989,8 +989,8 @@ export default function RepositoriesPage() {
                   <div>
                     {isAlreadyConnected ? (
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs text-emerald-400 border-emerald-500/30 gap-1.5 py-1 px-2.5">
-                          <Check className="h-3.5 w-3.5" />
+                        <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-900 gap-1 py-0.5">
+                          <Check className="h-3 w-3" />
                           Connected
                         </Badge>
                         <Button
@@ -1001,23 +1001,22 @@ export default function RepositoriesPage() {
                             if (match) handleDisconnectRepository(match.id, match.fullName);
                           }}
                           disabled={disconnectingRepoId !== null}
-                          className="text-xs h-7 px-2 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20"
+                          className="text-[11px] h-6 px-2 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/20"
                         >
                           Disconnect
                         </Button>
                       </div>
                     ) : (
                       <Button
-                        variant="glow"
                         size="sm"
                         onClick={() => handleConnectSingle(repo.fullName)}
                         disabled={isImporting}
-                        className="gap-1.5 text-xs"
+                        className="h-7 px-2.5 gap-1 text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                       >
                         {importingRepoName === repo.fullName ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin" />
                         ) : (
-                          <Plus className="h-3.5 w-3.5" />
+                          <Plus className="h-3 w-3" />
                         )}
                         {importingRepoName === repo.fullName ? "Connecting..." : "Connect"}
                       </Button>
@@ -1038,30 +1037,30 @@ export default function RepositoriesPage() {
               <DialogTitle>Import GitHub Repositories</DialogTitle>
               <DialogDescription>
                 Select repositories accessible on your GitHub account to import into{" "}
-                <span className="text-sky-300 font-medium">{workspaceDisplayName}</span>.
+                <span className="text-zinc-200 font-medium">{workspaceDisplayName}</span>.
               </DialogDescription>
             </div>
             <DialogClose onClose={() => setShowConnectModal(false)} />
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleBatchImport} className="space-y-4 mt-2">
+        <form onSubmit={handleBatchImport} className="space-y-3.5 mt-2">
           {isLoadingAvailable ? (
-            <div className="py-12 text-center text-slate-400 space-y-2">
-              <Loader2 className="mx-auto h-6 w-6 animate-spin text-sky-400" />
-              <p className="text-xs">Fetching accessible repositories live from GitHub...</p>
+            <div className="py-12 text-center text-zinc-400 space-y-2">
+              <Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" />
+              <p className="text-xs font-mono">Fetching accessible repositories live from GitHub...</p>
             </div>
           ) : availableRepos.length > 0 ? (
             <div className="space-y-3">
               {unimportedAvailable.length === 0 ? (
-                <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-400 flex items-center justify-between">
+                <div className="rounded-md border border-[#26262C] bg-[#141418] p-3 text-xs text-zinc-400 flex items-center justify-between">
                   <span>All accessible repositories are currently imported into this workspace.</span>
                   {connection?.installationId && (
                     <a
                       href={`https://github.com/settings/installations/${connection.installationId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sky-400 hover:text-sky-300 flex items-center gap-1 font-medium"
+                      className="text-zinc-200 hover:underline flex items-center gap-1 font-medium"
                     >
                       Add more on GitHub
                       <ExternalLink className="h-3 w-3" />
@@ -1069,24 +1068,24 @@ export default function RepositoriesPage() {
                   )}
                 </div>
               ) : (
-                <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
+                <div className="flex items-center justify-between text-xs text-zinc-400 pb-2 border-b border-[#1C1C21]">
                   <button
                     type="button"
                     onClick={toggleSelectAll}
                     className="flex items-center gap-2 hover:text-white transition-colors"
                   >
                     {selectedRepoNames.length > 0 && selectedRepoNames.length === unimportedAvailable.length ? (
-                      <CheckSquare className="h-4 w-4 text-sky-400" />
+                      <CheckSquare className="h-4 w-4 text-zinc-200" />
                     ) : (
-                      <Square className="h-4 w-4 text-slate-500" />
+                      <Square className="h-4 w-4 text-zinc-500" />
                     )}
                     <span>Select All Repositories ({unimportedAvailable.length})</span>
                   </button>
-                  <span>{selectedRepoNames.length} selected</span>
+                  <span className="font-mono text-[11px] text-zinc-400">{selectedRepoNames.length} selected</span>
                 </div>
               )}
 
-              <div className="max-h-64 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-800/40">
+              <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1 divide-y divide-[#1C1C21]">
                 {availableRepos.map((repo) => {
                   const isConnected = existingRepoFullNames.has(repo.fullName.toLowerCase());
                   const isChecked = selectedRepoNames.includes(repo.fullName);
@@ -1095,39 +1094,39 @@ export default function RepositoriesPage() {
                     <div
                       key={repo.id}
                       onClick={() => !isConnected && toggleRepoSelection(repo.fullName)}
-                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
+                      className={`flex items-center justify-between p-2 rounded-md border transition-all ${
                         isConnected
-                          ? "border-transparent bg-slate-900/20"
+                          ? "border-transparent bg-[#141418]/50"
                           : isChecked
-                          ? "border-sky-500/50 bg-sky-950/20 cursor-pointer"
-                          : "border-slate-800/60 bg-slate-900/40 hover:border-slate-700 cursor-pointer"
+                          ? "border-zinc-500 bg-[#141418] cursor-pointer"
+                          : "border-[#1C1C21] bg-[#0E0E11] hover:border-[#26262C] cursor-pointer"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2">
                         {!isConnected && (
-                          <div className="text-sky-400">
+                          <div className="text-zinc-200">
                             {isChecked ? (
-                              <CheckSquare className="h-4 w-4" />
+                              <CheckSquare className="h-3.5 w-3.5" />
                             ) : (
-                              <Square className="h-4 w-4 text-slate-500" />
+                              <Square className="h-3.5 w-3.5 text-zinc-500" />
                             )}
                           </div>
                         )}
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-white">{repo.fullName}</span>
+                            <span className="text-xs font-semibold text-zinc-200">{repo.fullName}</span>
                             <Badge
                               variant="outline"
-                              className={`text-[9px] py-0 px-1.5 ${
+                              className={`font-mono text-[9px] py-0 px-1.5 ${
                                 repo.isPrivate
-                                  ? "text-amber-400 border-amber-500/30"
-                                  : "text-slate-400 border-slate-700"
+                                  ? "text-amber-400 border-amber-900"
+                                  : "text-zinc-500 border-[#26262C]"
                               }`}
                             >
                               {repo.isPrivate ? "Private" : "Public"}
                             </Badge>
                           </div>
-                          <span className="text-[10px] text-slate-400 font-mono">
+                          <span className="text-[10px] text-zinc-500 font-mono">
                             branch: {repo.defaultBranch}
                           </span>
                         </div>
@@ -1135,7 +1134,7 @@ export default function RepositoriesPage() {
 
                       {isConnected ? (
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+                          <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-900">
                             Imported
                           </Badge>
                           <Button
@@ -1148,7 +1147,7 @@ export default function RepositoriesPage() {
                               if (match) handleDisconnectRepository(match.id, match.fullName);
                             }}
                             disabled={disconnectingRepoId !== null}
-                            className="text-[10px] h-6 px-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/20"
+                            className="text-[10px] h-6 px-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/20"
                           >
                             Disconnect
                           </Button>
@@ -1156,14 +1155,13 @@ export default function RepositoriesPage() {
                       ) : (
                         <Button
                           type="button"
-                          variant="glow"
                           size="sm"
                           disabled={isImporting}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleConnectSingle(repo.fullName);
                           }}
-                          className="text-[11px] h-6 px-2 gap-1"
+                          className="text-[10px] h-6 px-2 gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
                         >
                           {importingRepoName === repo.fullName ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1179,7 +1177,7 @@ export default function RepositoriesPage() {
               </div>
             </div>
           ) : (
-            <div className="py-8 text-center text-slate-400 space-y-3">
+            <div className="py-8 text-center text-zinc-400 space-y-3">
               <ShieldAlert className="mx-auto h-8 w-8 text-amber-400" />
               <p className="text-xs">No repositories found for this GitHub App installation.</p>
               {connection?.installationId && (
@@ -1188,7 +1186,7 @@ export default function RepositoriesPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs border-[#26262C]">
                     <ExternalLink className="h-3.5 w-3.5" />
                     Configure Access on GitHub
                   </Button>
@@ -1203,15 +1201,15 @@ export default function RepositoriesPage() {
               variant="outline"
               size="sm"
               onClick={() => setShowConnectModal(false)}
+              className="h-8 text-xs border-[#26262C]"
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              variant="glow"
               size="sm"
               disabled={isImporting || selectedRepoNames.length === 0}
-              className="gap-2"
+              className="h-8 text-xs gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-medium"
             >
               {isImporting ? (
                 <>

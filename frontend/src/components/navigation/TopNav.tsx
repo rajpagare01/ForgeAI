@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { OrgSwitcher } from "./OrgSwitcher";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useTenant } from "@/lib/tenant-context";
 import { apiClient } from "@/lib/api-client";
 import {
   Bell,
@@ -16,9 +16,10 @@ import {
   Activity,
   ShieldCheck,
   Radio,
+  ChevronRight,
 } from "lucide-react";
 
-const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" }) => (
+const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-3.5 w-3.5" }) => (
   <svg className={`${className} fill-current`} viewBox="0 0 24 24">
     <path
       fillRule="evenodd"
@@ -30,7 +31,9 @@ const GitHubIcon: React.FC<{ className?: string }> = ({ className = "h-4 w-4" })
 
 export const TopNav: React.FC = () => {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout, githubStatus, disconnectGitHubAccount, fetchGitHubStatus } = useAuth();
+  const { isPersonalWorkspace, currentOrg, activeWorkspace } = useTenant();
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -39,7 +42,6 @@ export const TopNav: React.FC = () => {
   const [connecting, setConnecting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Poll gateway health probe directly with no-cors to avoid CORS errors & eliminate dev server reload loops
   useEffect(() => {
     let isMounted = true;
     const checkGateway = async () => {
@@ -99,10 +101,36 @@ export const TopNav: React.FC = () => {
   const isGitHubLinked = !!githubStatus?.linked && !!githubStatus?.identity;
   const githubIdentity = githubStatus?.identity;
 
+  // Resolve current section title for dynamic breadcrumb
+  const sectionTitle = (() => {
+    if (pathname === "/") return "Overview";
+    if (pathname.startsWith("/projects")) return "Projects & Issues";
+    if (pathname.startsWith("/repositories")) return "Repositories";
+    if (pathname.startsWith("/test-runs")) return "Test Runs";
+    if (pathname.startsWith("/ai-insights")) return "PR & Code Intelligence";
+    if (pathname.startsWith("/traceability")) return "Traceability Graph";
+    if (pathname.startsWith("/operations")) return "Operations & Outbox";
+    return "Dashboard";
+  })();
+
+  const workspaceLabel = isPersonalWorkspace
+    ? "Personal"
+    : currentOrg?.name || "Organization";
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-slate-950/70 px-6 backdrop-blur-xl">
-      {/* Left: Search & Breadcrumbs */}
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-30 flex h-12 w-full items-center justify-between border-b border-[#1C1C21] bg-[#09090B]/85 px-6 backdrop-blur-md">
+      {/* Left: Dynamic Breadcrumb Bar */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-mono text-[11px] px-1.5 py-0.5 rounded border border-[#26262C] bg-[#141418] text-zinc-400">
+          {workspaceLabel}
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />
+        <span className="font-medium text-zinc-200">{sectionTitle}</span>
+      </div>
+
+      {/* Center & Right: Search, Gateway Pill, GitHub Chip, Notifications, User */}
+      <div className="flex items-center gap-3">
+        {/* Compact Search Bar with '/' shortcut hint */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -110,83 +138,72 @@ export const TopNav: React.FC = () => {
               router.push(`/projects?q=${encodeURIComponent(searchQuery.trim())}`);
             }
           }}
-          className="relative w-64 md:w-80"
+          className="relative hidden sm:block w-60"
         >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search tasks, PRs, requirements..."
-            className="h-9 w-full rounded-lg border border-slate-800 bg-slate-900/90 pl-9 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+            placeholder="Search tasks, PRs, SHAs..."
+            className="h-7 w-full rounded-md border border-[#26262C] bg-[#0E0E11] pl-8 pr-7 text-xs text-zinc-200 placeholder-zinc-500 focus:border-zinc-500 focus:outline-none transition-colors"
             aria-label="Search tasks, PRs, requirements"
           />
+          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 font-mono text-[10px] text-zinc-500 border border-zinc-800 rounded px-1 bg-[#09090B]">
+            /
+          </kbd>
         </form>
-      </div>
 
-      {/* Right: Gateway Health, OrgSwitcher, GitHub Status, User */}
-      <div className="flex items-center gap-3.5">
-        {/* Gateway Health Indicator */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 text-xs">
+        {/* Gateway Health Pill */}
+        <div className="hidden md:flex h-7 items-center gap-1.5 px-2.5 rounded-md border border-[#1C1C21] bg-[#0E0E11] font-mono text-[11px]">
           <span
             className={`inline-block h-1.5 w-1.5 rounded-full ${gatewayOnline === true
-              ? "bg-emerald-500"
-              : gatewayOnline === false
-                ? "bg-rose-500"
-                : "bg-amber-500"
+                ? "bg-emerald-400"
+                : gatewayOnline === false
+                  ? "bg-rose-400"
+                  : "bg-amber-400"
               }`}
           />
-          <span className="text-slate-400 text-[11px] font-mono">Gateway:</span>
+          <span className="text-zinc-500">Gateway:</span>
           <span
-            className={`font-semibold text-[11px] ${gatewayOnline === true
-              ? "text-emerald-400"
-              : gatewayOnline === false
-                ? "text-rose-400"
-                : "text-amber-400"
+            className={`${gatewayOnline === true
+                ? "text-emerald-400 font-medium"
+                : gatewayOnline === false
+                  ? "text-rose-400 font-medium"
+                  : "text-amber-400 font-medium"
               }`}
           >
-            {gatewayOnline === true
-              ? "ONLINE"
-              : gatewayOnline === false
-                ? "OFFLINE"
-                : "CONNECTING"}
+            {gatewayOnline === true ? "ONLINE" : gatewayOnline === false ? "OFFLINE" : "CHECKING"}
           </span>
         </div>
 
-        {/* Tenant Organization Switcher */}
-        <OrgSwitcher />
-
-        {/* GitHub Linked Badge indicator */}
+        {/* GitHub Connection Chip */}
         {isGitHubLinked ? (
           <div
-            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900/70 text-xs text-slate-300"
+            className="hidden sm:flex h-7 items-center gap-1.5 px-2 rounded-md border border-[#26262C] bg-[#0E0E11] text-[11px] text-zinc-300"
             title={`Connected GitHub Account: @${githubIdentity?.githubLogin}`}
           >
             {githubIdentity?.avatarUrl ? (
               <img
                 src={githubIdentity.avatarUrl}
                 alt={githubIdentity.githubLogin}
-                className="h-4 w-4 rounded-full border border-slate-700 object-cover"
+                className="h-3.5 w-3.5 rounded-full border border-zinc-700 object-cover"
               />
             ) : (
-              <GitHubIcon className="h-3.5 w-3.5 text-slate-400" />
+              <GitHubIcon className="h-3.5 w-3.5 text-zinc-400" />
             )}
-            <span className="text-[11px] font-medium text-slate-300">
-              @{githubIdentity?.githubLogin}
-            </span>
+            <span className="font-mono text-zinc-300">@{githubIdentity?.githubLogin}</span>
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           </div>
         ) : (
           <button
             onClick={handleConnectGitHub}
             disabled={connecting}
-            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-500/30 bg-indigo-950/30 hover:bg-indigo-900/40 text-xs font-medium text-indigo-300 transition-colors cursor-pointer"
+            className="hidden sm:flex h-7 items-center gap-1.5 px-2 rounded-md border border-zinc-700 bg-[#141418] hover:bg-[#1C1C22] text-[11px] font-medium text-zinc-300 transition-colors cursor-pointer"
             title="Connect your GitHub account"
           >
-            <GitHubIcon className="h-3.5 w-3.5 text-indigo-400" />
-            <span className="text-[11px]">
-              {connecting ? "Connecting..." : "Connect GitHub"}
-            </span>
+            <GitHubIcon className="h-3.5 w-3.5 text-zinc-400" />
+            <span>{connecting ? "Connecting..." : "Connect GitHub"}</span>
           </button>
         )}
 
@@ -195,10 +212,10 @@ export const TopNav: React.FC = () => {
           <button
             type="button"
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="relative rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors cursor-pointer"
-            title="Notifications"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-[#26262C] bg-[#0E0E11] text-zinc-400 hover:text-zinc-200 hover:bg-[#141418] transition-colors cursor-pointer"
+            title="System & Governance Alerts"
           >
-            <Bell className="h-4 w-4" />
+            <Bell className="h-3.5 w-3.5" />
           </button>
 
           {notificationsOpen && (
@@ -207,56 +224,43 @@ export const TopNav: React.FC = () => {
                 className="fixed inset-0 z-40"
                 onClick={() => setNotificationsOpen(false)}
               />
-              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-800 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-xl z-50 space-y-2.5">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                  <span className="text-xs font-semibold text-white">System & Governance Alerts</span>
-                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+              <div className="absolute right-0 mt-1.5 w-80 rounded-lg border border-[#26262C] bg-[#0E0E11] p-3 shadow-2xl z-50 space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
+                  <span className="text-xs font-semibold text-zinc-100">Telemetry & Alerts</span>
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/20 border border-emerald-500/30 px-1.5 py-0.5 rounded">
                     All Active
                   </span>
                 </div>
 
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                    <Activity className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-start gap-2 p-2 rounded-md bg-[#141418] border border-[#1C1C21]">
+                    <Activity className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-medium text-slate-200">Gateway Status</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        API Gateway is {gatewayOnline ? "ONLINE and reachable" : "connecting..."}.
+                      <div className="font-medium text-zinc-200 text-[11px]">API Gateway Status</div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        Gateway is {gatewayOnline ? "ONLINE and routing requests" : "connecting..."}.
                       </div>
                     </div>
                   </div>
 
                   {isGitHubLinked && (
-                    <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                      <ShieldCheck className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
+                    <div className="flex items-start gap-2 p-2 rounded-md bg-[#141418] border border-[#1C1C21]">
+                      <ShieldCheck className="h-3.5 w-3.5 text-zinc-300 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-medium text-slate-200">GitHub App Synced</div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          Connected as @{githubIdentity?.githubLogin}. Commits & PRs syncing.
+                        <div className="font-medium text-zinc-200 text-[11px]">GitHub App Ingestion</div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5">
+                          Webhook deliveries verified for @{githubIdentity?.githubLogin}.
                         </div>
                       </div>
                     </div>
                   )}
 
-                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                    <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2 p-2 rounded-md bg-[#141418] border border-[#1C1C21]">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-zinc-300 shrink-0 mt-0.5" />
                     <div>
-                      <div className="font-medium text-slate-200">AI Intelligence Ready</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        Real-time PR analysis, AST blast radius & auto-docs are enabled.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-950/60 border border-emerald-500/30">
-                    <Radio className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5 animate-pulse" />
-                    <div>
-                      <div className="font-medium text-slate-200 flex items-center gap-1.5">
-                        Live Push Guard & Telemetry
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        Real-time SSE event pipeline active. Automatic commit scanning, audit alerts, and auto-docs regeneration.
+                      <div className="font-medium text-zinc-200 text-[11px]">AI Synthesis Pipeline</div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        PR impact, AST blast radius & automated suite generators ready.
                       </div>
                     </div>
                   </div>
@@ -266,34 +270,29 @@ export const TopNav: React.FC = () => {
           )}
         </div>
 
-        {/* User Profile */}
+        {/* User Profile Menu */}
         <div className="relative">
           <button
             onClick={() => {
               setUserMenuOpen(!userMenuOpen);
               setActionError(null);
             }}
-            className="flex items-center gap-2.5 rounded-lg p-1.5 hover:bg-slate-800 transition-colors cursor-pointer"
+            className="flex h-7 items-center gap-1.5 rounded-md border border-[#26262C] bg-[#0E0E11] px-1.5 hover:bg-[#141418] transition-colors cursor-pointer"
           >
             {isGitHubLinked && githubIdentity?.avatarUrl ? (
               <img
                 src={githubIdentity.avatarUrl}
                 alt={githubIdentity.githubLogin}
-                className="h-7 w-7 rounded-lg border border-slate-700 object-cover"
+                className="h-4 w-4 rounded-full border border-zinc-700 object-cover"
               />
             ) : (
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 text-xs font-semibold text-white shadow-sm">
+              <div className="flex h-4 w-4 items-center justify-center rounded bg-zinc-800 text-[10px] font-semibold text-zinc-200">
                 {user?.fullName?.charAt(0) || user?.email?.charAt(0)?.toUpperCase() || "U"}
               </div>
             )}
-            <div className="hidden lg:block text-left text-xs">
-              <div className="font-medium text-slate-200">
-                {user?.fullName || (user?.email ? user.email.split("@")[0] : "Signed In")}
-              </div>
-              <div className="text-[10px] text-slate-500 truncate max-w-[110px]">
-                {user?.email || "Authenticated"}
-              </div>
-            </div>
+            <span className="hidden lg:inline text-[11px] font-medium text-zinc-300 max-w-[90px] truncate">
+              {user?.fullName || (user?.email ? user.email.split("@")[0] : "User")}
+            </span>
           </button>
 
           {userMenuOpen && (
@@ -302,22 +301,22 @@ export const TopNav: React.FC = () => {
                 className="fixed inset-0 z-40"
                 onClick={() => setUserMenuOpen(false)}
               />
-              <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl backdrop-blur-xl z-50">
+              <div className="absolute right-0 mt-1.5 w-64 rounded-lg border border-[#26262C] bg-[#0E0E11] p-2 shadow-2xl z-50">
                 {/* Header Profile Details */}
-                <div className="px-3 py-2 border-b border-slate-800">
-                  <p className="text-xs font-semibold text-white">{user?.fullName}</p>
-                  <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
+                <div className="px-2.5 py-1.5 border-b border-[#1C1C21]">
+                  <p className="text-xs font-semibold text-zinc-100">{user?.fullName}</p>
+                  <p className="text-[11px] text-zinc-400 truncate font-mono">{user?.email}</p>
                 </div>
 
                 {/* GitHub Identity Card */}
-                <div className="px-3 py-2.5 border-b border-slate-800">
+                <div className="px-2.5 py-2 border-b border-[#1C1C21]">
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="font-medium text-slate-300 flex items-center gap-1.5">
-                      <GitHubIcon className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="font-medium text-zinc-300 flex items-center gap-1.5 text-[11px]">
+                      <GitHubIcon className="h-3 w-3 text-zinc-400" />
                       GitHub Account
                     </span>
                     {isGitHubLinked && (
-                      <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
+                      <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
                         <CheckCircle2 className="h-3 w-3" />
                         Linked
                       </span>
@@ -325,17 +324,17 @@ export const TopNav: React.FC = () => {
                   </div>
 
                   {isGitHubLinked ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-[11px] bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                        <div className="flex items-center gap-2 truncate">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] bg-[#141418] p-1.5 rounded-md border border-[#1C1C21]">
+                        <div className="flex items-center gap-1.5 truncate">
                           {githubIdentity?.avatarUrl && (
                             <img
                               src={githubIdentity.avatarUrl}
                               alt={githubIdentity.githubLogin}
-                              className="h-5 w-5 rounded-full object-cover shrink-0"
+                              className="h-4 w-4 rounded-full object-cover shrink-0"
                             />
                           )}
-                          <span className="font-mono text-slate-200 truncate">
+                          <span className="font-mono text-zinc-200 truncate text-[11px]">
                             @{githubIdentity?.githubLogin}
                           </span>
                         </div>
@@ -344,7 +343,7 @@ export const TopNav: React.FC = () => {
                             href={githubIdentity.profileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-slate-400 hover:text-indigo-400 p-1"
+                            className="text-zinc-400 hover:text-zinc-100 p-0.5"
                             title="Open GitHub Profile"
                           >
                             <ExternalLink className="h-3 w-3" />
@@ -355,31 +354,31 @@ export const TopNav: React.FC = () => {
                       <button
                         onClick={handleDisconnectGitHub}
                         disabled={disconnecting}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 hover:border-rose-500/40 bg-slate-800/80 hover:bg-rose-950/30 py-1.5 text-[11px] font-medium text-slate-300 hover:text-rose-300 transition-colors disabled:opacity-60 cursor-pointer"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-[#26262C] hover:border-rose-500/30 bg-[#141418] hover:bg-rose-950/20 py-1 text-[11px] font-medium text-zinc-300 hover:text-rose-400 transition-colors disabled:opacity-60 cursor-pointer"
                       >
-                        <Unlink className="h-3 w-3 text-slate-400" />
+                        <Unlink className="h-3 w-3 text-zinc-400" />
                         {disconnecting ? "Disconnecting..." : "Disconnect GitHub"}
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <p className="text-[11px] text-slate-400">
-                        Link your GitHub account to sync repositories and review PRs.
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] text-zinc-400">
+                        Link your GitHub account to sync repositories and inspect PRs.
                       </p>
                       <button
                         onClick={handleConnectGitHub}
                         disabled={connecting}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-900/50 py-1.5 text-[11px] font-medium text-indigo-300 transition-colors disabled:opacity-60 cursor-pointer"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-100 hover:bg-white py-1 text-[11px] font-medium text-zinc-950 transition-colors disabled:opacity-60 cursor-pointer"
                       >
-                        <GitHubIcon className="h-3 w-3 text-indigo-400" />
+                        <GitHubIcon className="h-3 w-3 text-zinc-950" />
                         {connecting ? "Connecting..." : "Connect GitHub"}
                       </button>
                     </div>
                   )}
 
                   {actionError && (
-                    <div className="mt-2 flex items-start gap-1.5 p-2 rounded-lg bg-rose-950/50 border border-rose-500/30 text-[10px] text-rose-300">
-                      <AlertCircle className="h-3.5 w-3.5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="mt-1.5 flex items-start gap-1.5 p-1.5 rounded-md bg-rose-950/40 border border-rose-500/30 text-[10px] text-rose-300">
+                      <AlertCircle className="h-3 w-3 text-rose-400 shrink-0 mt-0.5" />
                       <span>{actionError}</span>
                     </div>
                   )}
@@ -389,9 +388,9 @@ export const TopNav: React.FC = () => {
                 <div className="pt-1">
                   <button
                     onClick={logout}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-rose-400 hover:bg-rose-500/10 transition-colors font-medium cursor-pointer"
+                    className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-rose-400 hover:bg-rose-500/10 transition-colors font-medium cursor-pointer"
                   >
-                    <LogOut className="h-4 w-4" />
+                    <LogOut className="h-3.5 w-3.5" />
                     Sign Out
                   </button>
                 </div>

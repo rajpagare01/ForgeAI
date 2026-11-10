@@ -17,8 +17,8 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#090d16] flex flex-col items-center justify-center text-slate-400 space-y-3 font-mono text-xs">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+      <div className="min-h-screen bg-[#09090B] flex flex-col items-center justify-center text-zinc-400 space-y-3 font-mono text-xs">
+        <Loader2 className="h-5 w-5 animate-spin text-zinc-300" />
         <p>Authenticating ForgeAI session...</p>
       </div>
     );

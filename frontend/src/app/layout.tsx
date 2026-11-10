@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark h-full antialiased">
-      <body className="min-h-screen bg-[#090d16] text-slate-100 font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
+      <body className="min-h-screen bg-[#09090B] text-zinc-100 font-sans antialiased selection:bg-zinc-800 selection:text-zinc-100">
         <AuthProvider>
           <TenantProvider>
             {children}
