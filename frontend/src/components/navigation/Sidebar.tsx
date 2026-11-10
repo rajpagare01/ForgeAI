@@ -60,7 +60,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-56 flex-col border-r border-[#1C1C21] bg-[#09090B] select-none">
-      {/* Top Header: ForgeAI Mark + OrgSwitcher */}
+      {/* Top Header: ForgeAI Mark + Version Pill */}
       <div className="flex h-12 items-center justify-between px-3 border-b border-[#1C1C21] bg-[#09090B]">
         <div className="flex items-center gap-2">
           {/* 20px x 20px Matte Geometric Emblem */}
@@ -69,11 +69,18 @@ export const Sidebar: React.FC = () => {
           </div>
           <span className="font-semibold text-xs tracking-tight text-zinc-100">ForgeAI</span>
         </div>
+        <span className="font-mono text-[10px] text-zinc-500 border border-[#1C1C21] bg-[#0E0E11] rounded px-1.5 py-0.5">
+          v2.4
+        </span>
+      </div>
+
+      {/* Dedicated Full-Width Workspace / Organization Switcher */}
+      <div className="px-2.5 pt-2.5 pb-1">
         <OrgSwitcher />
       </div>
 
       {/* Navigation Groups */}
-      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-4">
         {/* Group 1: Workspace */}
         <div className="space-y-0.5">
           <div className="px-2 pb-1.5 text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-zinc-500">

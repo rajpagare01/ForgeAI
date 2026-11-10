@@ -38,18 +38,63 @@ export default function OverviewDashboardPage() {
   const [testRunCount, setTestRunCount] = useState<number>(0);
   const [prCount, setPrCount] = useState<number>(0);
   const [recentInsights, setRecentInsights] = useState<InsightItem[]>([]);
+  const [serviceHealth, setServiceHealth] = useState<{
+    gateway: boolean | null;
+    identity: boolean | null;
+    sourceControl: boolean | null;
+    testing: boolean | null;
+    ai: boolean | null;
+    project: boolean | null;
+  }>({
+    gateway: null,
+    identity: null,
+    sourceControl: null,
+    testing: null,
+    ai: null,
+    project: null,
+  });
 
   useEffect(() => {
     let isMounted = true;
     async function loadStats() {
       try {
-        const [projects, repos, testRuns] = await Promise.allSettled([
+        const gatewayBase = apiClient.getBaseUrl();
+        const probeHealth = async (url: string, checkUpStatus = false): Promise<boolean> => {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) return false;
+          if (!checkUpStatus) return true;
+          try {
+            const body = await res.json();
+            return body?.status ? String(body.status).toUpperCase() === "UP" : true;
+          } catch {
+            return true;
+          }
+        };
+
+        const [projects, repos, testRuns, gatewayProbe, aiProbe] = await Promise.allSettled([
           apiClient.get<any[]>("/api/v1/projects"),
           apiClient.get<any[]>("/api/v1/repositories"),
           apiClient.get<any[]>("/api/v1/test-runs"),
+          probeHealth(`${gatewayBase}/actuator/health`),
+          probeHealth(`${gatewayBase}/api/v1/ai/health`, true),
         ]);
 
         if (!isMounted) return;
+
+        const gatewayOk = gatewayProbe.status === "fulfilled" && gatewayProbe.value === true;
+        const aiOk = aiProbe.status === "fulfilled" && aiProbe.value === true;
+        const projectOk = projects.status === "fulfilled";
+        const sourceControlOk = repos.status === "fulfilled";
+        const testingOk = testRuns.status === "fulfilled";
+
+        setServiceHealth({
+          gateway: gatewayOk,
+          identity: gatewayOk,
+          sourceControl: sourceControlOk,
+          testing: testingOk,
+          ai: aiOk,
+          project: projectOk,
+        });
 
         if (projects.status === "fulfilled" && Array.isArray(projects.value)) {
           setProjectCount(projects.value.length);
@@ -146,13 +191,17 @@ export default function OverviewDashboardPage() {
   ];
 
   const microservices = [
-    { name: "API Gateway", port: ":8080", status: "HEALTHY", role: "Ingress & Revocation Filter" },
-    { name: "Identity Service", port: ":8081", status: "HEALTHY", role: "RS256 JWKS & Multi-Tenant RBAC" },
-    { name: "Source Control", port: ":8082", status: "HEALTHY", role: "GitHub Webhooks & PR Ingestion" },
-    { name: "Testing Service", port: ":8083", status: "HEALTHY", role: "JUnit XML & Flaky Detection" },
-    { name: "AI Service", port: ":8084", status: "HEALTHY", role: "Tree-sitter AST & Blast Radius" },
-    { name: "Project Service", port: ":8085", status: "HEALTHY", role: "Kanban, Outbox & Traceability" },
+    { name: "API Gateway", port: ":8080", healthy: serviceHealth.gateway, role: "Ingress & Revocation Filter" },
+    { name: "Identity Service", port: ":8081", healthy: serviceHealth.identity, role: "RS256 JWKS & Multi-Tenant RBAC" },
+    { name: "Source Control", port: ":8082", healthy: serviceHealth.sourceControl, role: "GitHub Webhooks & PR Ingestion" },
+    { name: "Testing Service", port: ":8083", healthy: serviceHealth.testing, role: "JUnit XML & Flaky Detection" },
+    { name: "AI Service", port: ":8084", healthy: serviceHealth.ai, role: "Tree-sitter AST & Blast Radius" },
+    { name: "Project Service", port: ":8085", healthy: serviceHealth.project, role: "Kanban, Outbox & Traceability" },
   ];
+
+  const isProbing = microservices.every((svc) => svc.healthy === null);
+  const healthyCount = microservices.filter((svc) => svc.healthy === true).length;
+  const allHealthy = !isProbing && healthyCount === microservices.length;
 
   return (
     <div className="space-y-6">
@@ -332,8 +381,17 @@ export default function OverviewDashboardPage() {
                 Ingress nodes and internal microservice health
               </CardDescription>
             </div>
-            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-800">
-              6/6 HEALTHY
+            <Badge
+              variant="outline"
+              className={`font-mono tabular-nums text-[10px] ${
+                isProbing
+                  ? "text-zinc-400 border-zinc-800"
+                  : allHealthy
+                  ? "text-emerald-400 border-emerald-800"
+                  : "text-amber-400 border-amber-800"
+              }`}
+            >
+              {isProbing ? "PROBING" : allHealthy ? `${healthyCount}/${microservices.length} HEALTHY` : `${healthyCount}/${microservices.length} DEGRADED`}
             </Badge>
           </div>
 
@@ -350,9 +408,25 @@ export default function OverviewDashboardPage() {
                   </div>
                   <div className="text-[11px] text-zinc-400">{svc.role}</div>
                 </div>
-                <div className="flex items-center gap-1.5 font-mono text-[10px] text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  UP
+                <div
+                  className={`flex items-center gap-1.5 font-mono text-[10px] ${
+                    svc.healthy === null
+                      ? "text-zinc-400"
+                      : svc.healthy
+                      ? "text-emerald-400"
+                      : "text-amber-400"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      svc.healthy === null
+                        ? "bg-zinc-500"
+                        : svc.healthy
+                        ? "bg-emerald-500"
+                        : "bg-amber-500"
+                    }`}
+                  />
+                  {svc.healthy === null ? "PROBING" : svc.healthy ? "UP" : "DEGRADED"}
                 </div>
               </div>
             ))}

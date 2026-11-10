@@ -1,4 +1,5 @@
 FROM node:22-alpine AS base
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # Step 1: Install dependencies
 FROM base AS deps
@@ -6,7 +7,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=2000 --maxsockets=4
 
 # Step 2: Build the standalone Next.js bundle
 FROM base AS builder

@@ -38,29 +38,26 @@ export const OrgSwitcher: React.FC = () => {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-7 items-center gap-1.5 px-2 rounded-md border border-[#26262C] bg-[#0E0E11] hover:bg-[#141418] hover:border-zinc-700 transition-colors text-xs font-medium text-zinc-200"
+        className="flex h-8 w-full items-center justify-between gap-2 px-2.5 rounded-md border border-[#26262C] bg-[#0E0E11] hover:bg-[#141418] hover:border-zinc-700 transition-colors text-xs font-medium text-zinc-200 cursor-pointer"
         title="Switch Workspace or Organization"
       >
-        <div
-          className={`flex h-4 w-4 items-center justify-center rounded text-[10px] ${isPersonalWorkspace
-            ? "bg-zinc-800 text-zinc-300"
-            : "bg-zinc-800 text-zinc-300"
-            }`}
-        >
-          {isPersonalWorkspace ? (
-            <User className="h-3 w-3" />
-          ) : (
-            <Building2 className="h-3 w-3" />
-          )}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-zinc-800 text-zinc-300 text-[10px]">
+            {isPersonalWorkspace ? (
+              <User className="h-3 w-3" />
+            ) : (
+              <Building2 className="h-3 w-3" />
+            )}
+          </div>
+          <span className="truncate text-[11px]">{displayName}</span>
         </div>
-        <span className="max-w-[100px] truncate text-[11px]">{displayName}</span>
-        <ChevronDown className="h-3 w-3 text-zinc-500" />
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
       </button>
 
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute left-0 mt-1 w-72 rounded-lg border border-[#26262C] bg-[#0E0E11] p-1.5 shadow-2xl z-50">
+          <div className="absolute left-0 mt-1 w-64 rounded-lg border border-[#26262C] bg-[#0E0E11] p-1.5 shadow-2xl z-50">
             {/* Personal Workspace Section */}
             <div className="px-2 pt-1 pb-1 text-[10px] font-mono font-medium uppercase tracking-wider text-zinc-500">
               Personal Workspace
@@ -191,8 +188,5 @@ export const OrgSwitcher: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
-    </div >
   );
 };
