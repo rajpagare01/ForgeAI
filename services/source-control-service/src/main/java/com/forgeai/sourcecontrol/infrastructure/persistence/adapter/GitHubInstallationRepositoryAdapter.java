@@ -46,28 +46,31 @@ public class GitHubInstallationRepositoryAdapter implements GitHubInstallationRe
             }
         }
 
+        Optional<GitHubInstallationJpaEntity> existingOpt = Optional.empty();
         if (installation.getId() != null) {
-            Optional<GitHubInstallationJpaEntity> existingOpt = jpaRepository.findById(installation.getId());
-            if (existingOpt.isPresent()) {
-                GitHubInstallationJpaEntity entity = existingOpt.get();
-                entity.setOrganizationId(orgId);
-                entity.setWorkspaceId(wsId);
-                entity.setScope(scope);
-                entity.setGithubAppId(installation.getGithubAppId());
-                entity.setAccountId(installation.getAccountId());
-                entity.setAccountLogin(installation.getAccountLogin());
-                entity.setAccountType(installation.getAccountType());
-                if (installation.getRepositorySelection() != null) {
-                    entity.setRepositorySelection(installation.getRepositorySelection());
-                }
-                entity.setClaimedByUserId(installation.getClaimedByUserId());
-                entity.setStatus(installation.getStatus() != null ? installation.getStatus().name() : entity.getStatus());
-                entity.setUpdatedAt(Instant.now());
-                if (installation.getLastSyncedAt() != null) {
-                    entity.setLastSyncedAt(installation.getLastSyncedAt());
-                }
-                return mapper.toDomain(jpaRepository.saveAndFlush(entity));
+            existingOpt = jpaRepository.findById(installation.getId());
+        } else if (installation.getInstallationId() != null) {
+            existingOpt = jpaRepository.findByInstallationId(installation.getInstallationId());
+        }
+        if (existingOpt.isPresent()) {
+            GitHubInstallationJpaEntity entity = existingOpt.get();
+            entity.setOrganizationId(orgId);
+            entity.setWorkspaceId(wsId);
+            entity.setScope(scope);
+            entity.setGithubAppId(installation.getGithubAppId());
+            entity.setAccountId(installation.getAccountId());
+            entity.setAccountLogin(installation.getAccountLogin());
+            entity.setAccountType(installation.getAccountType());
+            if (installation.getRepositorySelection() != null) {
+                entity.setRepositorySelection(installation.getRepositorySelection());
             }
+            entity.setClaimedByUserId(installation.getClaimedByUserId());
+            entity.setStatus(installation.getStatus() != null ? installation.getStatus().name() : entity.getStatus());
+            entity.setUpdatedAt(Instant.now());
+            if (installation.getLastSyncedAt() != null) {
+                entity.setLastSyncedAt(installation.getLastSyncedAt());
+            }
+            return mapper.toDomain(jpaRepository.saveAndFlush(entity));
         }
         GitHubInstallationJpaEntity entity = mapper.toEntity(installation);
         entity.setOrganizationId(orgId);

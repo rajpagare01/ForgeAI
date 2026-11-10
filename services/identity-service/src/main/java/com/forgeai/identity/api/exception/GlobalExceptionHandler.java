@@ -32,7 +32,14 @@ public class GlobalExceptionHandler {
                 "Unable to complete identity request due to a database issue. Please try again in a moment.", request);
     }
 
-    @ExceptionHandler({UserNotFoundException.class, org.springframework.web.servlet.resource.NoResourceFoundException.class})
+    @ExceptionHandler({
+            UserNotFoundException.class,
+            ResourceNotFoundException.class,
+            OrganizationNotFoundException.class,
+            RoleNotFoundException.class,
+            TeamNotFoundException.class,
+            org.springframework.web.servlet.resource.NoResourceFoundException.class
+    })
     public ResponseEntity<ApiErrorResponse> handleNotFound(Exception ex, WebRequest request) {
         log.warn("Resource not found in identity-service: {}", ex.getMessage());
         return buildErrorResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", "The requested user, workspace, or identity resource could not be found.", request);

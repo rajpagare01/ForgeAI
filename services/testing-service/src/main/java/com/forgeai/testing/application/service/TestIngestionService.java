@@ -29,6 +29,11 @@ public class TestIngestionService {
     private final TestCaseRepository testCaseRepository;
     private final TestResultRepository testResultRepository;
     private final JunitXmlParser junitXmlParser;
+    private final java.util.concurrent.ConcurrentHashMap<String, Object> upsertLocks =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     @Transactional
     public int ingestBatch(UUID organizationId, UUID runId, List<RecordTestResultItem> items) {
@@ -62,18 +67,7 @@ public class TestIngestionService {
 
             // 1. Get or create TestSuite
             TestSuite suite = suiteCache.computeIfAbsent(suiteName, name ->
-                    testSuiteRepository.findByWorkspaceIdAndRepositoryIdAndName(effectiveWsId, run.getRepositoryId(), name)
-                            .orElseGet(() -> testSuiteRepository.save(TestSuite.builder()
-                                    .organizationId(organizationId)
-                                    .workspaceId(effectiveWsId)
-                                    .scope(effectiveScope)
-                                    .repositoryId(run.getRepositoryId())
-                                    .name(name)
-                                    .framework("JUNIT")
-                                    .createdAt(now)
-                                    .updatedAt(now)
-                                    .build()))
-            );
+                    resolveOrCreateSuite(effectiveWsId, organizationId, effectiveScope, run.getRepositoryId(), name, now));
 
             // 2. Get or create TestCase
             String effectiveTestName = (item.testName() != null && !item.testName().isBlank())
@@ -81,26 +75,8 @@ public class TestIngestionService {
                     : "VerificationTestCase";
             String caseKey = suite.getId() + "#" + effectiveTestName + "#" + (item.classname() != null ? item.classname() : "");
             TestCase testCase = caseCache.computeIfAbsent(caseKey, k ->
-                    testCaseRepository.findBySuiteIdAndNameAndClassname(suite.getId(), effectiveTestName, item.classname())
-                            .map(existing -> {
-                                if (item.requirementKey() != null && !item.requirementKey().equals(existing.getRequirementKey())) {
-                                    existing.setRequirementKey(item.requirementKey());
-                                    return testCaseRepository.save(existing);
-                                }
-                                return existing;
-                            })
-                            .orElseGet(() -> testCaseRepository.save(TestCase.builder()
-                                    .organizationId(organizationId)
-                                    .workspaceId(effectiveWsId)
-                                    .scope(effectiveScope)
-                                    .suiteId(suite.getId())
-                                    .name(effectiveTestName)
-                                    .classname(item.classname())
-                                    .requirementKey(item.requirementKey())
-                                    .createdAt(now)
-                                    .updatedAt(now)
-                                    .build()))
-            );
+                    resolveOrCreateTestCase(effectiveWsId, organizationId, effectiveScope, suite.getId(),
+                            effectiveTestName, item.classname(), item.requirementKey(), now));
 
             // 3. Assemble TestResult
             TestResult result = TestResult.builder()
@@ -150,5 +126,75 @@ public class TestIngestionService {
         }
 
         return ingestBatch(workspaceId, organizationId, scope, runId, items);
+    }
+
+    private TestSuite resolveOrCreateSuite(UUID effectiveWsId, UUID organizationId, String effectiveScope,
+                                           UUID repositoryId, String name, Instant now) {
+        String lockKey = "suite:" + effectiveWsId + ":" + repositoryId + ":" + name;
+        synchronized (upsertLocks.computeIfAbsent(lockKey, k -> new Object())) {
+            return testSuiteRepository.findByWorkspaceIdAndRepositoryIdAndName(effectiveWsId, repositoryId, name)
+                    .orElseGet(() -> {
+                        try {
+                            TestSuite toSave = TestSuite.builder()
+                                    .organizationId(organizationId)
+                                    .workspaceId(effectiveWsId)
+                                    .scope(effectiveScope)
+                                    .repositoryId(repositoryId)
+                                    .name(name)
+                                    .framework("JUNIT")
+                                    .createdAt(now)
+                                    .updatedAt(now)
+                                    .build();
+                            return saveInNewTxIfAvailable(() -> testSuiteRepository.save(toSave));
+                        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                            return testSuiteRepository.findByWorkspaceIdAndRepositoryIdAndName(effectiveWsId, repositoryId, name)
+                                    .orElseThrow(() -> ex);
+                        }
+                    });
+        }
+    }
+
+    private TestCase resolveOrCreateTestCase(UUID effectiveWsId, UUID organizationId, String effectiveScope,
+                                             UUID suiteId, String effectiveTestName, String classname,
+                                             String requirementKey, Instant now) {
+        String lockKey = "case:" + suiteId + ":" + effectiveTestName + ":" + (classname != null ? classname : "");
+        synchronized (upsertLocks.computeIfAbsent(lockKey, k -> new Object())) {
+            Optional<TestCase> existingOpt = testCaseRepository.findBySuiteIdAndNameAndClassname(suiteId, effectiveTestName, classname);
+            if (existingOpt.isPresent()) {
+                TestCase existing = existingOpt.get();
+                if (requirementKey != null && !requirementKey.equals(existing.getRequirementKey())) {
+                    existing.setRequirementKey(requirementKey);
+                    return testCaseRepository.save(existing);
+                }
+                return existing;
+            }
+            try {
+                TestCase toSave = TestCase.builder()
+                        .organizationId(organizationId)
+                        .workspaceId(effectiveWsId)
+                        .scope(effectiveScope)
+                        .suiteId(suiteId)
+                        .name(effectiveTestName)
+                        .classname(classname)
+                        .requirementKey(requirementKey)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build();
+                return saveInNewTxIfAvailable(() -> testCaseRepository.save(toSave));
+            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                return testCaseRepository.findBySuiteIdAndNameAndClassname(suiteId, effectiveTestName, classname)
+                        .orElseThrow(() -> ex);
+            }
+        }
+    }
+
+    private <T> T saveInNewTxIfAvailable(java.util.function.Supplier<T> action) {
+        if (transactionManager != null) {
+            org.springframework.transaction.support.TransactionTemplate tx =
+                    new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            tx.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+            return tx.execute(status -> action.get());
+        }
+        return action.get();
     }
 }

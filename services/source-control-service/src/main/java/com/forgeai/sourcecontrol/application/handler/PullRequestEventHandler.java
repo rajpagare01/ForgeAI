@@ -30,6 +30,9 @@ public class PullRequestEventHandler {
     private final PullRequestRepository pullRequestRepository;
     private final OutboxService outboxService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     public PullRequestEventHandler(
             RepositoryRepository repositoryRepository,
             GitHubInstallationRepository installationRepository,
@@ -148,69 +151,17 @@ public class PullRequestEventHandler {
     }
 
     private Repository getOrCreateRepository(Long githubRepoId, Long installationId, String repoName, String fullName, String defaultBranch, boolean isPrivate) {
-        Optional<Repository> existing = repositoryRepository.findByGithubRepoId(githubRepoId);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        UUID orgId = null;
-        UUID wsId = null;
-        String scope = "ORGANIZATION";
-        if (installationId != null && installationId > 0) {
-            Optional<GitHubInstallation> instOpt = installationRepository.findByInstallationId(installationId);
-            if (instOpt.isPresent()) {
-                GitHubInstallation inst = instOpt.get();
-                if (!UUID.fromString("00000000-0000-0000-0000-000000000000").equals(inst.getOrganizationId())) {
-                    if ("PERSONAL".equalsIgnoreCase(inst.getScope()) || (inst.getOrganizationId() == null && inst.getWorkspaceId() != null)) {
-                        wsId = inst.getWorkspaceId();
-                        orgId = null;
-                        scope = "PERSONAL";
-                    } else if (inst.getOrganizationId() != null) {
-                        orgId = inst.getOrganizationId();
-                        wsId = inst.getWorkspaceId() != null ? inst.getWorkspaceId() : orgId;
-                        scope = "ORGANIZATION";
-                    }
-                }
-            }
-        }
-
-        if (orgId == null && wsId == null) {
-            UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
-            log.warn("PullRequest received for unmapped repository/installation {} (repo: {}). Quarantining under tenant {}.", installationId, fullName, QUARANTINE_ORG_ID);
-            orgId = QUARANTINE_ORG_ID;
-            wsId = QUARANTINE_ORG_ID;
-            long effectiveInstId = (installationId != null && installationId > 0) ? installationId : 0L;
-            if (effectiveInstId > 0 && installationRepository.findByInstallationId(effectiveInstId).isEmpty()) {
-                GitHubInstallation inst = GitHubInstallation.builder()
-                        .organizationId(QUARANTINE_ORG_ID)
-                        .workspaceId(QUARANTINE_ORG_ID)
-                        .scope("ORGANIZATION")
-                        .installationId(effectiveInstId)
-                        .accountLogin(fullName.contains("/") ? fullName.split("/")[0] : "quarantine")
-                        .accountType("Organization")
-                        .status(InstallationStatus.SUSPENDED)
-                        .createdAt(Instant.now())
-                        .updatedAt(Instant.now())
-                        .build();
-                installationRepository.save(inst);
-            }
-            installationId = effectiveInstId;
-        }
-
-        Repository repo = Repository.builder()
-                .organizationId(orgId)
-                .workspaceId(wsId)
-                .scope(scope)
-                .installationId(installationId)
-                .githubRepoId(githubRepoId)
-                .name(repoName)
-                .fullName(fullName)
-                .defaultBranch(defaultBranch)
-                .isPrivate(isPrivate)
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
-
-        return repositoryRepository.save(repo);
+        return WebhookRepositoryResolver.resolveOrCreate(
+                repositoryRepository,
+                installationRepository,
+                transactionManager,
+                githubRepoId,
+                installationId,
+                repoName,
+                fullName,
+                defaultBranch,
+                isPrivate,
+                "PullRequest"
+        );
     }
 }
