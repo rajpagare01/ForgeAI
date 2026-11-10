@@ -7,7 +7,7 @@ services:
     container_name: forgeai-postgres-dev
     command: postgres -c max_connections=250 -c shared_buffers=256MB -c checkpoint_timeout=15min -c max_wal_size=2GB
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-forgeai}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
@@ -36,7 +36,7 @@ services:
     container_name: forgeai-redis-dev
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data_dev:/data
     healthcheck:
@@ -61,8 +61,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: forgeai-rabbitmq-dev
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-forgeai}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-password}
@@ -89,7 +89,7 @@ services:
       dockerfile: services/identity-service/Dockerfile
     container_name: forgeai-identity-dev
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_identity?connectTimeout=5&socketTimeout=10&tcpKeepAlive=true
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
@@ -139,7 +139,7 @@ services:
       dockerfile: services/project-service/Dockerfile
     container_name: forgeai-project-dev
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/forgeai_project
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
@@ -186,7 +186,7 @@ services:
       dockerfile: services/source-control-service/Dockerfile
     container_name: forgeai-source-control-dev
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/source_control_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
@@ -240,7 +240,7 @@ services:
       dockerfile: services/testing-service/Dockerfile
     container_name: forgeai-testing-dev
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/testing_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-forgeai}
@@ -280,7 +280,7 @@ services:
       dockerfile: Dockerfile
     container_name: forgeai-ai-dev
     ports:
-      - "8084:8084"
+      - "127.0.0.1:8084:8084"
     environment:
       DATABASE_URL: postgresql://forgeai:password@postgres:5432/ai_db
       REDIS_URL: redis://redis:6379/0

@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.ReactiveRedisOperations;
+import org.springframework.data.redis.core.ReactiveValueOperations;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -73,6 +74,10 @@ class ADV2_004_GatewayWorkspaceAndRevocationSecurityTest {
         );
 
         when(jwtDecoder.decode(token)).thenReturn(Mono.just(jwt));
+        @SuppressWarnings("unchecked")
+        ReactiveValueOperations<String, String> valueOps = mock(ReactiveValueOperations.class);
+        when(redisOperations.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("user:ws:" + USER_ID + ":" + WS_ID)).thenReturn(Mono.just("ALLOW"));
         when(filterChain.filter(any())).thenReturn(Mono.empty());
 
         MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/projects")
@@ -93,6 +98,7 @@ class ADV2_004_GatewayWorkspaceAndRevocationSecurityTest {
         assertThat(downstream.getRequest().getHeaders().getFirst("X-Workspace-Id")).isEqualTo(WS_ID);
         assertThat(downstream.getRequest().getHeaders().getFirst("X-Workspace-Scope")).isEqualTo("PERSONAL");
         assertThat(downstream.getRequest().getHeaders().getFirst("X-ForgeAI-Internal")).isEqualTo("attested");
+        assertThat(exchange.getResponse().getStatusCode()).isNotEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test

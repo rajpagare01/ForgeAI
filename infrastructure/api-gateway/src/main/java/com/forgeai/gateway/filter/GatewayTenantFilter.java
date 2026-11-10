@@ -50,12 +50,18 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
             return true;
         }
         String path = request.getURI().getPath();
-        return path.startsWith("/actuator")
+        return path.equals("/actuator/health")
+                || path.startsWith("/actuator/health/")
                 || path.startsWith("/.well-known")
-                || path.startsWith("/api/v1/auth")
+                || path.equals("/api/v1/auth/login")
+                || path.equals("/api/v1/auth/register")
+                || path.equals("/api/v1/auth/refresh")
+                || path.equals("/api/v1/auth/github/config")
+                || path.equals("/api/v1/auth/github/start")
+                || path.equals("/api/v1/auth/github/callback")
                 || path.startsWith("/api/v1/webhooks")
                 || path.startsWith("/api/v1/github/installation-callback")
-                || path.startsWith("/api/v1/installations/setup-callback")
+                || (request.getMethod() == HttpMethod.GET && path.startsWith("/api/v1/installations/setup-callback"))
                 || path.equals("/api/v1/ai/health")
                 || path.equals("/api/v1/ai/healthz");
     }
@@ -161,15 +167,25 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
 
                     // Personal workspace context on resource routes:
                     if (requestedClientWsId != null && !requestedClientWsId.isBlank()) {
+                        String trimmedWsId = requestedClientWsId.trim();
                         try {
-                            java.util.UUID.fromString(requestedClientWsId.trim());
+                            java.util.UUID.fromString(trimmedWsId);
                         } catch (IllegalArgumentException ex) {
                             log.warn("Blocked malformed X-Workspace-Id header: {}", requestedClientWsId);
                             exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
                             return exchange.getResponse().setComplete();
                         }
-                        String wsScope = (requestedClientWsScope != null && !requestedClientWsScope.isBlank()) ? requestedClientWsScope.trim() : "PERSONAL";
-                        return forwardDownstream(exchange, chain, sanitizedRequest, userId, null, role, permissions, requestedClientWsId.trim(), wsScope);
+                        return verifyUserWorkspaceAccess(userId, trimmedWsId, token)
+                                .defaultIfEmpty(Boolean.FALSE)
+                                .flatMap(allowed -> {
+                                    if (!Boolean.TRUE.equals(allowed)) {
+                                        log.warn("Blocked unauthorized X-Workspace-Id {} for user {}", trimmedWsId, userId);
+                                        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                                        return exchange.getResponse().setComplete();
+                                    }
+                                    return forwardDownstream(
+                                            exchange, chain, sanitizedRequest, userId, null, role, permissions, trimmedWsId, "PERSONAL");
+                                });
                     }
 
                     // No org and no workspace context
@@ -183,6 +199,62 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
     }
 
     private static final String REDIS_USER_ROLE_PREFIX = "user:role:";
+    private static final String REDIS_USER_WS_PREFIX = "user:ws:";
+
+    /**
+     * SEC-01: Verifies that the authenticated user owns the requested personal workspace.
+     * Checks Redis cache ("user:ws:<userId>:<workspaceId>") first; on miss queries identity-service
+     * GET /api/v1/workspaces/{workspaceId} with the caller's Bearer token, confirms HTTP 200 with
+     * a PERSONAL workspace owned by the user, and caches ALLOW for 5 minutes.
+     */
+    private Mono<Boolean> verifyUserWorkspaceAccess(String userId, String workspaceId, String token) {
+        String cacheKey = REDIS_USER_WS_PREFIX + userId + ":" + workspaceId;
+        org.springframework.data.redis.core.ReactiveValueOperations<String, String> valueOps =
+                redisOperations != null ? redisOperations.opsForValue() : null;
+        Mono<String> cacheLookup = valueOps != null
+                ? valueOps.get(cacheKey).onErrorResume(ex -> Mono.empty())
+                : Mono.empty();
+
+        return cacheLookup
+                .flatMap(cached -> "ALLOW".equals(cached) ? Mono.just(Boolean.TRUE) : Mono.<Boolean>empty())
+                .switchIfEmpty(Mono.defer(() -> webClient.get()
+                        .uri(identityServiceUri + "/api/v1/workspaces/" + workspaceId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .exchangeToMono(response -> {
+                            if (response.statusCode().is2xxSuccessful()) {
+                                return response.bodyToMono(new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {})
+                                        .flatMap(body -> {
+                                            Object typeObj = body.get("type");
+                                            String wsType = typeObj != null ? typeObj.toString() : "";
+                                            Object ownerObj = body.get("ownerUserId");
+                                            if (!"PERSONAL".equalsIgnoreCase(wsType)) {
+                                                log.warn("Rejected non-PERSONAL workspace {} (type={}) via X-Workspace-Id for user {}",
+                                                        workspaceId, wsType, userId);
+                                                return Mono.<Boolean>empty();
+                                            }
+                                            if (ownerObj != null && !userId.equals(ownerObj.toString())) {
+                                                log.warn("Workspace {} owner {} does not match authenticated user {}",
+                                                        workspaceId, ownerObj, userId);
+                                                return Mono.<Boolean>empty();
+                                            }
+                                            if (valueOps == null) {
+                                                return Mono.just(Boolean.TRUE);
+                                            }
+                                            return valueOps
+                                                    .set(cacheKey, "ALLOW", java.time.Duration.ofMinutes(5))
+                                                    .thenReturn(Boolean.TRUE)
+                                                    .onErrorReturn(Boolean.TRUE);
+                                        });
+                            }
+                            log.warn("Identity-service denied workspace {} verification for user {}: status={}",
+                                    workspaceId, userId, response.statusCode());
+                            return response.releaseBody().then(Mono.<Boolean>empty());
+                        })
+                        .onErrorResume(ex -> {
+                            log.warn("Failed workspace {} verification for user {}: {}", workspaceId, userId, ex.getMessage());
+                            return Mono.empty();
+                        })));
+    }
 
     private Mono<String> resolveUserOrgRole(String userId, String orgId, String token) {
         String cacheKey = REDIS_USER_ROLE_PREFIX + userId + ":" + orgId;
