@@ -47,7 +47,7 @@ export const SmtpTestBanner: React.FC<SmtpTestBannerProps> = ({
           const parsed = JSON.parse(rawUser);
           if (parsed?.email) setRecipient(parsed.email);
         }
-      } catch {}
+      } catch { }
     }
   }, [recipient]);
 
@@ -111,20 +111,19 @@ export const SmtpTestBanner: React.FC<SmtpTestBannerProps> = ({
       {/* SMTP Status Pill */}
       <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border border-[#26262C] bg-[#0E0E11]">
         <span
-          className={`h-1.5 w-1.5 rounded-full ${
-            smtpStatusKnown === true
-              ? "bg-emerald-400"
-              : smtpStatusKnown === false
+          className={`h-1.5 w-1.5 rounded-full ${smtpStatusKnown === true
+            ? "bg-emerald-400"
+            : smtpStatusKnown === false
               ? "bg-amber-400"
               : "bg-zinc-400"
-          }`}
+            }`}
         />
         <span className="text-zinc-300">
           {smtpStatusKnown === true
             ? "SMTP Active"
             : smtpStatusKnown === false
-            ? "Dry-Run"
-            : "Email Guard"}
+              ? "Dry-Run"
+              : "Email Guard"}
         </span>
       </div>
 
@@ -183,13 +182,12 @@ export const SmtpTestBanner: React.FC<SmtpTestBannerProps> = ({
 
               {result && (
                 <div
-                  className={`p-2.5 rounded-md border text-xs space-y-1 ${
-                    result.alert_sent && result.alert_status === "SENT"
-                      ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-300"
-                      : result.alert_status === "LOGGED_DRY_RUN"
+                  className={`p-2.5 rounded-md border text-xs space-y-1 ${result.alert_sent && result.alert_status === "SENT"
+                    ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-300"
+                    : result.alert_status === "LOGGED_DRY_RUN"
                       ? "border-amber-500/30 bg-amber-950/20 text-amber-300"
                       : "border-rose-500/30 bg-rose-950/20 text-rose-300"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-1.5 font-medium">
                     {result.alert_status === "SENT" ? (

@@ -61,7 +61,8 @@ public class SourceControlEventConsumer {
                 onPullRequestOpened(prEvent);
             } else if (payload instanceof BranchCreatedEvent branchEvent) {
                 onBranchCreated(branchEvent);
-            } else if (payload instanceof java.util.Map<?, ?> mapPayload) {
+            } else if ("PULL_REQUEST_MERGED".equalsIgnoreCase(envelope.getEventType())
+                    && payload instanceof java.util.Map<?, ?> mapPayload) {
                 @SuppressWarnings("unchecked")
                 java.util.Map<String, Object> typedMap = (java.util.Map<String, Object>) mapPayload;
                 onPullRequestMerged(typedMap);
@@ -155,7 +156,6 @@ public class SourceControlEventConsumer {
         }
     }
 
-    @EventListener
     @Transactional
     public void onPullRequestMerged(java.util.Map<String, Object> eventPayload) {
         if (eventPayload == null || eventPayload.isEmpty()) {
@@ -167,18 +167,10 @@ public class SourceControlEventConsumer {
         String body = eventPayload.get("body") != null ? String.valueOf(eventPayload.get("body")) : "";
         String combinedText = title + " " + sourceBranch + " " + body;
 
-        UUID organizationId = null;
-        if (eventPayload.get("organizationId") != null) {
-            try {
-                organizationId = UUID.fromString(String.valueOf(eventPayload.get("organizationId")));
-            } catch (Exception ignored) {}
-        }
-        UUID workspaceId = null;
-        if (eventPayload.get("workspaceId") != null) {
-            try {
-                workspaceId = UUID.fromString(String.valueOf(eventPayload.get("workspaceId")));
-            } catch (Exception ignored) {}
-        }
+        UUID organizationId = parseUuid(eventPayload.get("organizationId"));
+        UUID workspaceId = parseUuid(eventPayload.get("workspaceId"));
+        UUID repositoryId = parseUuid(eventPayload.get("repositoryId"));
+        UUID effectiveWsId = workspaceId != null ? workspaceId : organizationId;
 
         Set<String> matchedTaskKeys = extractTaskKeys(combinedText);
         for (String taskKey : matchedTaskKeys) {
@@ -199,6 +191,15 @@ public class SourceControlEventConsumer {
             String externalRef = "PR-#" + prNumber;
             List<CodeLink> links = codeLinkRepository.findAllByLinkTypeAndExternalRef(CodeLinkType.PULL_REQUEST, externalRef);
             for (CodeLink link : links) {
+                if (repositoryId != null && link.getRepositoryId() != null && !repositoryId.equals(link.getRepositoryId())) {
+                    continue;
+                }
+                if (effectiveWsId != null && link.getWorkspaceId() != null && !effectiveWsId.equals(link.getWorkspaceId())) {
+                    continue;
+                }
+                if (organizationId != null && link.getOrganizationId() != null && !organizationId.equals(link.getOrganizationId())) {
+                    continue;
+                }
                 taskRepository.findById(link.getTaskId()).ifPresent(task -> {
                     if (task.getStatus() != com.forgeai.project.domain.model.TaskStatus.DONE) {
                         task.setStatus(com.forgeai.project.domain.model.TaskStatus.DONE);
@@ -208,6 +209,15 @@ public class SourceControlEventConsumer {
                     }
                 });
             }
+        }
+    }
+
+    private UUID parseUuid(Object raw) {
+        if (raw == null) return null;
+        try {
+            return UUID.fromString(String.valueOf(raw));
+        } catch (Exception e) {
+            return null;
         }
     }
 

@@ -156,8 +156,8 @@ function TraceabilityMatrixContent() {
   const healthStatusColor = health?.status === "GREEN"
     ? "text-emerald-400 border-emerald-900 bg-emerald-950/20"
     : health?.status === "AMBER"
-    ? "text-amber-400 border-amber-900 bg-amber-950/20"
-    : "text-rose-400 border-rose-900 bg-rose-950/20";
+      ? "text-amber-400 border-amber-900 bg-amber-950/20"
+      : "text-rose-400 border-rose-900 bg-rose-950/20";
 
   return (
     <div className="space-y-6">
@@ -293,13 +293,12 @@ function TraceabilityMatrixContent() {
             </div>
             <div className="w-full bg-[#1C1C21] rounded-full h-1 overflow-hidden">
               <div
-                className={`h-full rounded-full ${
-                  health.status === "GREEN"
-                    ? "bg-emerald-500"
-                    : health.status === "AMBER"
+                className={`h-full rounded-full ${health.status === "GREEN"
+                  ? "bg-emerald-500"
+                  : health.status === "AMBER"
                     ? "bg-amber-500"
                     : "bg-rose-500"
-                }`}
+                  }`}
                 style={{ width: `${health.healthScore}%` }}
               />
             </div>
@@ -367,21 +366,19 @@ function TraceabilityMatrixContent() {
       <div className="flex border-b border-[#1C1C21] gap-6 text-xs font-medium text-zinc-400">
         <button
           onClick={() => setActiveTab("spine")}
-          className={`pb-2.5 transition-colors ${
-            activeTab === "spine"
-              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
-              : "hover:text-zinc-200"
-          }`}
+          className={`pb-2.5 transition-colors ${activeTab === "spine"
+            ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+            : "hover:text-zinc-200"
+            }`}
         >
           Delivery Spine Flow ({traceData?.chains?.length || 0})
         </button>
         <button
           onClick={() => setActiveTab("gaps")}
-          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${
-            activeTab === "gaps"
-              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
-              : "hover:text-zinc-200"
-          }`}
+          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${activeTab === "gaps"
+            ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+            : "hover:text-zinc-200"
+            }`}
         >
           Gap Inspector
           {gaps.length > 0 && (
@@ -392,21 +389,19 @@ function TraceabilityMatrixContent() {
         </button>
         <button
           onClick={() => setActiveTab("snapshots")}
-          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${
-            activeTab === "snapshots"
-              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
-              : "hover:text-zinc-200"
-          }`}
+          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${activeTab === "snapshots"
+            ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+            : "hover:text-zinc-200"
+            }`}
         >
           Historical Snapshots ({snapshots.length})
         </button>
         <button
           onClick={() => setActiveTab("repositories")}
-          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${
-            activeTab === "repositories"
-              ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
-              : "hover:text-zinc-200"
-          }`}
+          className={`pb-2.5 transition-colors flex items-center gap-1.5 ${activeTab === "repositories"
+            ? "text-zinc-100 border-b-2 border-zinc-100 font-semibold"
+            : "hover:text-zinc-200"
+            }`}
         >
           Connected Repositories ({traceData?.repositories?.length || repositories.length})
         </button>
@@ -440,11 +435,10 @@ function TraceabilityMatrixContent() {
                   <button
                     key={sev}
                     onClick={() => setGapFilter(sev)}
-                    className={`rounded px-2 py-0.5 text-xs font-medium font-mono transition-colors ${
-                      gapFilter === sev
-                        ? "bg-zinc-100 text-zinc-900 font-semibold"
-                        : "bg-[#141418] text-zinc-400 hover:text-zinc-200 border border-[#26262C]"
-                    }`}
+                    className={`rounded px-2 py-0.5 text-xs font-medium font-mono transition-colors ${gapFilter === sev
+                      ? "bg-zinc-100 text-zinc-900 font-semibold"
+                      : "bg-[#141418] text-zinc-400 hover:text-zinc-200 border border-[#26262C]"
+                      }`}
                   >
                     {sev}
                   </button>
@@ -474,8 +468,8 @@ function TraceabilityMatrixContent() {
                           gap.severity === "HIGH" || gap.severity === "CRITICAL"
                             ? "destructive"
                             : gap.severity === "MEDIUM"
-                            ? "outline"
-                            : "secondary"
+                              ? "outline"
+                              : "secondary"
                         }
                         className="text-[10px] font-mono"
                       >

@@ -90,16 +90,14 @@ export const Sidebar: React.FC = () => {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`group flex h-7 items-center gap-2.5 rounded-md px-2 text-[12px] font-medium transition-colors ${
-                  isActive
-                    ? "bg-zinc-900 text-zinc-100 border border-zinc-800/80 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
-                }`}
+                className={`group flex h-7 items-center gap-2.5 rounded-md px-2 text-[12px] font-medium transition-colors ${isActive
+                  ? "bg-zinc-900 text-zinc-100 border border-zinc-800/80 shadow-xs"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
+                  }`}
               >
                 <Icon
-                  className={`h-3.5 w-3.5 shrink-0 transition-colors ${
-                    isActive ? "text-zinc-100" : "text-zinc-500 group-hover:text-zinc-300"
-                  }`}
+                  className={`h-3.5 w-3.5 shrink-0 transition-colors ${isActive ? "text-zinc-100" : "text-zinc-500 group-hover:text-zinc-300"
+                    }`}
                 />
                 <span className="truncate">{item.name}</span>
               </Link>
@@ -120,16 +118,14 @@ export const Sidebar: React.FC = () => {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`group flex h-7 items-center gap-2.5 rounded-md px-2 text-[12px] font-medium transition-colors ${
-                  isActive
-                    ? "bg-zinc-900 text-zinc-100 border border-zinc-800/80 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
-                }`}
+                className={`group flex h-7 items-center gap-2.5 rounded-md px-2 text-[12px] font-medium transition-colors ${isActive
+                  ? "bg-zinc-900 text-zinc-100 border border-zinc-800/80 shadow-xs"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
+                  }`}
               >
                 <Icon
-                  className={`h-3.5 w-3.5 shrink-0 transition-colors ${
-                    isActive ? "text-zinc-100" : "text-zinc-500 group-hover:text-zinc-300"
-                  }`}
+                  className={`h-3.5 w-3.5 shrink-0 transition-colors ${isActive ? "text-zinc-100" : "text-zinc-500 group-hover:text-zinc-300"
+                    }`}
                 />
                 <span className="truncate">{item.name}</span>
               </Link>
@@ -143,13 +139,12 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 px-1 py-0.5">
           <div className="flex items-center gap-1.5">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                gatewayStatus === "ok"
-                  ? "bg-emerald-400"
-                  : gatewayStatus === "degraded"
+              className={`h-1.5 w-1.5 rounded-full ${gatewayStatus === "ok"
+                ? "bg-emerald-400"
+                : gatewayStatus === "degraded"
                   ? "bg-amber-400"
                   : "bg-rose-400"
-              }`}
+                }`}
             />
             <span className="text-[10px] text-zinc-400">Gateway {gatewayStatus.toUpperCase()}</span>
           </div>

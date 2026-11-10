@@ -158,19 +158,19 @@ export const TopNav: React.FC = () => {
         <div className="hidden md:flex h-7 items-center gap-1.5 px-2.5 rounded-md border border-[#1C1C21] bg-[#0E0E11] font-mono text-[11px]">
           <span
             className={`inline-block h-1.5 w-1.5 rounded-full ${gatewayOnline === true
-                ? "bg-emerald-400"
-                : gatewayOnline === false
-                  ? "bg-rose-400"
-                  : "bg-amber-400"
+              ? "bg-emerald-400"
+              : gatewayOnline === false
+                ? "bg-rose-400"
+                : "bg-amber-400"
               }`}
           />
           <span className="text-zinc-500">Gateway:</span>
           <span
             className={`${gatewayOnline === true
-                ? "text-emerald-400 font-medium"
-                : gatewayOnline === false
-                  ? "text-rose-400 font-medium"
-                  : "text-amber-400 font-medium"
+              ? "text-emerald-400 font-medium"
+              : gatewayOnline === false
+                ? "text-rose-400 font-medium"
+                : "text-amber-400 font-medium"
               }`}
           >
             {gatewayOnline === true ? "ONLINE" : gatewayOnline === false ? "OFFLINE" : "CHECKING"}

@@ -197,11 +197,10 @@ export const TraceabilitySpineFlow: React.FC<TraceabilitySpineFlowProps> = ({
             <button
               key={lvl}
               onClick={() => setFilterRisk(lvl)}
-              className={`rounded-md px-2.5 py-0.5 text-xs font-mono transition-colors ${
-                filterRisk === lvl
-                  ? "bg-zinc-100 text-zinc-950 font-medium"
-                  : "bg-[#141418] text-zinc-400 hover:text-zinc-200 border border-[#26262C]"
-              }`}
+              className={`rounded-md px-2.5 py-0.5 text-xs font-mono transition-colors ${filterRisk === lvl
+                ? "bg-zinc-100 text-zinc-950 font-medium"
+                : "bg-[#141418] text-zinc-400 hover:text-zinc-200 border border-[#26262C]"
+                }`}
             >
               {lvl}
             </button>
@@ -247,11 +246,10 @@ export const TraceabilitySpineFlow: React.FC<TraceabilitySpineFlowProps> = ({
                   setSelectedNode(node);
                   setIsSheetOpen(true);
                 }}
-                className={`relative grid grid-cols-5 gap-3 p-3 rounded-md border transition-colors cursor-pointer ${
-                  isSelected
-                    ? "border-zinc-500 bg-[#141418] ring-1 ring-zinc-500/50"
-                    : "border-[#1C1C21] bg-[#0E0E11] hover:border-[#2E2E36] hover:bg-[#121216]"
-                }`}
+                className={`relative grid grid-cols-5 gap-3 p-3 rounded-md border transition-colors cursor-pointer ${isSelected
+                  ? "border-zinc-500 bg-[#141418] ring-1 ring-zinc-500/50"
+                  : "border-[#1C1C21] bg-[#0E0E11] hover:border-[#2E2E36] hover:bg-[#121216]"
+                  }`}
               >
                 {/* 1. Requirement */}
                 <div className="space-y-1 pr-2 border-r border-[#1C1C21]">
@@ -343,8 +341,8 @@ export const TraceabilitySpineFlow: React.FC<TraceabilitySpineFlowProps> = ({
                         node.aiBlastRadius.riskLevel === "LOW"
                           ? "riskLow"
                           : node.aiBlastRadius.riskLevel === "MEDIUM"
-                          ? "riskMedium"
-                          : "riskHigh"
+                            ? "riskMedium"
+                            : "riskHigh"
                       }
                     >
                       {node.aiBlastRadius.riskLevel} ({node.aiBlastRadius.score})
@@ -403,8 +401,8 @@ export const TraceabilitySpineFlow: React.FC<TraceabilitySpineFlowProps> = ({
                   selectedNode.aiBlastRadius.riskLevel === "LOW"
                     ? "riskLow"
                     : selectedNode.aiBlastRadius.riskLevel === "MEDIUM"
-                    ? "riskMedium"
-                    : "riskHigh"
+                      ? "riskMedium"
+                      : "riskHigh"
                 }
                 className="text-xs font-mono tabular-nums px-2.5 py-1"
               >

@@ -42,11 +42,10 @@ export const OrgSwitcher: React.FC = () => {
         title="Switch Workspace or Organization"
       >
         <div
-          className={`flex h-4 w-4 items-center justify-center rounded text-[10px] ${
-            isPersonalWorkspace
-              ? "bg-zinc-800 text-zinc-300"
-              : "bg-zinc-800 text-zinc-300"
-          }`}
+          className={`flex h-4 w-4 items-center justify-center rounded text-[10px] ${isPersonalWorkspace
+            ? "bg-zinc-800 text-zinc-300"
+            : "bg-zinc-800 text-zinc-300"
+            }`}
         >
           {isPersonalWorkspace ? (
             <User className="h-3 w-3" />
@@ -72,11 +71,10 @@ export const OrgSwitcher: React.FC = () => {
                   switchToPersonalWorkspace();
                   setIsOpen(false);
                 }}
-                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-                  isPersonalWorkspace
-                    ? "bg-zinc-900 text-zinc-100 border border-zinc-800"
-                    : "text-zinc-300 hover:bg-zinc-900/60"
-                }`}
+                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors ${isPersonalWorkspace
+                  ? "bg-zinc-900 text-zinc-100 border border-zinc-800"
+                  : "text-zinc-300 hover:bg-zinc-900/60"
+                  }`}
               >
                 <div className="flex items-center gap-2 truncate">
                   <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-zinc-800 text-zinc-300 text-[10px]">
@@ -112,11 +110,10 @@ export const OrgSwitcher: React.FC = () => {
                         switchOrganization(org.id);
                         setIsOpen(false);
                       }}
-                      className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
-                        isSelected
-                          ? "bg-zinc-900 text-zinc-100 border border-zinc-800"
-                          : "text-zinc-300 hover:bg-zinc-900/60"
-                      }`}
+                      className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors ${isSelected
+                        ? "bg-zinc-900 text-zinc-100 border border-zinc-800"
+                        : "text-zinc-300 hover:bg-zinc-900/60"
+                        }`}
                     >
                       <div className="flex items-center gap-2 truncate">
                         <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-zinc-800 text-[10px] font-bold text-zinc-300">
@@ -194,5 +191,8 @@ export const OrgSwitcher: React.FC = () => {
         </div>
       )}
     </div>
+  );
+};
+    </div >
   );
 };

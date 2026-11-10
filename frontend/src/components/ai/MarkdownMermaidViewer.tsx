@@ -66,7 +66,7 @@ export const MarkdownMermaidViewer: React.FC<MarkdownMermaidViewerProps> = ({
       await navigator.clipboard.writeText(text);
       setCopiedBlockId(id);
       setTimeout(() => setCopiedBlockId(null), 2000);
-    } catch {}
+    } catch { }
   };
 
   // Dynamically load Mermaid and render diagrams
@@ -480,11 +480,10 @@ export const MarkdownMermaidViewer: React.FC<MarkdownMermaidViewerProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab("rendered")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
-              activeTab === "rendered"
-                ? "bg-zinc-100 text-zinc-950"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${activeTab === "rendered"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-200"
+              }`}
           >
             <Eye className="h-3.5 w-3.5" />
             Rendered Preview
@@ -492,11 +491,10 @@ export const MarkdownMermaidViewer: React.FC<MarkdownMermaidViewerProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab("raw")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
-              activeTab === "raw"
-                ? "bg-zinc-100 text-zinc-950"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${activeTab === "raw"
+              ? "bg-zinc-100 text-zinc-950"
+              : "text-zinc-400 hover:text-zinc-200"
+              }`}
           >
             <Code className="h-3.5 w-3.5" />
             Raw Source
