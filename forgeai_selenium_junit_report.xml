@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ForgeAISeleniumTestSuite" tests="25" failures="0" errors="0" skipped="0" time="121.600">
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_01_auth_guard_unauthenticated_redirect" time="3.244"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_02_login_page_elements_and_github_oauth_button" time="1.202"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_03_login_invalid_credentials_error_banner" time="1.953"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_04_register_enterprise_account_and_workspace_init" time="31.207"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_05_overview_dashboard_kpi_cards_and_microservices_topology" time="0.713"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_06_top_nav_keyboard_shortcuts_notifications_and_profile_menu" time="0.770"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_07_org_switcher_workspace_toggle_and_create_organization" time="24.130"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_08_projects_create_governed_project_modal" time="4.459"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_09_project_workspace_add_requirement_and_task" time="3.101"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_10_kanban_task_lifecycle_status_transitions" time="13.145"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_11_ai_sprint_planner_prd_backlog_generation" time="0.588"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_12_traceability_spine_matrix_gaps_and_snapshots" time="1.141"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_13_repositories_github_connection_and_batch_import" time="0.537"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_14_test_runs_junit_xml_upload_and_ingestion" time="2.322"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_15_test_runs_inspector_and_ai_failure_diagnosis" time="2.318"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_16_test_studio_selenium_suite_generation_and_verification" time="7.581"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_17_ai_insights_seven_intelligence_tabs_and_searches" time="3.952"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_18_operations_outbox_dlq_replay_and_logout" time="1.822"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_19_negative_github_oauth_callback_missing_or_error_params" time="2.298"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_20_negative_project_creation_duplicate_and_invalid_key_rejection" time="3.986"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_21_negative_repositories_empty_batch_import_guard" time="7.725"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_22_negative_test_runs_malformed_junit_xml_rejection" time="1.061"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_23_negative_security_secret_redaction_and_error_sanitization" time="0.282"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_24_negative_ai_remediation_rejection_requires_audit_reason" time="1.476"/>
+  <testcase classname="com.forgeai.e2e.ForgeAISeleniumTestSuite" name="test_25_negative_empty_traceability_fallback_and_session_expiry_logout" time="0.587"/>
+</testsuite>

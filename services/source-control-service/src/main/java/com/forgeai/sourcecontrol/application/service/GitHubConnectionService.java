@@ -39,7 +39,8 @@ public class GitHubConnectionService {
     private final GitHubInstallationDiscoveryService discoveryService;
     private final InstallationReconciliationService reconciliationService;
 
-    @Transactional
+    // Intentionally non-transactional: discoveryService.autoOnboard runs its own TX inside try/catch,
+    // so an expected rejection must not mark a shared outer TX as rollback-only (UnexpectedRollbackException).
     public GitHubConnectionResponse getConnectionStatus(
             UUID callerUserId,
             UUID workspaceId,
