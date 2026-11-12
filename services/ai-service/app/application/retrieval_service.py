@@ -38,6 +38,7 @@ class RetrievalService:
             limit=limit,
             repo_id=repository_id,
             only_current=only_current,
+            query_text=query,
         )
 
     async def get_impacted_symbols(

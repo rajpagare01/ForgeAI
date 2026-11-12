@@ -254,3 +254,49 @@ def test_no_dependency_hallucination_without_evidence(org_repos):
     )
 
     assert len(discovered) == 0
+
+
+def test_discover_monorepo_internal_service_dependencies():
+    """
+    Verifies AI-BUG-05: Multi-service monorepo files (services/*, infrastructure/*) discover
+    service-to-service HTTP and Maven module dependencies when no external org repos match.
+    """
+    org_id = uuid4()
+    monorepo_id = uuid4()
+    all_repos = [{"id": str(monorepo_id), "name": "ForgeAI", "fullName": "rajpagare01/ForgeAI"}]
+
+    changed_files = [
+        {
+            "file_path": "pom.xml",
+            "content": "<project><modules><module>infrastructure/api-gateway</module><module>services/identity-service</module><module>services/source-control-service</module><module>services/testing-service</module></modules></project>",
+        },
+        {
+            "file_path": "infrastructure/api-gateway/src/main/resources/application.yml",
+            "content": "routes:\n  - id: identity\n    uri: http://identity-service:8081\n",
+        },
+        {
+            "file_path": "services/source-control-service/src/main/resources/application.yml",
+            "content": "forgeai:\n  ai:\n    url: http://ai-service:8084\n  testing:\n    url: http://testing-service:8083\n",
+        },
+        {
+            "file_path": "services/ai-service/app/core/config.py",
+            "content": 'SOURCE_CONTROL_SERVICE_URL: str = "http://source-control-service:8082"\n',
+        },
+    ]
+
+    discovered = DependencyDiscoveryEngine.discover_dependencies_from_files(
+        organization_id=org_id,
+        repository_id=monorepo_id,
+        changed_files=changed_files,
+        all_org_repositories=all_repos,
+        commit_sha="mono123",
+        source_repository_name="rajpagare01/ForgeAI",
+    )
+
+    targets = {(d.metadata.get("source_service"), d.target_reference, d.dependency_type) for d, _ in discovered}
+    assert ("api-gateway", "identity-service", DependencyType.HTTP_API) in targets
+    assert ("source-control-service", "ai-service", DependencyType.HTTP_API) in targets
+    assert ("source-control-service", "testing-service", DependencyType.HTTP_API) in targets
+    assert ("ai-service", "source-control-service", DependencyType.HTTP_API) in targets
+    assert ("forgeai", "identity-service", DependencyType.SHARED_LIBRARY) in targets
+    assert all(d.source_repository_id == monorepo_id and d.target_repository_id == monorepo_id for d, _ in discovered)

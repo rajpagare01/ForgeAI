@@ -154,15 +154,16 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                     if (requestedClientOrgId != null && !requestedClientOrgId.isBlank()) {
                         String targetOrg = requestedClientOrgId.trim();
                         return resolveUserOrgRole(userId, targetOrg, token)
+                                .defaultIfEmpty("")
                                 .flatMap(resolvedRole -> {
+                                    if (resolvedRole.isBlank()) {
+                                        log.warn("Access denied: user {} is NOT a member of requested org {}", userId, targetOrg);
+                                        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                                        return exchange.getResponse().setComplete();
+                                    }
                                     String effectiveRole = (role != null && !role.isBlank()) ? role : resolvedRole;
                                     return forwardDownstream(exchange, chain, sanitizedRequest, userId, targetOrg, effectiveRole, permissions, null, "ORGANIZATION");
-                                })
-                                .switchIfEmpty(Mono.defer(() -> {
-                                    log.warn("Access denied: user {} is NOT a member of requested org {}", userId, targetOrg);
-                                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-                                    return exchange.getResponse().setComplete();
-                                }));
+                                });
                     }
 
                     // Personal workspace context on resource routes:
@@ -216,7 +217,15 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                 : Mono.empty();
 
         return cacheLookup
-                .flatMap(cached -> "ALLOW".equals(cached) ? Mono.just(Boolean.TRUE) : Mono.<Boolean>empty())
+                .flatMap(cached -> {
+                    if ("ALLOW".equals(cached)) {
+                        return Mono.just(Boolean.TRUE);
+                    }
+                    if ("DENY".equals(cached)) {
+                        return Mono.just(Boolean.FALSE);
+                    }
+                    return Mono.<Boolean>empty();
+                })
                 .switchIfEmpty(Mono.defer(() -> webClient.get()
                         .uri(identityServiceUri + "/api/v1/workspaces/" + workspaceId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -230,30 +239,45 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                                             if (!"PERSONAL".equalsIgnoreCase(wsType)) {
                                                 log.warn("Rejected non-PERSONAL workspace {} (type={}) via X-Workspace-Id for user {}",
                                                         workspaceId, wsType, userId);
-                                                return Mono.<Boolean>empty();
+                                                return cacheWorkspaceDecision(valueOps, cacheKey, "DENY", java.time.Duration.ofMinutes(1), Boolean.FALSE);
                                             }
                                             if (ownerObj != null && !userId.equals(ownerObj.toString())) {
                                                 log.warn("Workspace {} owner {} does not match authenticated user {}",
                                                         workspaceId, ownerObj, userId);
-                                                return Mono.<Boolean>empty();
+                                                return cacheWorkspaceDecision(valueOps, cacheKey, "DENY", java.time.Duration.ofMinutes(1), Boolean.FALSE);
                                             }
-                                            if (valueOps == null) {
-                                                return Mono.just(Boolean.TRUE);
-                                            }
-                                            return valueOps
-                                                    .set(cacheKey, "ALLOW", java.time.Duration.ofMinutes(5))
-                                                    .thenReturn(Boolean.TRUE)
-                                                    .onErrorReturn(Boolean.TRUE);
+                                            return cacheWorkspaceDecision(valueOps, cacheKey, "ALLOW", java.time.Duration.ofMinutes(5), Boolean.TRUE);
                                         });
                             }
+                            int statusCode = response.statusCode().value();
                             log.warn("Identity-service denied workspace {} verification for user {}: status={}",
                                     workspaceId, userId, response.statusCode());
-                            return response.releaseBody().then(Mono.<Boolean>empty());
+                            if (statusCode == 403 || statusCode == 404) {
+                                return response.releaseBody()
+                                        .then(cacheWorkspaceDecision(valueOps, cacheKey, "DENY", java.time.Duration.ofMinutes(1), Boolean.FALSE));
+                            }
+                            return response.releaseBody().thenReturn(Boolean.FALSE);
                         })
                         .onErrorResume(ex -> {
                             log.warn("Failed workspace {} verification for user {}: {}", workspaceId, userId, ex.getMessage());
-                            return Mono.empty();
+                            return Mono.just(Boolean.FALSE);
                         })));
+    }
+
+    private Mono<Boolean> cacheWorkspaceDecision(
+            org.springframework.data.redis.core.ReactiveValueOperations<String, String> valueOps,
+            String cacheKey,
+            String decision,
+            java.time.Duration ttl,
+            boolean result) {
+        if (valueOps == null) {
+            return Mono.just(result);
+        }
+        Mono<Boolean> setOp = valueOps.set(cacheKey, decision, ttl);
+        if (setOp == null) {
+            return Mono.just(result);
+        }
+        return setOp.thenReturn(result).onErrorReturn(result);
     }
 
     private Mono<String> resolveUserOrgRole(String userId, String orgId, String token) {

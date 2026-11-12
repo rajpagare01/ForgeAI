@@ -11,6 +11,7 @@ public interface SpringDataTestCaseRepository extends JpaRepository<TestCaseJpaE
     Optional<TestCaseJpaEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
     Optional<TestCaseJpaEntity> findByIdAndWorkspaceId(UUID id, UUID workspaceId);
     Optional<TestCaseJpaEntity> findBySuiteIdAndNameAndClassname(UUID suiteId, String name, String classname);
+    List<TestCaseJpaEntity> findAllBySuiteId(UUID suiteId);
     List<TestCaseJpaEntity> findAllByOrganizationIdAndRequirementKey(UUID organizationId, String requirementKey);
     List<TestCaseJpaEntity> findAllByWorkspaceIdAndRequirementKey(UUID workspaceId, String requirementKey);
 }

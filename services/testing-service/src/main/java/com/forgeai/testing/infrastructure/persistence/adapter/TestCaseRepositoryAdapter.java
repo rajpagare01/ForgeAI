@@ -54,6 +54,13 @@ public class TestCaseRepositoryAdapter implements TestCaseRepository {
     }
 
     @Override
+    public List<TestCase> findAllBySuiteId(UUID suiteId) {
+        return jpaRepository.findAllBySuiteId(suiteId).stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<TestCase> findAllByOrganizationIdAndRequirementKey(UUID organizationId, String requirementKey) {
         return jpaRepository.findAllByOrganizationIdAndRequirementKey(organizationId, requirementKey).stream()
                 .map(mapper::toDomain)

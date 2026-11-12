@@ -72,6 +72,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { evaluateSecurityStatus, extractSafeCodeContext } from "@/lib/security-helpers";
 import { MarkdownMermaidViewer } from "@/components/ai/MarkdownMermaidViewer";
+import { GroundedReasoningRenderer } from "@/components/ai/GroundedReasoningRenderer";
 import { SmtpTestBanner } from "@/components/ai/SmtpTestBanner";
 import { AutoDocsGridSkeleton, CommitReportsListSkeleton } from "@/components/ai/SkeletonLoaders";
 
@@ -752,6 +753,7 @@ function AiInsightsContent() {
   const [impactResults, setImpactResults] = useState<any[]>([]);
   const [isAnalyzingImpact, setIsAnalyzingImpact] = useState(false);
   const [impactError, setImpactError] = useState<string | null>(null);
+  const [hasSearchedImpact, setHasSearchedImpact] = useState(false);
 
   // Provenance filter
   const [provenanceFilter, setProvenanceFilter] = useState<
@@ -796,12 +798,33 @@ function AiInsightsContent() {
 
   // Auto-Docs & System Design state
   const [documents, setDocuments] = useState<GeneratedDocumentItem[]>([]);
+  const [showHistoricalDocs, setShowHistoricalDocs] = useState<boolean>(false);
   const [isLoadingDocs, setIsLoadingDocs] = useState<boolean>(false);
   const [isGeneratingDocs, setIsGeneratingDocs] = useState<boolean>(false);
   const [selectedDocPreview, setSelectedDocPreview] = useState<GeneratedDocumentItem | null>(null);
   const [docActionError, setDocActionError] = useState<string | null>(null);
   const [docActionSuccess, setDocActionSuccess] = useState<string | null>(null);
   const [processingDocId, setProcessingDocId] = useState<string | null>(null);
+
+  const latestDocs = React.useMemo(() => {
+    const byType = new Map<string, GeneratedDocumentItem>();
+    for (const doc of documents) {
+      const key = doc.doc_type || doc.target_path || doc.id;
+      const existing = byType.get(key);
+      if (!existing) {
+        byType.set(key, doc);
+      } else {
+        const docTime = doc.created_at ? new Date(doc.created_at).getTime() : 0;
+        const existingTime = existing.created_at ? new Date(existing.created_at).getTime() : 0;
+        if (docTime >= existingTime) {
+          byType.set(key, doc);
+        }
+      }
+    }
+    return Array.from(byType.values());
+  }, [documents]);
+
+  const displayedDocs = showHistoricalDocs ? documents : latestDocs;
 
   // Commit Guard & Push Alert Log state
   const [commitReports, setCommitReports] = useState<CommitAnalysisReportItem[]>([]);
@@ -997,6 +1020,14 @@ function AiInsightsContent() {
   };
 
   const handleRejectAction = async (actionId: string) => {
+    if (!rejectReasonInput.trim()) {
+      setRemediationFeedback({
+        actionId,
+        type: "error",
+        message: "Please provide an explicit audit reason before rejecting a remediation action.",
+      });
+      return;
+    }
     setIsRejectingAction(true);
     setRemediationFeedback(null);
     try {
@@ -1146,6 +1177,20 @@ function AiInsightsContent() {
   }, []);
 
   useEffect(() => {
+    setSelectedRepoId("");
+    setRepositories([]);
+    setDocuments([]);
+    setShowHistoricalDocs(false);
+    setCommitReports([]);
+    setSearchResults([]);
+    setImpactResults([]);
+    setHasSearchedImpact(false);
+    setLocalActions([]);
+    setOrgDependencies([]);
+    setPrAnalysisResult(null);
+    setPrChangeSet(null);
+    setPullRequests([]);
+    setSelectedPrNumber("");
     fetchRepositories();
   }, [currentOrg?.id, activeWorkspace?.id, fetchRepositories]);
 
@@ -1282,7 +1327,10 @@ function AiInsightsContent() {
 
   // Auto-Docs & Commit Guard Fetchers
   const fetchDocuments = useCallback(async () => {
-    if (!selectedRepoId) return;
+    if (!selectedRepoId) {
+      setDocuments([]);
+      return;
+    }
     setIsLoadingDocs(true);
     setDocActionError(null);
     try {
@@ -1299,7 +1347,10 @@ function AiInsightsContent() {
   }, [selectedRepoId]);
 
   const fetchCommitReports = useCallback(async () => {
-    if (!selectedRepoId) return;
+    if (!selectedRepoId) {
+      setCommitReports([]);
+      return;
+    }
     setIsLoadingCommitReports(true);
     try {
       const res = await apiClient.get<{ repository_id: string; reports: CommitAnalysisReportItem[] }>(
@@ -1313,6 +1364,11 @@ function AiInsightsContent() {
       setIsLoadingCommitReports(false);
     }
   }, [selectedRepoId]);
+
+  useEffect(() => {
+    fetchDocuments();
+    fetchCommitReports();
+  }, [selectedRepoId, fetchDocuments, fetchCommitReports]);
 
   useEffect(() => {
     if (activeTab === "autodocs") {
@@ -1815,6 +1871,7 @@ function AiInsightsContent() {
     e.preventDefault();
     if (!impactSymbolsInput.trim() || !selectedRepoId) return;
     setIsAnalyzingImpact(true);
+    setHasSearchedImpact(true);
     setImpactError(null);
     try {
       const symbols = impactSymbolsInput.split(",").map((s) => s.trim()).filter(Boolean);
@@ -2956,13 +3013,13 @@ function AiInsightsContent() {
         >
           <BookOpen className="h-3.5 w-3.5" />
           System Design & Auto-Docs
-          {documents.length > 0 && (
+          {latestDocs.length > 0 && (
             <span className={`ml-1 rounded px-1.5 py-0 text-[10px] font-mono tabular-nums ${
               activeTab === "autodocs"
                 ? "bg-zinc-900/15 text-zinc-950"
                 : "bg-[#141418] text-zinc-300 border border-[#26262C]"
             }`}>
-              {documents.length}
+              {latestDocs.length}
             </span>
           )}
         </button>
@@ -5082,9 +5139,7 @@ function AiInsightsContent() {
                       <Cpu className="h-3.5 w-3.5 text-zinc-400" />
                       Grounded LLM Reasoning (Facts, Inferences & Recommendations)
                     </div>
-                    <div className="p-4 rounded-md bg-[#141418] border border-[#26262C] text-xs text-zinc-200 leading-relaxed whitespace-pre-line font-sans">
-                      {prAnalysisResult.summary}
-                    </div>
+                    <GroundedReasoningRenderer summary={prAnalysisResult.summary} />
                   </div>
 
                   {/* ========================================================= */}
@@ -5523,7 +5578,7 @@ function AiInsightsContent() {
             </CardContent>
           </Card>
 
-          {impactResults.length > 0 && (
+          {impactResults.length > 0 ? (
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono tabular-nums">
                 Impacted Upstream Dependencies ({impactResults.length})
@@ -5532,20 +5587,29 @@ function AiInsightsContent() {
                 {impactResults.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] text-xs"
+                    className="flex items-center justify-between gap-2 p-3 rounded-md border border-[#1C1C21] bg-[#0E0E11] text-xs"
                   >
-                    <div>
-                      <div className="font-mono text-zinc-100 font-semibold">{item.source_symbol}</div>
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className="font-mono text-zinc-100 font-semibold truncate" title={item.source_symbol}>
+                        {item.source_symbol}
+                      </div>
                       <div className="text-[10px] text-zinc-500 font-mono tabular-nums">Depth: {item.depth ?? 1} hops</div>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-mono border-[#26262C] bg-[#141418] text-zinc-300">
+                    <Badge variant="outline" className="shrink-0 text-[10px] font-mono border-[#26262C] bg-[#141418] text-zinc-300">
                       {item.edge_type || "DEPENDS_ON"}
                     </Badge>
                   </div>
                 ))}
               </div>
             </div>
-          )}
+          ) : hasSearchedImpact && !isAnalyzingImpact && !impactError ? (
+            <div className="rounded-md border border-dashed border-[#26262C] bg-[#0E0E11] p-8 text-center text-xs text-zinc-400 space-y-1.5">
+              <p className="font-medium text-zinc-200">No Upstream Dependencies Found</p>
+              <p className="text-[11px] text-zinc-500">
+                No callers or AST edges matched &ldquo;{impactSymbolsInput}&rdquo; within 3 hops in this repository. Try entering a class name, method suffix, or qualified symbol.
+              </p>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -6205,10 +6269,15 @@ function AiInsightsContent() {
                             </div>
                           </CardContent>
                         </Card>
-                      ) : (
+                      ) : isLoadingActionDetails ? (
                         <div className="p-4 rounded-lg border border-[#1C1C21] bg-[#09090B] text-xs text-zinc-500 flex items-center gap-2">
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />
                           <span>Loading structured remediation plan steps...</span>
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-lg border border-[#1C1C21] bg-[#09090B] text-xs text-zinc-400 flex items-center gap-2">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                          <span>No code remediation steps required — all deterministic quality and security checks passed.</span>
                         </div>
                       )}
 
@@ -6467,7 +6536,20 @@ function AiInsightsContent() {
                 4 deterministic documents (Overview, API, Data Model, Dependencies) + Grounded LLM System Design with verified citations. Managed through DRAFT &rarr; APPROVED &rarr; APPLIED lifecycle.
               </p>
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {documents.length > latestDocs.length && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowHistoricalDocs((prev) => !prev)}
+                  className="gap-1.5 text-xs border-[#26262C]"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  {showHistoricalDocs
+                    ? `Show Latest Only (${latestDocs.length})`
+                    : `Show Historical Snapshots (${documents.length - latestDocs.length})`}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -6556,7 +6638,7 @@ function AiInsightsContent() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {documents.map((doc) => {
+              {displayedDocs.map((doc) => {
                 const isSystemDesign = doc.doc_type === "SYSTEM_DESIGN" || doc.doc_type === "ARCHITECTURE";
                 const isDraft = doc.status === "DRAFT";
                 const isApproved = doc.status === "APPROVED";
@@ -6613,7 +6695,12 @@ function AiInsightsContent() {
                           {doc.provenance.generator === "ai_grounded" ? (
                             <span>AI: {doc.provenance.model || "Gemini"} ({doc.provenance.provider})</span>
                           ) : (
-                            <span>Deterministic Engine v{doc.provenance.generator_version || "1.0"}</span>
+                            <span>
+                              Deterministic Engine{" "}
+                              {String(doc.provenance.generator_version || "1.0").startsWith("v")
+                                ? doc.provenance.generator_version
+                                : `v${doc.provenance.generator_version || "1.0"}`}
+                            </span>
                           )}
                         </div>
                       )}

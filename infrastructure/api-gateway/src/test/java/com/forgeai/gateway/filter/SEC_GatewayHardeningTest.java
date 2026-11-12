@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -137,7 +138,8 @@ class SEC_GatewayHardeningTest {
         StepVerifier.create(filter.filter(exchange, filterChain)).verifyComplete();
 
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        verify(valueOps, never()).set(any(), any(), any(Duration.class));
+        verify(valueOps).set("user:ws:" + USER_ID + ":" + VICTIM_WS_ID, "DENY", Duration.ofMinutes(1));
+        verify(valueOps, never()).set(any(), eq("ALLOW"), any(Duration.class));
         verifyNoInteractions(filterChain);
     }
 
@@ -211,5 +213,54 @@ class SEC_GatewayHardeningTest {
                     .isEqualTo(HttpStatus.UNAUTHORIZED);
         }
         verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    @DisplayName("PERF-BUG-06: Cached DENY workspace verdict short-circuits with 403 without calling identity-service")
+    void cachedWorkspaceDenyShortCircuitsWith403WithoutIdentityServiceCall() {
+        String token = "user.jwt.token";
+        when(jwtDecoder.decode(token)).thenReturn(Mono.just(createUserJwt(token)));
+        when(valueOps.get("user:ws:" + USER_ID + ":" + VICTIM_WS_ID)).thenReturn(Mono.just("DENY"));
+
+        AtomicInteger identityCalls = new AtomicInteger(0);
+        GatewayTenantFilter filter = buildFilter(clientReq -> {
+            identityCalls.incrementAndGet();
+            return Mono.just(ClientResponse.create(HttpStatus.FORBIDDEN).build());
+        });
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/test-runs")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Workspace-Id", VICTIM_WS_ID)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain)).verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(identityCalls.get()).isZero();
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    @DisplayName("PERF-BUG-06: Organization request completes downstream without falsely triggering switchIfEmpty 403")
+    void orgRequestForwardsWithoutPostCompletionForbidden() {
+        String token = "user.jwt.token";
+        String orgId = UUID.randomUUID().toString();
+        when(jwtDecoder.decode(token)).thenReturn(Mono.just(createUserJwt(token)));
+        when(valueOps.get("user:role:" + USER_ID + ":" + orgId)).thenReturn(Mono.just("OWNER"));
+        when(filterChain.filter(any())).thenReturn(Mono.empty());
+
+        GatewayTenantFilter filter = buildFilter(clientReq -> Mono.empty());
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/projects")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Org-Id", orgId)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, filterChain)).verifyComplete();
+
+        verify(filterChain).filter(any());
+        assertThat(exchange.getResponse().getStatusCode()).isNotEqualTo(HttpStatus.FORBIDDEN);
     }
 }

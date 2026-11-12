@@ -38,6 +38,7 @@ export default function OverviewDashboardPage() {
   const [testRunCount, setTestRunCount] = useState<number>(0);
   const [prCount, setPrCount] = useState<number>(0);
   const [recentInsights, setRecentInsights] = useState<InsightItem[]>([]);
+  const [connectedRepos, setConnectedRepos] = useState<any[]>([]);
   const [serviceHealth, setServiceHealth] = useState<{
     gateway: boolean | null;
     identity: boolean | null;
@@ -65,7 +66,7 @@ export default function OverviewDashboardPage() {
           if (!checkUpStatus) return true;
           try {
             const body = await res.json();
-            return body?.status ? String(body.status).toUpperCase() === "UP" : true;
+            return body?.status ? ["UP", "OK", "HEALTHY"].includes(String(body.status).toUpperCase()) : true;
           } catch {
             return true;
           }
@@ -100,6 +101,7 @@ export default function OverviewDashboardPage() {
           setProjectCount(projects.value.length);
         }
         if (repos.status === "fulfilled" && Array.isArray(repos.value)) {
+          setConnectedRepos(repos.value);
           setRepoCount(repos.value.length);
           let totalOpenPrs = 0;
           const insightsList: InsightItem[] = [];
@@ -190,18 +192,17 @@ export default function OverviewDashboardPage() {
     },
   ];
 
-  const microservices = [
-    { name: "API Gateway", port: ":8080", healthy: serviceHealth.gateway, role: "Ingress & Revocation Filter" },
-    { name: "Identity Service", port: ":8081", healthy: serviceHealth.identity, role: "RS256 JWKS & Multi-Tenant RBAC" },
-    { name: "Source Control", port: ":8082", healthy: serviceHealth.sourceControl, role: "GitHub Webhooks & PR Ingestion" },
-    { name: "Testing Service", port: ":8083", healthy: serviceHealth.testing, role: "JUnit XML & Flaky Detection" },
-    { name: "AI Service", port: ":8084", healthy: serviceHealth.ai, role: "Tree-sitter AST & Blast Radius" },
-    { name: "Project Service", port: ":8085", healthy: serviceHealth.project, role: "Kanban, Outbox & Traceability" },
+  const systemChecks = [
+    serviceHealth.gateway,
+    serviceHealth.identity,
+    serviceHealth.sourceControl,
+    serviceHealth.testing,
+    serviceHealth.ai,
+    serviceHealth.project,
   ];
-
-  const isProbing = microservices.every((svc) => svc.healthy === null);
-  const healthyCount = microservices.filter((svc) => svc.healthy === true).length;
-  const allHealthy = !isProbing && healthyCount === microservices.length;
+  const isProbing = systemChecks.every((healthy) => healthy === null);
+  const healthyCount = systemChecks.filter((healthy) => healthy === true).length;
+  const allHealthy = !isProbing && healthyCount === systemChecks.length;
 
   return (
     <div className="space-y-6">
@@ -369,67 +370,85 @@ export default function OverviewDashboardPage() {
           </div>
         </Card>
 
-        {/* Microservices Cluster Status */}
+        {/* Connected Repositories & Sync Health */}
         <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
             <div>
               <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
                 <Activity className="h-3.5 w-3.5 text-zinc-400" />
-                Microservices Topology
+                Connected Repositories & Sync Health
               </CardTitle>
               <CardDescription className="text-[11px] text-zinc-500">
-                Ingress nodes and internal microservice health
+                Workspace repository indexing, webhook sync status, and AI readiness
               </CardDescription>
             </div>
-            <Badge
-              variant="outline"
-              className={`font-mono tabular-nums text-[10px] ${
-                isProbing
-                  ? "text-zinc-400 border-zinc-800"
-                  : allHealthy
-                  ? "text-emerald-400 border-emerald-800"
-                  : "text-amber-400 border-amber-800"
-              }`}
-            >
-              {isProbing ? "PROBING" : allHealthy ? `${healthyCount}/${microservices.length} HEALTHY` : `${healthyCount}/${microservices.length} DEGRADED`}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className={`font-mono tabular-nums text-[10px] ${
+                  isProbing
+                    ? "text-zinc-400 border-zinc-800"
+                    : allHealthy
+                    ? "text-emerald-400 border-emerald-800"
+                    : "text-amber-400 border-amber-800"
+                }`}
+              >
+                {isProbing ? "CHECKING" : allHealthy ? "PLATFORM READY" : `${healthyCount}/${systemChecks.length} ACTIVE`}
+              </Badge>
+              <Link href="/repositories">
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-zinc-400 hover:text-zinc-100">
+                  Manage
+                </Button>
+              </Link>
+            </div>
           </div>
 
           <div className="space-y-1.5">
-            {microservices.map((svc) => (
-              <div
-                key={svc.name}
-                className="flex items-center justify-between p-2 rounded-md border border-[#1C1C21] bg-[#141418] text-xs"
-              >
-                <div className="space-y-0.5">
-                  <div className="font-medium text-zinc-200 flex items-center gap-2">
-                    <span>{svc.name}</span>
-                    <span className="text-[10px] font-mono text-zinc-500">{svc.port}</span>
-                  </div>
-                  <div className="text-[11px] text-zinc-400">{svc.role}</div>
-                </div>
-                <div
-                  className={`flex items-center gap-1.5 font-mono text-[10px] ${
-                    svc.healthy === null
-                      ? "text-zinc-400"
-                      : svc.healthy
-                      ? "text-emerald-400"
-                      : "text-amber-400"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      svc.healthy === null
-                        ? "bg-zinc-500"
-                        : svc.healthy
-                        ? "bg-emerald-500"
-                        : "bg-amber-500"
-                    }`}
-                  />
-                  {svc.healthy === null ? "PROBING" : svc.healthy ? "UP" : "DEGRADED"}
-                </div>
+            {connectedRepos.length === 0 ? (
+              <div className="p-6 text-center rounded-md border border-dashed border-[#26262C] text-xs text-zinc-500 space-y-2">
+                <p>No GitHub repositories connected to this workspace yet.</p>
+                <Link href="/repositories" className="inline-block">
+                  <Button variant="outline" size="sm" className="h-7 text-xs border-[#26262C] text-zinc-200">
+                    Connect Repository
+                  </Button>
+                </Link>
               </div>
-            ))}
+            ) : (
+              connectedRepos.slice(0, 6).map((repo: any) => {
+                const syncState = String(repo.syncStatus || (repo.webhookInstalled !== false ? "SYNCED" : "PENDING")).toUpperCase();
+                const isSynced = syncState === "SYNCED";
+                return (
+                  <div
+                    key={repo.id}
+                    className="flex items-center justify-between gap-2 p-2 rounded-md border border-[#1C1C21] bg-[#141418] text-xs"
+                  >
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="font-medium text-zinc-200 flex items-center gap-2 truncate">
+                        <span className="truncate font-mono">{repo.fullName || repo.name}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#09090B] border border-[#26262C] text-zinc-400 shrink-0">
+                          {repo.defaultBranch || "main"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                        <Link href={`/ai-insights?repoId=${repo.id}`} className="text-zinc-400 hover:text-zinc-200 transition-colors">
+                          Open AI Insights &rarr;
+                        </Link>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`shrink-0 font-mono text-[10px] ${
+                        isSynced
+                          ? "border-emerald-900 text-emerald-400 bg-emerald-950/20"
+                          : "border-amber-900 text-amber-400 bg-amber-950/20"
+                      }`}
+                    >
+                      {syncState}
+                    </Badge>
+                  </div>
+                );
+              })
+            )}
           </div>
         </Card>
       </div>

@@ -190,6 +190,7 @@ export function setup() {
     accessToken,
     orgId,
     personalWorkspaceId,
+    unownedWorkspaceId: randomUuid(),
     projectId,
     repositoryId: randomUuid(),
   };
@@ -243,7 +244,7 @@ export function tenantReadAndSecurityScenario(data) {
     group("1C. SEC-01 Adversarial Check: Spoofed Unowned X-Workspace-Id Blocked with 403", () => {
       const spoofedWsHeaders = {
         Authorization: `Bearer ${data.accessToken}`,
-        "X-Workspace-Id": randomUuid(),
+        "X-Workspace-Id": data.unownedWorkspaceId || randomUuid(),
         "X-Workspace-Scope": "PERSONAL",
       };
       const res = http.get(`${BASE_URL}/api/v1/test-runs`, {

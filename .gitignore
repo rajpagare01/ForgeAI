@@ -74,4 +74,8 @@ generate_postman.py
 Thumbs.db
 scratch/
 
+### E2E Screenshots & Reports ###
+screenshots/
+screenshots-live/
+forgeai_selenium*.xml
 

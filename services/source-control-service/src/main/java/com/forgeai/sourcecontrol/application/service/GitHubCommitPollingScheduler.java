@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -21,10 +22,13 @@ import java.util.UUID;
 @ConditionalOnProperty(name = "forgeai.github.commit-polling-enabled", havingValue = "true", matchIfMissing = true)
 public class GitHubCommitPollingScheduler {
 
+    private static final UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+
     private final RepositoryRepository repositoryRepository;
     private final RepositoryApplicationService repositoryApplicationService;
     private final GitHubAppClient gitHubAppClient;
     private final GitHubAppConfig gitHubAppConfig;
+    private final ConcurrentHashMap<Long, String> forwardedWorkflowRunStates = new ConcurrentHashMap<>();
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.forgeai.sourcecontrol.infrastructure.messaging.WorkflowRunTestingServiceForwarder workflowRunTestingServiceForwarder;
@@ -47,12 +51,11 @@ public class GitHubCommitPollingScheduler {
         }
 
         for (Repository repo : repositories) {
-            if (repo.getInstallationId() == null || repo.getInstallationId() <= 0) {
+            if (repo.getInstallationId() == null || repo.getInstallationId() <= 0 || QUARANTINE_ORG_ID.equals(repo.getOrganizationId())) {
                 continue;
             }
 
             try {
-                // Poll remote branches so commits pushed to any branch are detected and reconciled
                 List<GitHubBranchMetadata> branches = gitHubAppClient.listBranches(
                         repo.getInstallationId(),
                         repo.getFullName()
@@ -62,38 +65,34 @@ public class GitHubCommitPollingScheduler {
                 String targetBranch = null;
 
                 if (branches != null && !branches.isEmpty()) {
-                    for (GitHubBranchMetadata b : branches) {
-                        if (repo.getDefaultBranch() != null && repo.getDefaultBranch().equalsIgnoreCase(b.name())) {
-                            if (!b.commitSha().equals(repo.getLatestIndexedSha())) {
-                                latestSha = b.commitSha();
-                                targetBranch = b.name();
-                                break;
-                            }
-                        }
-                    }
-                    if (latestSha == null) {
-                        for (GitHubBranchMetadata b : branches) {
-                            if (!b.commitSha().equals(repo.getLatestIndexedSha())) {
-                                latestSha = b.commitSha();
-                                targetBranch = b.name();
-                                break;
-                            }
-                        }
-                    }
-                }
+                    // Only track the default branch (falling back to the first branch) to prevent multi-branch oscillation.
+                    GitHubBranchMetadata trackedBranch = branches.stream()
+                            .filter(b -> repo.getDefaultBranch() != null && repo.getDefaultBranch().equalsIgnoreCase(b.name()))
+                            .findFirst()
+                            .orElse(branches.get(0));
 
-                if (latestSha == null) {
+                    if (!trackedBranch.commitSha().equals(repo.getLatestIndexedSha())
+                            && !trackedBranch.commitSha().equals(repo.getLatestObservedSha())) {
+                        latestSha = trackedBranch.commitSha();
+                        targetBranch = trackedBranch.name();
+                    }
+                } else {
                     List<GitHubCommitMetadata> commits = gitHubAppClient.listCommits(
                             repo.getInstallationId(),
                             repo.getFullName(),
                             1
                     );
                     if (!commits.isEmpty()) {
-                        latestSha = commits.get(0).sha();
+                        String commitSha = commits.get(0).sha();
+                        if (!commitSha.equals(repo.getLatestIndexedSha())
+                                && !commitSha.equals(repo.getLatestObservedSha())) {
+                            latestSha = commitSha;
+                            targetBranch = repo.getDefaultBranch();
+                        }
                     }
                 }
 
-                if (latestSha != null && !latestSha.isBlank() && !latestSha.equals(repo.getLatestIndexedSha())) {
+                if (latestSha != null && !latestSha.isBlank()) {
                     log.info("[Poller] Auto-detected new commit {} on repository {} (branch: {}, previous indexed SHA: {}); triggering autonomous sync & analysis",
                             latestSha, repo.getFullName(), targetBranch, repo.getLatestIndexedSha());
 
@@ -106,7 +105,6 @@ public class GitHubCommitPollingScheduler {
             }
 
             try {
-                // Poll and ingest workflow runs into testing-service for localhost/dev
                 if (workflowRunTestingServiceForwarder != null) {
                     List<GitHubAppClient.GitHubWorkflowRun> workflowRuns = gitHubAppClient.listWorkflowRuns(
                             repo.getInstallationId(),
@@ -114,6 +112,11 @@ public class GitHubCommitPollingScheduler {
                             5
                     );
                     for (var r : workflowRuns) {
+                        String stateKey = (r.status() != null ? r.status() : "") + ":" + (r.conclusion() != null ? r.conclusion() : "");
+                        if (stateKey.equals(forwardedWorkflowRunStates.get(r.id()))) {
+                            continue;
+                        }
+
                         String scope = repo.getScope() != null ? repo.getScope() :
                                 (repo.getOrganizationId() != null ? "ORGANIZATION" : "PERSONAL");
                         UUID effectiveOrgId = "PERSONAL".equalsIgnoreCase(scope) ? null : repo.getOrganizationId();
@@ -136,8 +139,10 @@ public class GitHubCommitPollingScheduler {
                                 .timestamp(java.time.Instant.now())
                                 .build();
                         workflowRunTestingServiceForwarder.onEventEnvelope(
-                                com.forgeai.sourcecontrol.domain.event.EventEnvelope.from(event, "poll-" + r.id(), "WorkflowRun", String.valueOf(r.id()))
+                                com.forgeai.sourcecontrol.domain.event.EventEnvelope.from(
+                                        event, "poll-" + r.id(), "WorkflowRun", String.valueOf(r.id()))
                         );
+                        forwardedWorkflowRunStates.put(r.id(), stateKey);
                     }
                 }
             } catch (Exception e) {
@@ -146,4 +151,3 @@ public class GitHubCommitPollingScheduler {
         }
     }
 }
-

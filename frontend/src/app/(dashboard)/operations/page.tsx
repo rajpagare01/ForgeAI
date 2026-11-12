@@ -19,6 +19,9 @@ import {
   Lock,
   Copy,
   Check,
+  ChevronDown,
+  ChevronRight,
+  Server,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -114,6 +117,7 @@ export default function OperationsDashboardPage() {
   const [replayingId, setReplayingId] = useState<string | null>(null);
   const [replaySuccess, setReplaySuccess] = useState<string | null>(null);
   const [copiedTraceId, setCopiedTraceId] = useState<string | null>(null);
+  const [showPlatformInternals, setShowPlatformInternals] = useState<boolean>(false);
 
   const fetchData = useCallback(async () => {
     if (isTenantLoading) return;
@@ -206,22 +210,36 @@ export default function OperationsDashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
-              <Activity className="h-5 w-5 text-zinc-300" />
+              <ShieldCheck className="h-5 w-5 text-emerald-400" />
               <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
-                Production Observability & Outbox Operations
+                Workspace Governance &amp; Integration Operations
               </h1>
               <Badge variant="outline" className="font-mono text-[10px] border-emerald-900 text-emerald-400 bg-emerald-950/20">
-                LIVE TELEMETRY
+                AUDIT &amp; WEBHOOKS
               </Badge>
             </div>
             <p className="text-xs text-zinc-400">
-              Real-time circuit breaker resilience, transactional outbox queue integrity, and partitioned immutable audit trail.
+              Immutable tenant governance audit trail, GitHub App webhook health, and traceability verification.
             </p>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <Badge variant="outline" className="font-mono text-[11px] bg-[#141418] text-zinc-300 border-[#26262C]">
               {currentOrg?.name || activeWorkspace?.name || "Personal Workspace"}
             </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowPlatformInternals((prev) => !prev)}
+              className="h-8 text-xs border-[#26262C] bg-[#141418] text-zinc-200 gap-1.5"
+            >
+              <Server className="h-3.5 w-3.5 text-zinc-400" />
+              {showPlatformInternals ? "Hide Platform Internals" : "Platform Internals (Developer / SRE Mode)"}
+              {showPlatformInternals ? (
+                <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-zinc-400" />
+              )}
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -253,40 +271,12 @@ export default function OperationsDashboardPage() {
         </div>
       )}
 
-      {/* KPI Overview Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Outbox Health */}
-        <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-2.5">
-          <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span className="font-medium">Transactional Outbox</span>
-            <Layers className="h-3.5 w-3.5 text-zinc-500" />
-          </div>
-          <div className="text-2xl font-semibold text-zinc-100 font-mono tabular-nums">
-            {outboxStats ? outboxStats.totalUnpublished : 0}
-            <span className="text-xs font-normal font-sans text-zinc-500 ml-1.5">unprocessed</span>
-          </div>
-          <div className="text-[11px] text-zinc-400 space-y-1 pt-2 border-t border-[#1C1C21] font-mono">
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Pending:</span>
-              <span className="text-zinc-200">{outboxStats?.pending ?? 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Retrying:</span>
-              <span className="text-amber-400">{outboxStats?.retrying ?? 0}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Dead Letter:</span>
-              <span className={outboxStats && outboxStats.deadLetter > 0 ? "text-rose-400 font-semibold" : "text-emerald-400"}>
-                {outboxStats?.deadLetter ?? 0}
-              </span>
-            </div>
-          </div>
-        </Card>
-
+      {/* Primary Customer-Facing KPIs: GitHub Integration & Webhook Health, Traceability, AI Telemetry */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {/* GitHub API & Webhooks */}
         <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-2.5">
           <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span className="font-medium">GitHub Integration</span>
+            <span className="font-medium">GitHub Integration &amp; Webhook Health</span>
             <GitPullRequest className="h-3.5 w-3.5 text-zinc-500" />
           </div>
           <div className="text-2xl font-semibold text-zinc-100 font-mono tabular-nums">
@@ -340,7 +330,7 @@ export default function OperationsDashboardPage() {
         {/* AI Orchestrator */}
         <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-2.5">
           <div className="flex items-center justify-between text-xs text-zinc-400">
-            <span className="font-medium">AI Service & Latency</span>
+            <span className="font-medium">AI Analysis Telemetry</span>
             <Cpu className="h-3.5 w-3.5 text-zinc-500" />
           </div>
           <div className="text-2xl font-semibold text-zinc-100 font-mono tabular-nums">
@@ -368,129 +358,7 @@ export default function OperationsDashboardPage() {
         </Card>
       </div>
 
-      {/* Circuit Breakers & Dependency Resilience */}
-      <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
-        <div className="pb-2 border-b border-[#1C1C21]">
-          <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
-            <Zap className="h-3.5 w-3.5 text-amber-400" />
-            Circuit Breaker Resilience Matrix
-          </CardTitle>
-          <CardDescription className="text-[11px] text-zinc-500 mt-0.5">
-            Fast-fail thresholds protecting microservices against downstream cascading degradation.
-          </CardDescription>
-        </div>
-        <div>
-          {circuitBreakers.length === 0 ? (
-            <div className="text-xs text-zinc-400 py-3 text-center font-mono">
-              All registered circuit breakers healthy (CLOSED, 0 consecutive failures).
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {circuitBreakers.map((cb) => (
-                <div
-                  key={cb.serviceName}
-                  className="rounded-md border border-[#1C1C21] bg-[#141418] p-3 space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs text-zinc-200">{cb.serviceName}</span>
-                    <Badge
-                      variant="outline"
-                      className={`font-mono text-[10px] ${
-                        cb.state === "CLOSED"
-                          ? "border-emerald-900 text-emerald-400 bg-emerald-950/20"
-                          : cb.state === "HALF_OPEN"
-                          ? "border-amber-900 text-amber-400 bg-amber-950/20"
-                          : "border-rose-900 text-rose-400 bg-rose-950/20"
-                      }`}
-                    >
-                      {cb.state}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] text-zinc-400 flex justify-between font-mono">
-                    <span className="text-zinc-500">Consecutive Failures:</span>
-                    <span className="text-zinc-200">{cb.consecutiveFailures}</span>
-                  </div>
-                  <div className="text-[11px] text-zinc-400 flex justify-between font-mono">
-                    <span className="text-zinc-500">Reset Timeout:</span>
-                    <span className="text-zinc-200">{cb.resetTimeoutSeconds}s</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Dead-Letter Outbox Queue & Replay Action */}
-      <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
-          <div>
-            <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
-              <RotateCcw className="h-3.5 w-3.5 text-rose-400" />
-              Dead-Letter Outbox Queue
-            </CardTitle>
-            <CardDescription className="text-[11px] text-zinc-500 mt-0.5">
-              Events exceeding max delivery retries preserved with full audit context for tenant-scoped replay.
-            </CardDescription>
-          </div>
-          <Badge variant="outline" className="font-mono text-[10px] border-[#26262C] text-zinc-300">
-            {deadLetters.length} Dead Letters
-          </Badge>
-        </div>
-
-        <div>
-          {deadLetters.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[#26262C] p-8 text-center text-zinc-400">
-              <CheckCircle2 className="mx-auto h-6 w-6 text-emerald-400 mb-2" />
-              <p className="text-xs font-medium text-zinc-200">No Poison-Pill Events</p>
-              <p className="text-[11px] text-zinc-500 mt-1">All transactional outbox events published cleanly.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-zinc-300">
-                <thead className="bg-[#0B0B0E] text-[10px] uppercase text-zinc-500 border-b border-[#1C1C21] font-mono">
-                  <tr>
-                    <th className="py-2 px-3">Event Type</th>
-                    <th className="py-2 px-3">Aggregate ID</th>
-                    <th className="py-2 px-3">Attempts</th>
-                    <th className="py-2 px-3">Dead Letter At</th>
-                    <th className="py-2 px-3">Last Error</th>
-                    <th className="py-2 px-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1C1C21]">
-                  {deadLetters.map((event) => (
-                    <tr key={event.id} className="hover:bg-[#141418]">
-                      <td className="py-2 px-3 font-mono text-xs text-zinc-200">{event.eventType}</td>
-                      <td className="py-2 px-3 font-mono text-xs text-zinc-400">{event.aggregateId}</td>
-                      <td className="py-2 px-3 font-mono text-xs tabular-nums">{event.attemptCount} / {event.maxAttempts}</td>
-                      <td className="py-2 px-3 font-mono text-xs text-zinc-400">
-                        {event.deadLetterAt ? new Date(event.deadLetterAt).toLocaleTimeString() : "N/A"}
-                      </td>
-                      <td className="py-2 px-3 text-xs text-rose-300 max-w-xs truncate" title={event.lastError}>
-                        {event.lastError || "Unknown failure"}
-                      </td>
-                      <td className="py-2 px-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleReplay(event.id)}
-                          disabled={replayingId === event.id}
-                          className="h-7 text-[11px] border-[#26262C] bg-[#141418] text-zinc-200 hover:bg-zinc-800"
-                        >
-                          {replayingId === event.id ? "Replaying..." : "Safe Replay"}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Immutable Audit Trail */}
+      {/* Primary View: Immutable Audit Trail */}
       <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
         <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
           <div>
@@ -576,6 +444,193 @@ export default function OperationsDashboardPage() {
           )}
         </div>
       </Card>
+
+      {/* Collapsible Platform Internals (Developer / SRE Mode) */}
+      <div className="rounded-lg border border-[#1C1C21] bg-[#0B0B0E]">
+        <button
+          type="button"
+          onClick={() => setShowPlatformInternals((prev) => !prev)}
+          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#141418]/60 transition-colors rounded-lg cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            <Server className="h-4 w-4 text-zinc-400" />
+            <div>
+              <div className="text-xs font-semibold text-zinc-200">
+                Platform Internals (Developer / SRE Mode)
+              </div>
+              <div className="text-[11px] text-zinc-500">
+                Transactional Outbox queue metrics, Circuit Breaker Resilience Matrix, and Dead-Letter replay console
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {(outboxStats?.deadLetter ?? 0) > 0 && (
+              <Badge variant="outline" className="font-mono text-[10px] border-rose-900 text-rose-400 bg-rose-950/20">
+                {outboxStats?.deadLetter} Dead Letters
+              </Badge>
+            )}
+            {showPlatformInternals ? (
+              <ChevronDown className="h-4 w-4 text-zinc-400" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-zinc-400" />
+            )}
+          </div>
+        </button>
+
+        {showPlatformInternals && (
+          <div className="space-y-4 border-t border-[#1C1C21] p-4">
+            {/* Transactional Outbox Health */}
+            <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-2.5">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="font-medium">Transactional Outbox</span>
+                <Layers className="h-3.5 w-3.5 text-zinc-500" />
+              </div>
+              <div className="text-2xl font-semibold text-zinc-100 font-mono tabular-nums">
+                {outboxStats ? outboxStats.totalUnpublished : 0}
+                <span className="text-xs font-normal font-sans text-zinc-500 ml-1.5">unprocessed</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-zinc-400 pt-2 border-t border-[#1C1C21] font-mono">
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Pending:</span>
+                  <span className="text-zinc-200">{outboxStats?.pending ?? 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Retrying:</span>
+                  <span className="text-amber-400">{outboxStats?.retrying ?? 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Dead Letter:</span>
+                  <span className={outboxStats && outboxStats.deadLetter > 0 ? "text-rose-400 font-semibold" : "text-emerald-400"}>
+                    {outboxStats?.deadLetter ?? 0}
+                  </span>
+                </div>
+              </div>
+            </Card>
+
+            {/* Circuit Breakers & Dependency Resilience */}
+            <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
+              <div className="pb-2 border-b border-[#1C1C21]">
+                <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 text-amber-400" />
+                  Circuit Breaker Resilience Matrix
+                </CardTitle>
+                <CardDescription className="text-[11px] text-zinc-500 mt-0.5">
+                  Fast-fail thresholds protecting microservices against downstream cascading degradation.
+                </CardDescription>
+              </div>
+              <div>
+                {circuitBreakers.length === 0 ? (
+                  <div className="text-xs text-zinc-400 py-3 text-center font-mono">
+                    All registered circuit breakers healthy (CLOSED, 0 consecutive failures).
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {circuitBreakers.map((cb) => (
+                      <div
+                        key={cb.serviceName}
+                        className="rounded-md border border-[#1C1C21] bg-[#141418] p-3 space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-xs text-zinc-200">{cb.serviceName}</span>
+                          <Badge
+                            variant="outline"
+                            className={`font-mono text-[10px] ${
+                              cb.state === "CLOSED"
+                                ? "border-emerald-900 text-emerald-400 bg-emerald-950/20"
+                                : cb.state === "HALF_OPEN"
+                                ? "border-amber-900 text-amber-400 bg-amber-950/20"
+                                : "border-rose-900 text-rose-400 bg-rose-950/20"
+                            }`}
+                          >
+                            {cb.state}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-zinc-400 flex justify-between font-mono">
+                          <span className="text-zinc-500">Consecutive Failures:</span>
+                          <span className="text-zinc-200">{cb.consecutiveFailures}</span>
+                        </div>
+                        <div className="text-[11px] text-zinc-400 flex justify-between font-mono">
+                          <span className="text-zinc-500">Reset Timeout:</span>
+                          <span className="text-zinc-200">{cb.resetTimeoutSeconds}s</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Dead-Letter Outbox Queue & Replay Action */}
+            <Card className="p-4 border-[#1C1C21] bg-[#0E0E11] space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
+                <div>
+                  <CardTitle className="text-xs font-semibold text-zinc-200 flex items-center gap-2">
+                    <RotateCcw className="h-3.5 w-3.5 text-rose-400" />
+                    Dead-Letter Outbox Queue
+                  </CardTitle>
+                  <CardDescription className="text-[11px] text-zinc-500 mt-0.5">
+                    Events exceeding max delivery retries preserved with full audit context for tenant-scoped replay.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="font-mono text-[10px] border-[#26262C] text-zinc-300">
+                  {deadLetters.length} Dead Letters
+                </Badge>
+              </div>
+
+              <div>
+                {deadLetters.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-[#26262C] p-8 text-center text-zinc-400">
+                    <CheckCircle2 className="mx-auto h-6 w-6 text-emerald-400 mb-2" />
+                    <p className="text-xs font-medium text-zinc-200">No Poison-Pill Events</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">All transactional outbox events published cleanly.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-zinc-300">
+                      <thead className="bg-[#0B0B0E] text-[10px] uppercase text-zinc-500 border-b border-[#1C1C21] font-mono">
+                        <tr>
+                          <th className="py-2 px-3">Event Type</th>
+                          <th className="py-2 px-3">Aggregate ID</th>
+                          <th className="py-2 px-3">Attempts</th>
+                          <th className="py-2 px-3">Dead Letter At</th>
+                          <th className="py-2 px-3">Last Error</th>
+                          <th className="py-2 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#1C1C21]">
+                        {deadLetters.map((event) => (
+                          <tr key={event.id} className="hover:bg-[#141418]">
+                            <td className="py-2 px-3 font-mono text-xs text-zinc-200">{event.eventType}</td>
+                            <td className="py-2 px-3 font-mono text-xs text-zinc-400">{event.aggregateId}</td>
+                            <td className="py-2 px-3 font-mono text-xs tabular-nums">{event.attemptCount} / {event.maxAttempts}</td>
+                            <td className="py-2 px-3 font-mono text-xs text-zinc-400">
+                              {event.deadLetterAt ? new Date(event.deadLetterAt).toLocaleTimeString() : "N/A"}
+                            </td>
+                            <td className="py-2 px-3 text-xs text-rose-300 max-w-xs truncate" title={event.lastError}>
+                              {event.lastError || "Unknown failure"}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleReplay(event.id)}
+                                disabled={replayingId === event.id}
+                                className="h-7 text-[11px] border-[#26262C] bg-[#141418] text-zinc-200 hover:bg-zinc-800"
+                              >
+                                {replayingId === event.id ? "Replaying..." : "Safe Replay"}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

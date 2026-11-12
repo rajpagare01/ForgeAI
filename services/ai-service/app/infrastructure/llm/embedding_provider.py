@@ -53,29 +53,40 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 "Real embedding provider is unconfigured in production mode (GEMINI_API_KEY required)."
             )
 
-        # Gemini model name may accept either "models/text-embedding-004" or "text-embedding-004"
-        candidate_models = [self.embedding_model]
-        if self.embedding_model.startswith("models/"):
-            candidate_models.append(self.embedding_model.replace("models/", ""))
-        else:
-            candidate_models.append(f"models/{self.embedding_model}")
+        candidate_models = list(
+            dict.fromkeys([self.embedding_model, "models/gemini-embedding-001", "models/text-embedding-004"])
+        )
 
         last_err = None
         for candidate in candidate_models:
+            if not candidate:
+                continue
             try:
-                result = genai.embed_content(
-                    model=candidate,
-                    content=text,
-                    task_type="retrieval_document",
-                )
-                embedding = result.get("embedding", [])
+                try:
+                    result = genai.embed_content(
+                        model=candidate,
+                        content=text,
+                        task_type="retrieval_document",
+                        output_dimensionality=self.dimension,
+                    )
+                except TypeError:
+                    result = genai.embed_content(
+                        model=candidate,
+                        content=text,
+                        task_type="retrieval_document",
+                    )
+                embedding = list(result.get("embedding", [])) if isinstance(result, dict) else []
                 if not embedding:
                     continue
 
-                # Pad or slice to dimension (768)
+                # Pad or slice to dimension (768) and L2-normalize
                 if len(embedding) < self.dimension:
                     embedding = embedding + [0.0] * (self.dimension - len(embedding))
-                return embedding[:self.dimension]
+                embedding = [float(x) for x in embedding[: self.dimension]]
+                norm = sum(x * x for x in embedding) ** 0.5
+                if norm > 0:
+                    embedding = [x / norm for x in embedding]
+                return embedding
             except Exception as e:
                 last_err = e
                 logger.debug("Failed embedding with candidate model '%s': %s", candidate, type(e).__name__)
@@ -92,14 +103,29 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
     def _generate_deterministic_vector(self, text: str) -> List[float]:
         """
-        Generates a deterministic 768-dimensional float vector based on sha256 of text
-        strictly for offline unit/integration testing and explicit development fallback.
+        Generates a 768-dimensional L2-normalized token-aware feature-hashed vector
+        (splitting camelCase, PascalCase, and snake_case identifiers + bigrams).
         """
-        h = hashlib.sha256(text.encode("utf-8")).digest()
-        vector = []
-        for i in range(self.dimension):
-            byte_val = h[i % len(h)]
-            vector.append((float(byte_val) / 128.0) - 1.0)
+        import re
+        raw_words = re.findall(r"[A-Za-z0-9]+", text or "")
+        tokens: List[str] = []
+        for w in raw_words:
+            parts = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", w).lower().split()
+            tokens.extend(parts)
+            if len(parts) > 1:
+                tokens.append(w.lower())
+        if not tokens:
+            tokens = ["empty"]
+
+        features = list(tokens) + [f"{tokens[i]}_{tokens[i+1]}" for i in range(len(tokens) - 1)]
+        vector = [0.0] * self.dimension
+        for feat in features:
+            digest = hashlib.sha256(feat.encode("utf-8")).digest()
+            for j in range(0, 16, 2):
+                idx = ((digest[j] << 8) | digest[j + 1]) % self.dimension
+                sign = 1.0 if (digest[(j + 2) % 32] & 1) == 0 else -1.0
+                vector[idx] += sign
+
         norm = sum(x * x for x in vector) ** 0.5
         if norm > 0:
             vector = [x / norm for x in vector]

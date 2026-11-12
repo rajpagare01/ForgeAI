@@ -242,16 +242,40 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 )
             return chunks
 
+    @staticmethod
+    def _extract_query_tokens(query_text: Optional[str]) -> List[str]:
+        if not query_text:
+            return []
+        import re
+        raw_words = re.findall(r"[A-Za-z0-9]+", query_text)
+        tokens: List[str] = []
+        for w in raw_words:
+            parts = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", w).lower().split()
+            for p in parts:
+                if len(p) >= 2 and p not in tokens:
+                    tokens.append(p)
+            if len(parts) > 1 and w.lower() not in tokens:
+                tokens.append(w.lower())
+        return tokens
+
     async def similarity_search(
-        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None, only_current: bool = True
+        self,
+        org_id: UUID,
+        query_embedding: List[float],
+        limit: int = 5,
+        repo_id: Optional[UUID] = None,
+        only_current: bool = True,
+        query_text: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Enforces strict multi-tenancy: WHERE organization_id = $1 is mandatory.
-        Uses pgvector cosine distance operator <=>
+        Uses pgvector cosine distance operator <=> combined with lexical token boosting
+        when query_text is provided.
         Filters by is_current = TRUE when only_current is set to True.
         """
         emb_str = f"[{','.join(str(x) for x in query_embedding)}]"
         current_clause = "AND is_current = TRUE" if only_current else ""
+        candidate_limit = max(limit * 8, 50)
         if repo_id:
             query = f"""
                 SELECT id, organization_id, repository_id, commit_sha, file_path,
@@ -263,7 +287,7 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 LIMIT $4;
             """
             async with self.pool.acquire() as conn:
-                rows = await conn.fetch(query, org_id, emb_str, repo_id, limit)
+                rows = await conn.fetch(query, org_id, emb_str, repo_id, candidate_limit)
         else:
             query = f"""
                 SELECT id, organization_id, repository_id, commit_sha, file_path,
@@ -275,10 +299,31 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 LIMIT $3;
             """
             async with self.pool.acquire() as conn:
-                rows = await conn.fetch(query, org_id, emb_str, limit)
+                rows = await conn.fetch(query, org_id, emb_str, candidate_limit)
+
+        tokens = self._extract_query_tokens(query_text)
+        raw_query_lower = query_text.strip().lower() if query_text else ""
 
         results = []
         for r in rows:
+            base_dist = float(r["distance"]) if r["distance"] is not None else 1.0
+            base_sim = max(0.0, 1.0 - base_dist)
+            boost = 0.0
+            if tokens:
+                sym_lower = (r["symbol_name"] or "").lower()
+                path_lower = (r["file_path"] or "").lower()
+                content_lower = (r["content"] or "").lower()
+                if raw_query_lower and raw_query_lower in sym_lower:
+                    boost += 0.25
+                sym_hits = sum(1 for t in tokens if t in sym_lower)
+                path_hits = sum(1 for t in tokens if t in path_lower)
+                content_hits = sum(1 for t in tokens if t in content_lower)
+                n_tok = float(len(tokens))
+                boost += 0.20 * (sym_hits / n_tok)
+                boost += 0.10 * (path_hits / n_tok)
+                boost += 0.15 * (content_hits / n_tok)
+            boosted_sim = min(0.9999, base_sim + boost)
+            boosted_dist = max(0.0001, 1.0 - boosted_sim)
             results.append({
                 "id": str(r["id"]),
                 "organization_id": str(r["organization_id"]),
@@ -289,10 +334,13 @@ class AsyncpgCodeChunkRepository(CodeChunkRepository):
                 "symbol_type": r["symbol_type"],
                 "content": r["content"],
                 "is_current": r.get("is_current", True),
-                "distance": float(r["distance"]) if r["distance"] is not None else 1.0,
-                "similarity": 1.0 - (float(r["distance"]) if r["distance"] is not None else 1.0),
+                "distance": boosted_dist if tokens else base_dist,
+                "similarity": boosted_sim if tokens else (1.0 - base_dist),
             })
-        return results
+
+        if tokens:
+            results.sort(key=lambda x: x["similarity"], reverse=True)
+        return results[:limit]
 
 
 class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
@@ -389,16 +437,30 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
             WITH RECURSIVE impact_tree AS (
                 SELECT source_symbol, target_symbol, edge_type, 1 AS depth
                 FROM graph_edges
-                WHERE organization_id = $1 AND repository_id = $2 AND target_symbol = $3 {current_base}
+                WHERE organization_id = $1 AND repository_id = $2
+                  AND (
+                      LOWER(target_symbol) = LOWER($3)
+                      OR LOWER(target_symbol) LIKE '%.' || LOWER($3)
+                      OR LOWER(target_symbol) LIKE '%#' || LOWER($3)
+                      OR LOWER(source_symbol) LIKE '%.' || LOWER($3)
+                      OR LOWER(source_symbol) LIKE '%.' || LOWER($3) || '#%'
+                  )
+                  {current_base}
                 UNION
                 SELECT ge.source_symbol, ge.target_symbol, ge.edge_type, it.depth + 1
                 FROM graph_edges ge
-                JOIN impact_tree it ON ge.target_symbol = it.source_symbol
+                JOIN impact_tree it ON (
+                    ge.target_symbol = it.source_symbol
+                    OR it.source_symbol LIKE ge.target_symbol || '#%'
+                    OR ge.target_symbol LIKE '%.' || SPLIT_PART(SPLIT_PART(it.source_symbol, '#', 1), '.', -1)
+                )
                 WHERE ge.organization_id = $1 AND ge.repository_id = $2 {current_join} AND it.depth < $4
             )
-            SELECT DISTINCT source_symbol, edge_type, depth
+            SELECT DISTINCT source_symbol, edge_type, MIN(depth) AS depth
             FROM impact_tree
-            ORDER BY depth ASC;
+            GROUP BY source_symbol, edge_type
+            ORDER BY depth ASC, source_symbol ASC
+            LIMIT 150;
         """
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query, org_id, repository_id, target_symbol, max_depth)

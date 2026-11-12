@@ -408,11 +408,209 @@ class DependencyDiscoveryEngine:
                             excerpt=m.group(0)[:200],
                         )
 
+        if not results:
+            cls._discover_monorepo_dependencies(
+                organization_id=organization_id,
+                source_repository_id=source_repository_id,
+                source_repository_name=source_repository_name,
+                repository_files=repository_files,
+                commit_sha=commit_sha,
+                results=results,
+                seen=seen,
+            )
+
         logger.info(
             "DependencyDiscovery: source=%s found %d dependencies across %d files",
             source_repository_name, len(results), len(repository_files),
         )
         return results
+
+    @classmethod
+    def _discover_monorepo_dependencies(
+        cls,
+        organization_id: UUID,
+        source_repository_id: UUID,
+        source_repository_name: str,
+        repository_files: List[Dict[str, Any]],
+        commit_sha: str,
+        results: List[Tuple[RepositoryDependency, DependencyEvidence]],
+        seen: Set[str],
+    ) -> None:
+        """
+        Extracts deterministic internal service-to-service topology edges when
+        external cross-repository matching returns 0 and the repository files span
+        multiple monorepo service directories (services/<name>/ or infrastructure/<name>/).
+        """
+        service_dir_re = re.compile(r"^(?:services|infrastructure)/([^/]+)/", re.IGNORECASE)
+        maven_module_re = re.compile(r"<module>\s*([^<\s]+)\s*</module>", re.IGNORECASE)
+        service_url_re = re.compile(r"(?:https?|lb|ws)://([a-z0-9][a-z0-9\-]+)(?::\d+)?", re.IGNORECASE)
+
+        monorepo_services: Set[str] = set()
+        for f in repository_files:
+            fp = (f.get("file_path") or "").lstrip("./")
+            m = service_dir_re.match(fp)
+            if m:
+                monorepo_services.add(m.group(1).lower())
+            elif fp.lower() == "pom.xml" and f.get("content"):
+                for mod in maven_module_re.findall(f.get("content") or ""):
+                    mod_clean = mod.strip().rstrip("/").split("/")[-1].lower()
+                    if mod_clean:
+                        monorepo_services.add(mod_clean)
+
+        if len(monorepo_services) < 2:
+            return
+
+        svc_lookup: Dict[str, str] = {}
+        for svc in monorepo_services:
+            svc_lookup[svc] = svc
+            svc_lookup[svc.replace("-", "_")] = svc
+            for suffix in ("-service", "_service"):
+                if svc.endswith(suffix):
+                    svc_lookup[svc[: -len(suffix)]] = svc
+
+        def match_monorepo_service(candidate: str) -> Optional[str]:
+            if not candidate:
+                return None
+            norm = candidate.strip().lower().replace("_", "-")
+            if norm in svc_lookup:
+                return svc_lookup[norm]
+            norm_under = norm.replace("-", "_")
+            if norm_under in svc_lookup:
+                return svc_lookup[norm_under]
+            return None
+
+        def add_monorepo(
+            source_svc: str,
+            target_svc: str,
+            dep_type: str,
+            evidence_type: str,
+            confidence: str,
+            source_ref: str,
+            target_ref: str,
+            evidence_kind: str,
+            file_path: str,
+            excerpt: str,
+        ) -> None:
+            if not target_svc or source_svc == target_svc:
+                return
+            key = f"monorepo:{source_svc}:{target_svc}:{dep_type}:{source_ref}"
+            if key in seen:
+                return
+            seen.add(key)
+            dep = RepositoryDependency(
+                organization_id=organization_id,
+                source_repository_id=source_repository_id,
+                target_repository_id=source_repository_id,
+                dependency_type=dep_type,
+                evidence_type=evidence_type,
+                confidence=confidence,
+                source_reference=source_ref[:500] if source_ref else None,
+                target_reference=target_ref[:500] if target_ref else None,
+                current_state=DependencyState.ACTIVE,
+                metadata={
+                    "monorepo_internal": True,
+                    "source_service": source_svc,
+                    "target_service": target_svc,
+                },
+                discovered_at=_utc_now(),
+                last_verified_at=_utc_now(),
+            )
+            ev = DependencyEvidence(
+                organization_id=organization_id,
+                dependency_id=dep.id,
+                evidence_kind=evidence_kind,
+                file_path=file_path,
+                excerpt=excerpt[:800] if excerpt else None,
+                commit_sha=commit_sha or None,
+            )
+            results.append((dep, ev))
+
+        root_name = (source_repository_name or "monorepo-root").split("/")[-1].lower()
+
+        for file_item in repository_files:
+            fp = (file_item.get("file_path") or "").lstrip("./")
+            content = file_item.get("content") or ""
+            if not fp or not content:
+                continue
+
+            fname = fp.split("/")[-1].lower()
+            dir_match = service_dir_re.match(fp)
+            source_svc = dir_match.group(1).lower() if dir_match else None
+
+            # Root pom.xml <module> declarations
+            if not source_svc and fname == "pom.xml":
+                for mod in maven_module_re.findall(content):
+                    mod_clean = mod.strip().rstrip("/")
+                    mod_svc = mod_clean.split("/")[-1].lower()
+                    target_svc = match_monorepo_service(mod_svc)
+                    if target_svc:
+                        add_monorepo(
+                            source_svc=root_name,
+                            target_svc=target_svc,
+                            dep_type=DependencyType.SHARED_LIBRARY,
+                            evidence_type=DependencyEvidenceType.EXPLICIT,
+                            confidence=DependencyConfidence.HIGH,
+                            source_ref=f"{root_name}:pom.xml:module:{mod_clean}",
+                            target_ref=target_svc,
+                            evidence_kind="MAVEN_POM",
+                            file_path=fp,
+                            excerpt=f"<module>{mod_clean}</module>",
+                        )
+                continue
+
+            if not source_svc:
+                continue
+
+            # Service pom.xml dependencies
+            if fname == "pom.xml":
+                for m in _MAVEN_DEP_RE.finditer(content):
+                    group_id = m.group(1).strip()
+                    artifact_id = m.group(2).strip()
+                    target_svc = match_monorepo_service(artifact_id)
+                    if target_svc:
+                        add_monorepo(
+                            source_svc=source_svc,
+                            target_svc=target_svc,
+                            dep_type=DependencyType.SHARED_LIBRARY,
+                            evidence_type=DependencyEvidenceType.EXPLICIT,
+                            confidence=DependencyConfidence.HIGH,
+                            source_ref=f"{source_svc}:pom.xml:{group_id}:{artifact_id}",
+                            target_ref=target_svc,
+                            evidence_kind="MAVEN_POM",
+                            file_path=fp,
+                            excerpt=m.group(0)[:300],
+                        )
+
+            # Service-to-service URLs in Spring configs, Python configs, env files, or client adapters
+            is_config_or_client = (
+                fname in (
+                    "application.yml", "application.yaml", "application.properties",
+                    "application-prod.yml", "application-dev.yml", "bootstrap.yml",
+                    ".env", ".env.example", ".env.local", "config.yml", "config.yaml",
+                    "config.py", "settings.py",
+                )
+                or fname.endswith((".yml", ".yaml", ".properties"))
+                or "client" in fname
+                or "filter" in fname
+                or "gateway" in fname
+            )
+            if is_config_or_client:
+                for m in service_url_re.finditer(content):
+                    host = m.group(1).strip().lower()
+                    target_svc = match_monorepo_service(host)
+                    if target_svc:
+                        add_monorepo(
+                            source_svc=source_svc,
+                            target_svc=target_svc,
+                            dep_type=DependencyType.HTTP_API,
+                            evidence_type=DependencyEvidenceType.EXPLICIT,
+                            confidence=DependencyConfidence.HIGH,
+                            source_ref=f"{source_svc}:{fp}:{target_svc}",
+                            target_ref=target_svc,
+                            evidence_kind="SPRING_CONFIG_URL",
+                            file_path=fp,
+                            excerpt=m.group(0)[:200],
+                        )
 
     # ---------------------------------------------------------------------------
     # Contract Compatibility Analysis

@@ -66,8 +66,13 @@ public class TestIngestionService {
                     : "default-suite";
 
             // 1. Get or create TestSuite
-            TestSuite suite = suiteCache.computeIfAbsent(suiteName, name ->
-                    resolveOrCreateSuite(effectiveWsId, organizationId, effectiveScope, run.getRepositoryId(), name, now));
+            TestSuite suite = suiteCache.computeIfAbsent(suiteName, name -> {
+                TestSuite resolved = resolveOrCreateSuite(effectiveWsId, organizationId, effectiveScope, run.getRepositoryId(), name, now);
+                if (resolved != null && resolved.getId() != null) {
+                    preloadSuiteTestCases(resolved.getId(), caseCache);
+                }
+                return resolved;
+            });
 
             // 2. Get or create TestCase
             String effectiveTestName = (item.testName() != null && !item.testName().isBlank())
@@ -77,6 +82,14 @@ public class TestIngestionService {
             TestCase testCase = caseCache.computeIfAbsent(caseKey, k ->
                     resolveOrCreateTestCase(effectiveWsId, organizationId, effectiveScope, suite.getId(),
                             effectiveTestName, item.classname(), item.requirementKey(), now));
+            if (item.requirementKey() != null && !item.requirementKey().equals(testCase.getRequirementKey())) {
+                testCase.setRequirementKey(item.requirementKey());
+                TestCase updated = testCaseRepository.save(testCase);
+                if (updated != null) {
+                    testCase = updated;
+                    caseCache.put(caseKey, updated);
+                }
+            }
 
             // 3. Assemble TestResult
             TestResult result = TestResult.builder()
@@ -151,6 +164,17 @@ public class TestIngestionService {
                                     .orElseThrow(() -> ex);
                         }
                     });
+        }
+    }
+
+    private void preloadSuiteTestCases(UUID suiteId, Map<String, TestCase> caseCache) {
+        List<TestCase> existingCases = testCaseRepository.findAllBySuiteId(suiteId);
+        if (existingCases == null) {
+            return;
+        }
+        for (TestCase tc : existingCases) {
+            String key = suiteId + "#" + tc.getName() + "#" + (tc.getClassname() != null ? tc.getClassname() : "");
+            caseCache.putIfAbsent(key, tc);
         }
     }
 

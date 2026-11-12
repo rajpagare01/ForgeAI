@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useTenant } from "@/lib/tenant-context";
@@ -37,8 +37,10 @@ export const TopNav: React.FC = () => {
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -61,6 +63,30 @@ export const TopNav: React.FC = () => {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (notificationsOpen && notificationsRef.current && !notificationsRef.current.contains(target)) {
+        setNotificationsOpen(false);
+      }
+      if (userMenuOpen && userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setNotificationsOpen(false);
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [notificationsOpen, userMenuOpen]);
 
   useEffect(() => {
     let isMounted = true;
@@ -229,7 +255,7 @@ export const TopNav: React.FC = () => {
         )}
 
         {/* Notifications Icon & Popover */}
-        <div className="relative">
+        <div ref={notificationsRef} className="relative">
           <button
             type="button"
             onClick={() => setNotificationsOpen(!notificationsOpen)}
@@ -240,11 +266,6 @@ export const TopNav: React.FC = () => {
           </button>
 
           {notificationsOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setNotificationsOpen(false)}
-              />
               <div className="absolute right-0 mt-1.5 w-80 rounded-lg border border-[#26262C] bg-[#0E0E11] p-3 shadow-2xl z-50 space-y-2">
                 <div className="flex items-center justify-between pb-2 border-b border-[#1C1C21]">
                   <span className="text-xs font-semibold text-zinc-100">Telemetry & Alerts</span>
@@ -287,12 +308,11 @@ export const TopNav: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </>
           )}
         </div>
 
         {/* User Profile Menu */}
-        <div className="relative">
+        <div ref={userMenuRef} className="relative">
           <button
             onClick={() => {
               setUserMenuOpen(!userMenuOpen);
@@ -317,11 +337,6 @@ export const TopNav: React.FC = () => {
           </button>
 
           {userMenuOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setUserMenuOpen(false)}
-              />
               <div className="absolute right-0 mt-1.5 w-64 rounded-lg border border-[#26262C] bg-[#0E0E11] p-2 shadow-2xl z-50">
                 {/* Header Profile Details */}
                 <div className="px-2.5 py-1.5 border-b border-[#1C1C21]">
@@ -416,7 +431,6 @@ export const TopNav: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </>
           )}
         </div>
       </div>

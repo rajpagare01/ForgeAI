@@ -37,56 +37,79 @@ class GeminiProvider(LLMProvider):
 
         start_time = time.time()
         max_retries = max(1, settings.PROVIDER_MAX_RETRIES)
+        candidate_models = list(
+            dict.fromkeys([self.model_name, "gemini-2.5-flash", "gemini-2.0-flash"])
+        )
         last_error: Optional[Exception] = None
 
-        for attempt in range(1, max_retries + 1):
-            try:
-                model = genai.GenerativeModel(
-                    model_name=self.model_name,
-                    system_instruction=system_instruction,
-                )
-                # Run the blocking Gemini call in a threadpool with a strict timeout to keep async loop unblocked
-                import sys
-                call_timeout = 2.0 if "pytest" in sys.modules else float(settings.PROVIDER_TIMEOUT_SECONDS)
-                response = await asyncio.wait_for(
-                    asyncio.to_thread(model.generate_content, prompt),
-                    timeout=call_timeout,
-                )
-                if not response or not hasattr(response, "text") or response.text is None:
-                    raise ProviderUnavailableException("Gemini returned empty response text.")
+        for candidate_model in candidate_models:
+            if not candidate_model:
+                continue
+            for attempt in range(1, max_retries + 1):
+                try:
+                    model = genai.GenerativeModel(
+                        model_name=candidate_model,
+                        system_instruction=system_instruction,
+                    )
+                    # Run the blocking Gemini call in a threadpool with a strict timeout to keep async loop unblocked
+                    import sys
+                    call_timeout = 2.0 if "pytest" in sys.modules else float(settings.PROVIDER_TIMEOUT_SECONDS)
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(model.generate_content, prompt),
+                        timeout=call_timeout,
+                    )
+                    if not response or not hasattr(response, "text") or response.text is None:
+                        raise ProviderUnavailableException("Gemini returned empty response text.")
 
-                duration_ms = int((time.time() - start_time) * 1000)
-                logger.info(
-                    "Gemini generation succeeded (model=%s, duration=%dms, attempt=%d)",
-                    self.model_name,
-                    duration_ms,
-                    attempt,
-                )
-                return ProviderResponse(
-                    text=response.text,
-                    provider="GEMINI",
-                    model=self.model_name,
-                    fallback_used=False,
-                    latency_ms=duration_ms,
-                )
-            except Exception as e:
-                last_error = e
-                # Check for non-retryable programming or tenant violations vs retryable network/availability
-                err_type = type(e).__name__
-                err_msg = str(e)
-                logger.warning(
-                    "Gemini attempt %d/%d failed (%s: %s)",
-                    attempt,
-                    max_retries,
-                    err_type,
-                    err_msg[:120],
-                )
-                if any(x in err_type for x in ("NotFound", "InvalidArgument", "PermissionDenied", "Unauthenticated")) or any(c in err_msg for c in ("404", "400", "401", "403")):
-                    logger.info("Gemini failure is non-retryable (%s); fast-failing to trigger immediate fallback.", err_type)
-                    break
-                if attempt < max_retries:
-                    await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    logger.info(
+                        "Gemini generation succeeded (model=%s, duration=%dms, attempt=%d)",
+                        candidate_model,
+                        duration_ms,
+                        attempt,
+                    )
+                    return ProviderResponse(
+                        text=response.text,
+                        provider="GEMINI",
+                        model=candidate_model,
+                        fallback_used=False,
+                        latency_ms=duration_ms,
+                    )
+                except Exception as e:
+                    last_error = e
+                    # Check for non-retryable programming or tenant violations vs retryable network/availability
+                    err_type = type(e).__name__
+                    err_msg = str(e)
+                    logger.warning(
+                        "Gemini model=%s attempt %d/%d failed (%s: %s)",
+                        candidate_model,
+                        attempt,
+                        max_retries,
+                        err_type,
+                        err_msg[:120],
+                    )
+                    if any(x in err_type for x in ("NotFound", "InvalidArgument")) or any(
+                        c in err_msg for c in ("404", "400")
+                    ):
+                        logger.info(
+                            "Gemini model=%s unsupported/not found (%s); trying next candidate model.",
+                            candidate_model,
+                            err_type,
+                        )
+                        break
+                    if any(x in err_type for x in ("PermissionDenied", "Unauthenticated")) or any(
+                        c in err_msg for c in ("401", "403")
+                    ):
+                        logger.info(
+                            "Gemini failure is non-retryable (%s); fast-failing to trigger immediate fallback.",
+                            err_type,
+                        )
+                        raise ProviderUnavailableException(
+                            f"Gemini API auth failure ({err_type})"
+                        ) from e
+                    if attempt < max_retries:
+                        await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
 
         raise ProviderUnavailableException(
-            f"Gemini API unavailable after {max_retries} attempts ({type(last_error).__name__})"
+            f"Gemini API unavailable after trying {candidate_models} ({type(last_error).__name__})"
         )

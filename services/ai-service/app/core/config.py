@@ -25,8 +25,8 @@ class Settings(BaseSettings):
 
     # Gemini LLM settings (PRIMARY)
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
-    GEMINI_EMBEDDING_MODEL: str = "models/text-embedding-004"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     EMBEDDING_DIMENSION: int = 768
 
     # Groq LLM settings (FALLBACK ONLY - NOT FOR EMBEDDINGS)

@@ -22,7 +22,13 @@ class CodeChunkRepository(ABC):
 
     @abstractmethod
     async def similarity_search(
-        self, org_id: UUID, query_embedding: List[float], limit: int = 5, repo_id: Optional[UUID] = None, only_current: bool = True
+        self,
+        org_id: UUID,
+        query_embedding: List[float],
+        limit: int = 5,
+        repo_id: Optional[UUID] = None,
+        only_current: bool = True,
+        query_text: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         pass
 
