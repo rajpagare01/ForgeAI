@@ -2,6 +2,7 @@ package com.forgeai.testing.application.command;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.forgeai.testing.domain.model.TestResultStatus;
+import jakarta.validation.constraints.NotNull;
 
 public record RecordTestResultItem(
         @JsonAlias({"suite_name"})
@@ -16,6 +17,7 @@ public record RecordTestResultItem(
         @JsonAlias({"requirement_key"})
         String requirementKey,
 
+        @NotNull(message = "Test result status is required")
         TestResultStatus status,
 
         @JsonAlias({"duration_ms"})

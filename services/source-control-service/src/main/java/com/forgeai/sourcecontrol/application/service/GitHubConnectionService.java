@@ -50,6 +50,21 @@ public class GitHubConnectionService {
         boolean isPersonal = (organizationId == null);
         String workspaceScope = isPersonal ? "PERSONAL" : "ORGANIZATION";
 
+        if (isPersonal) {
+            if (callerUserId == null) {
+                throw new com.forgeai.sourcecontrol.infrastructure.github.GitHubAccessDeniedException(
+                        "Authenticated caller user identity is required for personal workspace connection status");
+            }
+            if (effectiveWsId != null && workspaceRepository != null) {
+                workspaceRepository.findById(effectiveWsId).ifPresent(ws -> {
+                    if ("PERSONAL".equalsIgnoreCase(ws.getType()) && !callerUserId.equals(ws.getOwnerUserId())) {
+                        throw new com.forgeai.sourcecontrol.infrastructure.github.GitHubAccessDeniedException(
+                                "Access denied: You do not own this personal workspace");
+                    }
+                });
+            }
+        }
+
         // 1. Resolve linked GitHub OAuth profile from Identity Service
         Optional<IdentityServiceClient.UserGitHubProfile> profileOpt = Optional.empty();
         if (callerUserId != null) {

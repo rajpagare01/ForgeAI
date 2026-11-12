@@ -55,21 +55,6 @@ public class RateLimiterConfig {
     @Bean
     public KeyResolver webhookKeyResolver() {
         return exchange -> {
-            String deliveryId = exchange.getRequest().getHeaders().getFirst("X-GitHub-Delivery");
-            String repoHeader = exchange.getRequest().getHeaders().getFirst("X-GitHub-Hook-ID");
-            
-            if (repoHeader != null && !repoHeader.isBlank()) {
-                return Mono.just("webhook:repo:" + repoHeader.trim());
-            }
-            if (deliveryId != null && !deliveryId.isBlank()) {
-                // Shared webhook ingress bucket partitioned by sender IP or webhook host
-                InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
-                String ip = (remoteAddress != null && remoteAddress.getAddress() != null)
-                        ? remoteAddress.getAddress().getHostAddress()
-                        : "github-ingress";
-                return Mono.just("webhook:ingress:" + ip);
-            }
-
             InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
             String ip = (remoteAddress != null && remoteAddress.getAddress() != null)
                     ? remoteAddress.getAddress().getHostAddress()

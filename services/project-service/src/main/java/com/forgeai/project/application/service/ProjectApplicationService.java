@@ -198,20 +198,27 @@ public class ProjectApplicationService {
                 }
             }
             if (wsOpt.isEmpty() && callerUserId != null) {
-                // Auto-provision workspace locally if provisioned in identity-service
-                WorkspaceJpaEntity autoWs = WorkspaceJpaEntity.builder()
-                        .id(workspaceId)
-                        .type(organizationId != null ? "ORGANIZATION" : "PERSONAL")
-                        .ownerUserId(callerUserId)
-                        .organizationId(organizationId)
-                        .name(organizationId != null ? "Organization Workspace" : "Personal Workspace")
-                        .createdAt(Instant.now())
-                        .updatedAt(Instant.now())
-                        .build();
-                try {
-                    wsOpt = Optional.of(workspaceRepository.save(autoWs));
-                } catch (Exception ignored) {
-                    wsOpt = workspaceRepository.findById(workspaceId);
+                if (organizationId != null) {
+                    if (workspaceId.equals(organizationId)) {
+                        wsOpt = Optional.of(getOrCreateOrgWorkspace(organizationId, callerUserId));
+                    }
+                } else if (!"ORGANIZATION".equalsIgnoreCase(com.forgeai.project.infrastructure.security.TenantContext.getWorkspaceScope())
+                        && workspaceRepository.findByTypeAndOrganizationId("ORGANIZATION", workspaceId).isEmpty()) {
+                    // Auto-provision PERSONAL workspace locally only when explicitly PERSONAL and not an org workspace ID
+                    WorkspaceJpaEntity autoWs = WorkspaceJpaEntity.builder()
+                            .id(workspaceId)
+                            .type("PERSONAL")
+                            .ownerUserId(callerUserId)
+                            .organizationId(null)
+                            .name("Personal Workspace")
+                            .createdAt(Instant.now())
+                            .updatedAt(Instant.now())
+                            .build();
+                    try {
+                        wsOpt = Optional.of(workspaceRepository.save(autoWs));
+                    } catch (Exception ignored) {
+                        wsOpt = workspaceRepository.findById(workspaceId);
+                    }
                 }
             }
             WorkspaceJpaEntity workspace = wsOpt
@@ -268,13 +275,15 @@ public class ProjectApplicationService {
                     return personalWs.get();
                 }
             }
-            if (callerUserId != null) {
+            if (callerUserId != null && organizationId == null
+                    && !"ORGANIZATION".equalsIgnoreCase(com.forgeai.project.infrastructure.security.TenantContext.getWorkspaceScope())
+                    && workspaceRepository.findByTypeAndOrganizationId("ORGANIZATION", workspaceId).isEmpty()) {
                 WorkspaceJpaEntity autoWs = WorkspaceJpaEntity.builder()
                         .id(workspaceId)
-                        .type(organizationId != null ? "ORGANIZATION" : "PERSONAL")
+                        .type("PERSONAL")
                         .ownerUserId(callerUserId)
-                        .organizationId(organizationId)
-                        .name(organizationId != null ? "Organization Workspace" : "Personal Workspace")
+                        .organizationId(null)
+                        .name("Personal Workspace")
                         .createdAt(Instant.now())
                         .updatedAt(Instant.now())
                         .build();

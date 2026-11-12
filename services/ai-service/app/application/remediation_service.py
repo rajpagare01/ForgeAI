@@ -1,7 +1,9 @@
 import logging
+import sys
 from typing import Dict, Any, List, Optional
 from uuid import UUID
 from fastapi import HTTPException
+from app.core.config import settings
 from app.domain.models import (
     EngineeringAction,
     ActionStatus,
@@ -191,7 +193,6 @@ class RemediationService:
                 target_file=patch.target_file,
                 original_content=original_content,
                 unified_diff=patch.unified_diff,
-                proposed_replacement=patch.proposed_replacement,
                 source_finding_id=patch.source_finding,
             )
             await self.patch_repo.update_status(organization_id, patch.id, PatchStatus.VALIDATED.value)
@@ -251,8 +252,9 @@ class RemediationService:
         if not patch:
             raise HTTPException(status_code=404, detail=f"No patch proposal found for action '{action_id}'.")
 
-        # 2. Enforce Write Mode (Section 10 & 25 of Prompt)
-        active_mode = write_mode_override or self.default_write_mode
+        # 2. Enforce Write Mode (ignore caller override outside test runtime)
+        allow_override = settings.ENVIRONMENT == "test" or "pytest" in sys.modules
+        active_mode = (write_mode_override if allow_override else None) or self.default_write_mode
         if active_mode != GitHubWriteMode.CONTROLLED_WRITE.value:
             raise HTTPException(
                 status_code=403,
@@ -309,6 +311,22 @@ class RemediationService:
             f"**Validation Plan**:\nIn-memory AST parsing and deterministic rule verification passed."
         )
 
+        if not self.source_control_client:
+            raise HTTPException(
+                status_code=503,
+                detail="Source control client is not configured to propose remediation pull requests.",
+            )
+
+        pr_info = await self.source_control_client.propose_files_pull_request(
+            organization_id=organization_id,
+            repository_id=action.repository_id,
+            base_commit_sha=action.commit_sha,
+            branch_name=branch_name,
+            pr_title=pr_title,
+            pr_body=pr_body,
+            files=[{"path": patch.target_file, "content": patched_code}],
+        )
+
         # 4. Deterministic Differential Re-Analysis
         effectiveness = RemediationEffectivenessEngine.evaluate_remediation_effectiveness(
             organization_id=organization_id,
@@ -339,6 +357,8 @@ class RemediationService:
                 actor_id=actor_id,
                 details={
                     "branch": branch_name,
+                    "pr_url": pr_info.get("pr_url"),
+                    "pr_number": pr_info.get("pr_number"),
                     "target_file": patch.target_file,
                     "is_effective": effectiveness.is_effective,
                     "risk_delta": effectiveness.risk_delta,
@@ -352,5 +372,7 @@ class RemediationService:
             "action_id": action_id,
             "branch_created": branch_name,
             "remediation_pr_title": pr_title,
+            "pull_request": pr_info,
+            "pr_url": pr_info.get("pr_url"),
             "effectiveness": effectiveness.model_dump(),
         }

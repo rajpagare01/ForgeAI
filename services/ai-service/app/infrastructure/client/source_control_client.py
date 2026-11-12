@@ -181,16 +181,20 @@ class SourceControlClient:
                 if resp.status_code in [200, 201]:
                     return resp.json()
                 logger.warning("Source control PR creation returned %d: %s", resp.status_code, resp.text)
+                last_err = f"HTTP {resp.status_code}"
         except Exception as e:
             logger.debug("Source control service call failed (propose_files_pull_request): %s", e)
+            last_err = str(e)
 
-        # Fallback simulation for tests/offline environments
-        short_branch = branch_name.replace("/", "-")
-        return {
-            "pr_number": 101,
-            "pr_url": f"https://github.com/forgeai-enterprise/repo/pull/101",
-            "branch_name": branch_name,
-            "status": "OPEN",
-        }
+        import sys
+        from app.core.config import settings
+        if "pytest" in sys.modules or settings.ALLOW_TEST_FALLBACK:
+            return {
+                "pr_number": 101,
+                "pr_url": "https://github.com/forgeai-enterprise/repo/pull/101",
+                "branch_name": branch_name,
+                "status": "OPEN",
+            }
+        raise RuntimeError(f"Failed to create pull request in source-control-service: {last_err}")
 
 

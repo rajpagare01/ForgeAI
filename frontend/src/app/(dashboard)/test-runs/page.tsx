@@ -185,11 +185,12 @@ export default function TestRunsPage() {
             latestObservedSha: r.latestObservedSha || r.defaultBranchSha || r.latestCommitSha,
           }));
           setRepositories(list);
-          if (!recordRepoId && list.length > 0) {
-            setRecordRepoId(list[0].id);
-          }
-          if (!genRepoId && list.length > 0) {
-            setGenRepoId(list[0].id);
+          if (list.length > 0) {
+            setRecordRepoId((prev) => (prev && list.some((r) => r.id === prev) ? prev : list[0].id));
+            setGenRepoId((prev) => (prev && list.some((r) => r.id === prev) ? prev : list[0].id));
+          } else {
+            setRecordRepoId("");
+            setGenRepoId("");
           }
           repoData.forEach((r) => {
             if (r.id) repoMap[r.id] = r.fullName || r.name;
@@ -260,7 +261,7 @@ export default function TestRunsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [recordRepoId, genRepoId]);
+  }, [currentOrg?.id, activeWorkspace?.id]);
 
   useEffect(() => {
     fetchRuns();
@@ -318,13 +319,18 @@ export default function TestRunsPage() {
   // AI Test Failure Root-Cause Diagnosis
   const handleDiagnoseFailure = async (testCase: TestCaseResult) => {
     if (!selectedRun) return;
+    const repoId = (selectedRun as any).repositoryId;
+    if (!repoId) {
+      setError("Selected test run is not linked to a repository.");
+      return;
+    }
     setDiagnosingTestName(testCase.name || testCase.testCaseName || "test");
     setDiagnosisResult(null);
     setOpenedPrUrl(null);
 
     try {
       const diagnosis = await apiClient.post<DiagnosisResult>("/api/v1/ai/test-runs/diagnose-failure", {
-        repository_id: (selectedRun as any).repositoryId || "00000000-0000-0000-0000-000000000001",
+        repository_id: repoId,
         run_id: selectedRun.id,
         commit_sha: selectedRun.commitSha,
         test_name: testCase.name || testCase.testCaseName || "testTenantBoundaryIsolation",
@@ -394,7 +400,6 @@ export default function TestRunsPage() {
           }
           return clean.slice(0, 40);
         })(),
-        branch: recordBranch.trim() || "main",
       });
 
       const newRunId = runRes?.id;
@@ -410,9 +415,7 @@ export default function TestRunsPage() {
         }
       }
 
-      await apiClient.post(`/api/v1/test-runs/${newRunId}/complete`, {
-        status: "COMPLETED",
-      });
+      await apiClient.post(`/api/v1/test-runs/${newRunId}/complete`);
 
       setShowRecordRunModal(false);
       showNotification("✓ Test run and JUnit results successfully ingested into Testing Service!");
@@ -483,16 +486,13 @@ export default function TestRunsPage() {
         const runRes = await apiClient.post<any>("/api/v1/test-runs", {
           repositoryId: genRepoId,
           commitSha: fallbackSha,
-          branch: "main",
         });
         const runId = runRes?.id;
         if (runId && resp.junit_xml) {
           await apiClient.post(`/api/v1/test-runs/${runId}/reports/junit`, resp.junit_xml, {
             headers: { "Content-Type": "application/xml" },
           });
-          await apiClient.post(`/api/v1/test-runs/${runId}/complete`, {
-            status: resp.failed_tests > 0 ? "FAILED" : "PASSED",
-          });
+          await apiClient.post(`/api/v1/test-runs/${runId}/complete`);
         }
         await fetchRuns();
       } catch (recErr) {

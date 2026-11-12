@@ -23,6 +23,16 @@ interface MarkdownMermaidViewerProps {
   onCitationClick?: (citation: { file_path: string; commit_sha?: string }) => void;
 }
 
+function sanitizeSvg(rawSvg: string): string {
+  if (!rawSvg) return "";
+  return rawSvg
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<foreignObject[\s\S]*?>[\s\S]*?<\/foreignObject>/gi, "")
+    .replace(/<(iframe|object|embed)\b[\s\S]*?(?:\/>|>[\s\S]*?<\/\1>)/gi, "")
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|xlink:href)\s*=\s*["']\s*(?:javascript:|data:text\/html)[^"']*["']/gi, "");
+}
+
 export const MarkdownMermaidViewer: React.FC<MarkdownMermaidViewerProps> = ({
   content,
   title = "Document",
@@ -106,14 +116,14 @@ export const MarkdownMermaidViewer: React.FC<MarkdownMermaidViewerProps> = ({
             secondaryColor: "#141418",
             tertiaryColor: "#0e0e11",
           },
-          securityLevel: "loose",
+          securityLevel: "strict",
         });
 
         const svgs: Record<string, string> = {};
         for (const m of matches) {
           try {
             const { svg } = await mermaid.render(`svg-${m.id}-${Date.now()}`, m.code);
-            svgs[m.id] = svg;
+            svgs[m.id] = sanitizeSvg(svg);
           } catch (diagramErr: any) {
             console.warn(`Mermaid render failed for ${m.id}:`, diagramErr);
             svgs[m.id] = `<div class="p-3 bg-red-950/40 border border-red-800 rounded text-red-300 text-xs font-mono">Failed to render Mermaid diagram. Click 'Raw Source' to view diagram code.</div>`;
@@ -182,7 +192,7 @@ export const MarkdownMermaidViewer: React.FC<MarkdownMermaidViewerProps> = ({
               {renderedSvg ? (
                 <div
                   className="w-full flex justify-center [&_svg]:max-w-full [&_svg]:h-auto"
-                  dangerouslySetInnerHTML={{ __html: renderedSvg }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeSvg(renderedSvg) }}
                 />
               ) : (
                 <div className="text-center py-6 text-zinc-400 text-xs font-mono space-y-2">

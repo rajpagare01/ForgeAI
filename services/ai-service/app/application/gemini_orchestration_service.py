@@ -762,12 +762,8 @@ If no defects or risks are detected, provide positive validation findings with s
             logger.warning("[AI] Primary and fallback LLM generation failed or unavailable: %s", e)
 
         if resp is None or (resp.provider == "TEST_FALLBACK" and "pytest" not in sys.modules):
-            # Fall back to previous real AI analysis from PostgreSQL
+            # Fall back to previous real AI analysis for the exact same PR from PostgreSQL
             prev_analyses = await self.analysis_repo.get_by_entity(organization_id, "PR", f"{repository_id}#{pr_number}")
-            if not prev_analyses:
-                prev_analyses = await self.analysis_repo.get_by_entity(organization_id, "PR", str(repository_id))
-            if not prev_analyses:
-                prev_analyses = await self.analysis_repo.get_by_entity(organization_id, "PR", "%")
 
             real_prev = None
             for a in prev_analyses:

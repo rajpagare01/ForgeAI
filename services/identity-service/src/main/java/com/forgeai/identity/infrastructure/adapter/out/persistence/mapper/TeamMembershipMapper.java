@@ -1,5 +1,6 @@
 package com.forgeai.identity.infrastructure.adapter.out.persistence.mapper;
 
+import com.forgeai.identity.domain.model.MembershipStatus;
 import com.forgeai.identity.domain.model.TeamMembership;
 import com.forgeai.identity.infrastructure.adapter.out.persistence.entity.TeamMembershipJpaEntity;
 import org.springframework.beans.BeanUtils;
@@ -10,14 +11,18 @@ public class TeamMembershipMapper {
     public TeamMembership toDomain(TeamMembershipJpaEntity entity) {
         if (entity == null) return null;
         TeamMembership domain = new TeamMembership();
-        BeanUtils.copyProperties(entity, domain);
+        BeanUtils.copyProperties(entity, domain, "status");
+        if (entity.getStatus() != null && !entity.getStatus().isBlank()) {
+            domain.setStatus(MembershipStatus.valueOf(entity.getStatus()));
+        }
         return domain;
     }
 
     public TeamMembershipJpaEntity toEntity(TeamMembership domain) {
         if (domain == null) return null;
         TeamMembershipJpaEntity entity = new TeamMembershipJpaEntity();
-        BeanUtils.copyProperties(domain, entity);
+        BeanUtils.copyProperties(domain, entity, "status");
+        entity.setStatus(domain.getStatus() != null ? domain.getStatus().name() : MembershipStatus.ACTIVE.name());
         return entity;
     }
 }

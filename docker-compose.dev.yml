@@ -112,11 +112,11 @@ services:
       - ./secrets:/app/secrets:ro
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 10s
@@ -160,9 +160,9 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
       interval: 10s
@@ -211,11 +211,11 @@ services:
       - ./secrets:/app/secrets:ro
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       identity-service:
         condition: service_started
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 10s
@@ -255,9 +255,9 @@ services:
       JAVA_TOOL_OPTIONS: "-Xmx256m -XX:+TieredCompilation -XX:TieredStopAtLevel=1 -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true"
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
       interval: 10s
@@ -282,7 +282,7 @@ services:
     ports:
       - "127.0.0.1:8084:8084"
     environment:
-      DATABASE_URL: postgresql://forgeai:password@postgres:5432/ai_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-forgeai}:${POSTGRES_PASSWORD:-password}@postgres:5432/ai_db
       REDIS_URL: redis://redis:6379/0
       PORT: 8084
       ENVIRONMENT: ${ENVIRONMENT:-development}
@@ -305,9 +305,9 @@ services:
       - ./services/ai-service:/app
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/healthz"]
       interval: 10s
@@ -357,7 +357,7 @@ services:
       ai-service:
         condition: service_started
       redis:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s

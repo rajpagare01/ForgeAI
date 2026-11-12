@@ -483,8 +483,13 @@ class InMemoryGeneratedDocumentRepository(GeneratedDocumentRepository):
         key = self._unique_key(doc.organization_id, doc.repository_id, doc.doc_type, doc.commit_sha)
         existing = self.documents.get(key)
         if existing:
-            # Preserve APPROVED or APPLIED if content_hash has not changed
-            if existing.content_hash == doc.content_hash and existing.status in [DocumentStatus.APPROVED.value, DocumentStatus.APPLIED.value]:
+            # Preserve APPROVED or APPLIED on re-generation when content_hash is unchanged,
+            # unless an explicit lifecycle transition (APPROVED/REJECTED/APPLIED) is requested.
+            if (
+                doc.status not in [DocumentStatus.APPROVED.value, DocumentStatus.REJECTED.value, DocumentStatus.APPLIED.value]
+                and existing.content_hash == doc.content_hash
+                and existing.status in [DocumentStatus.APPROVED.value, DocumentStatus.APPLIED.value]
+            ):
                 doc.status = existing.status
                 doc.approved_by = existing.approved_by
                 doc.pr_url = existing.pr_url

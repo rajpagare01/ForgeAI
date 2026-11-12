@@ -1,0 +1,2 @@
+ALTER TABLE pull_requests ADD COLUMN IF NOT EXISTS head_sha VARCHAR(64);
+

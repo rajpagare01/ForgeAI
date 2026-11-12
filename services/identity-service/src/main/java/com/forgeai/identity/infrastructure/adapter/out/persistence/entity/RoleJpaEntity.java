@@ -32,6 +32,14 @@ public class RoleJpaEntity {
     @Column(name = "system_defined", nullable = false)
     private boolean systemDefined;
 
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "role_permissions",
+            joinColumns = @JoinColumn(name = "role_id"),
+            inverseJoinColumns = @JoinColumn(name = "permission_id")
+    )
+    private java.util.Set<PermissionJpaEntity> permissions = new java.util.HashSet<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

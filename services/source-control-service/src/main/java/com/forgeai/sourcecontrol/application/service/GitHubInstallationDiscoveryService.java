@@ -208,9 +208,6 @@ public class GitHubInstallationDiscoveryService {
                             break;
                         }
                     }
-                    if (!isPersonal && matched == null && !appInstalls.isEmpty()) {
-                        matched = appInstalls.get(0);
-                    }
                     if (matched != null) {
                         candidates.add(new InstallationCandidateDto(
                                 matched.id(),
@@ -340,8 +337,11 @@ public class GitHubInstallationDiscoveryService {
         }
 
         // 2. Strict Ownership Validation (Anti-Spoofing)
-        if (callerUserId != null) {
-            if ("PERSONAL".equalsIgnoreCase(scope) || "User".equalsIgnoreCase(details.accountType())) {
+        if (callerUserId == null) {
+            throw new GitHubAccessDeniedException(
+                    "Authenticated user identity is required to associate a GitHub installation.");
+        }
+        if ("PERSONAL".equalsIgnoreCase(scope) || "User".equalsIgnoreCase(details.accountType())) {
                 Optional<IdentityServiceClient.UserGitHubProfile> profileOpt = identityServiceClient.getUserGitHubProfile(callerUserId);
                 if (profileOpt.isPresent() && profileOpt.get().connected()) {
                     IdentityServiceClient.UserGitHubProfile profile = profileOpt.get();
@@ -361,7 +361,6 @@ public class GitHubInstallationDiscoveryService {
                     }
                 }
             }
-        }
 
         // 3. Multi-Tenant Collision Check & Cross-User Anti-Hijacking
         Optional<GitHubInstallation> existingClaimOpt = installationRepository.findByInstallationId(installationId);
@@ -386,8 +385,20 @@ public class GitHubInstallationDiscoveryService {
                             "Installation " + installationId + " is already claimed by another user.");
                 }
 
-                // If claimed by same user OR unclaimed OR caller is null (e.g. system), allow workspace migration
-                if (existing.getClaimedByUserId() == null || callerUserId == null || callerUserId.equals(existing.getClaimedByUserId())) {
+                // Verify no cross-organization hijack for active installations bound to a different organization
+                if (existing.getOrganizationId() != null && targetOrg != null && !targetOrg.equals(existing.getOrganizationId())) {
+                    log.warn("[Security] Cross-org installation hijack attempt blocked! Existing org={}, Target org={}",
+                            existing.getOrganizationId(), targetOrg);
+                    if (metrics != null) {
+                        metrics.recordInstallationOwnershipRejection();
+                        metrics.recordInstallationFailure();
+                    }
+                    throw new GitHubAccessDeniedException(
+                            "Installation " + installationId + " is already claimed by another organization.");
+                }
+
+                // If claimed by same user OR unclaimed, allow workspace migration
+                if (existing.getClaimedByUserId() == null || callerUserId.equals(existing.getClaimedByUserId())) {
                     log.info("[GitHub] Associating/migrating installation {} to workspace {}, org {}, scope {}",
                             installationId, targetWs, targetOrg, scope);
                     existing.setWorkspaceId(targetWs);

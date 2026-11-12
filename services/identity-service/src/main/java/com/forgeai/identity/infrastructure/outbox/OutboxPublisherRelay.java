@@ -35,6 +35,8 @@ public class OutboxPublisherRelay {
     private final ObjectMapper objectMapper;
     private final IdentityMetrics identityMetrics;
     private final StructuredLogger structuredLogger;
+    @Autowired(required = false)
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     @Value("${outbox.publisher.batch-size:50}")
     private int batchSize = 50;
@@ -73,8 +75,22 @@ public class OutboxPublisherRelay {
         }
     }
 
-    @Transactional
     public int processBatchInternal() {
+        if (transactionTemplate == null) {
+            return processBatchTransactional();
+        }
+        List<OutboxEventEntity> claimed = transactionTemplate.execute(status -> claimPendingBatch());
+        if (claimed == null || claimed.isEmpty()) {
+            return 0;
+        }
+        for (OutboxEventEntity eventEntity : claimed) {
+            processSingleEvent(eventEntity);
+        }
+        return claimed.size();
+    }
+
+    @Transactional
+    public int processBatchTransactional() {
         List<OutboxEventEntity> pendingEvents = outboxEventRepository
                 .findUnprocessedEventsForUpdateSkipLocked(batchSize, maxAttempts);
 
@@ -97,6 +113,40 @@ public class OutboxPublisherRelay {
         }
 
         return pendingEvents.size();
+    }
+
+    private List<OutboxEventEntity> claimPendingBatch() {
+        List<OutboxEventEntity> pendingEvents = outboxEventRepository
+                .findUnprocessedEventsForUpdateSkipLocked(batchSize, maxAttempts);
+
+        if (identityMetrics != null) {
+            try {
+                identityMetrics.updatePendingOutboxCount((int) outboxEventRepository.countByPublishedAtIsNull());
+            } catch (Exception ignored) {
+                identityMetrics.updatePendingOutboxCount(pendingEvents.size());
+            }
+        }
+
+        if (pendingEvents.isEmpty()) {
+            return pendingEvents;
+        }
+
+        Instant claimUntil = Instant.now().plusSeconds(60);
+        for (OutboxEventEntity entity : pendingEvents) {
+            entity.setStatus("RETRYING");
+            entity.setNextRetryAt(claimUntil);
+        }
+        outboxEventRepository.saveAll(pendingEvents);
+        log.debug("Claimed {} identity outbox events for off-lock dispatch", pendingEvents.size());
+        return pendingEvents;
+    }
+
+    private void saveEntityState(OutboxEventEntity entity) {
+        if (transactionTemplate != null) {
+            transactionTemplate.executeWithoutResult(status -> outboxEventRepository.save(entity));
+        } else {
+            outboxEventRepository.save(entity);
+        }
     }
 
     private void processSingleEvent(OutboxEventEntity entity) {
@@ -143,7 +193,9 @@ public class OutboxPublisherRelay {
                         .payload(domainEvent)
                         .build();
             } else {
-                envelope = objectMapper.readValue(entity.getPayload(), EventEnvelope.class);
+                envelope = rootNode != null
+                        ? objectMapper.treeToValue(rootNode, EventEnvelope.class)
+                        : objectMapper.readValue(entity.getPayload(), EventEnvelope.class);
             }
 
             eventPublisher.publish(envelope);
@@ -151,8 +203,9 @@ public class OutboxPublisherRelay {
             long latency = System.currentTimeMillis() - start;
             entity.setPublishedAt(Instant.now());
             entity.setStatus("PUBLISHED");
+            entity.setNextRetryAt(null);
             entity.setLastError(null);
-            outboxEventRepository.save(entity);
+            saveEntityState(entity);
 
             if (identityMetrics != null) {
                 identityMetrics.recordOutboxSuccess(latency);
@@ -221,7 +274,7 @@ public class OutboxPublisherRelay {
                 }
             }
 
-            outboxEventRepository.save(entity);
+            saveEntityState(entity);
         } finally {
             if (traceId != null && !traceId.isBlank()) {
                 MDC.remove("traceId");

@@ -104,7 +104,7 @@ public class InvitationService {
         return toResponse(saved, rawToken);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {IllegalArgumentException.class})
     public OrganizationMembership acceptInvitation(String rawToken, UUID authenticatedUserId) {
         String tokenHash = hashSha256(rawToken);
 
@@ -127,6 +127,10 @@ public class InvitationService {
         User user = userRepository.findById(authenticatedUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
+        if (invitation.getEmail() != null && !user.getEmail().value().equalsIgnoreCase(invitation.getEmail().trim())) {
+            throw new com.forgeai.identity.domain.exception.AccessDeniedException("Invitation email does not match authenticated user");
+        }
+
         Role role = roleRepository.findById(invitation.getRoleId())
                 .orElseThrow(() -> new RoleNotFoundException("Role not found"));
 
@@ -135,6 +139,13 @@ public class InvitationService {
         OrganizationMembership membership;
         if (existingMembership.isPresent()) {
             membership = existingMembership.get();
+            boolean isExistingOwner = membership.getRoleId() != null && roleRepository.findById(membership.getRoleId())
+                    .map(r -> "OWNER".equalsIgnoreCase(r.getName()))
+                    .orElse(false);
+            if (isExistingOwner && !role.getId().equals(membership.getRoleId())) {
+                throw new com.forgeai.identity.domain.exception.InvalidOwnershipOperationException(
+                        "Cannot overwrite an existing OWNER membership role via invitation");
+            }
             membership.setRoleId(role.getId());
             membership.setStatus(MembershipStatus.ACTIVE);
             membership.setUpdatedAt(Instant.now());

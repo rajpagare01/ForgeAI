@@ -42,6 +42,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 String userIdHeader = request.getHeader("X-User-Id");
                 String permsHeader = request.getHeader("X-Permissions");
                 String wsIdHeader = request.getHeader("X-Workspace-Id");
+                String wsScopeHeader = request.getHeader("X-Workspace-Scope");
 
                 UUID orgId = parseUuid(orgIdHeader);
                 UUID userId = parseUuid(userIdHeader);
@@ -58,6 +59,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 TenantContext.set(orgId, userId, permissions);
                 if (wsId != null) {
                     TenantContext.setWorkspaceId(wsId);
+                }
+                if (wsScopeHeader != null && !wsScopeHeader.isBlank()) {
+                    TenantContext.setWorkspaceScope(wsScopeHeader.trim());
                 }
             } else {
                 // Untrusted caller: strip identity headers

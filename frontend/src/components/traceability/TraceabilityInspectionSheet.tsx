@@ -147,13 +147,12 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
               <div>
                 <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-medium">Verification</span>
                 <span
-                  className={`text-xs font-mono font-medium ${
-                    node.verification.status === "PASSED"
-                      ? "text-emerald-400"
-                      : node.verification.status === "RUNNING"
+                  className={`text-xs font-mono font-medium ${node.verification.status === "PASSED"
+                    ? "text-emerald-400"
+                    : node.verification.status === "RUNNING"
                       ? "text-amber-400"
                       : "text-rose-400"
-                  }`}
+                    }`}
                 >
                   {node.verification.status}
                 </span>
@@ -161,13 +160,12 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
               <div>
                 <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-medium">Risk Score</span>
                 <span
-                  className={`text-xs font-mono font-medium ${
-                    node.aiBlastRadius.riskLevel === "LOW"
-                      ? "text-emerald-400"
-                      : node.aiBlastRadius.riskLevel === "MEDIUM"
+                  className={`text-xs font-mono font-medium ${node.aiBlastRadius.riskLevel === "LOW"
+                    ? "text-emerald-400"
+                    : node.aiBlastRadius.riskLevel === "MEDIUM"
                       ? "text-amber-400"
                       : "text-rose-400"
-                  }`}
+                    }`}
                 >
                   {node.aiBlastRadius.riskLevel} ({node.aiBlastRadius.score})
                 </span>
@@ -178,44 +176,40 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
             <div className="flex gap-1.5 mt-3 pt-3 border-t border-[#1C1C21] flex-wrap">
               <button
                 onClick={() => setActiveTab("ast")}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  activeTab === "ast"
-                    ? "bg-zinc-100 text-zinc-900 font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-                }`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${activeTab === "ast"
+                  ? "bg-zinc-100 text-zinc-900 font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                  }`}
               >
                 <FolderTree className="h-3.5 w-3.5" />
                 AST & Risk Analysis
               </button>
               <button
                 onClick={() => setActiveTab("junit")}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  activeTab === "junit"
-                    ? "bg-zinc-100 text-zinc-900 font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-                }`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${activeTab === "junit"
+                  ? "bg-zinc-100 text-zinc-900 font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                  }`}
               >
                 <Terminal className="h-3.5 w-3.5" />
                 Verification Output
               </button>
               <button
                 onClick={() => setActiveTab("git")}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  activeTab === "git"
-                    ? "bg-zinc-100 text-zinc-900 font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-                }`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${activeTab === "git"
+                  ? "bg-zinc-100 text-zinc-900 font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                  }`}
               >
                 <GitPullRequest className="h-3.5 w-3.5" />
                 PR & Commit Lineage
               </button>
               <button
                 onClick={() => setActiveTab("taskTrace")}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  activeTab === "taskTrace"
-                    ? "bg-zinc-100 text-zinc-900 font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-                }`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${activeTab === "taskTrace"
+                  ? "bg-zinc-100 text-zinc-900 font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+                  }`}
               >
                 <Link2 className="h-3.5 w-3.5" />
                 Task Continuous Traceability
@@ -249,8 +243,8 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                           node.aiBlastRadius.riskLevel === "LOW"
                             ? "riskLow"
                             : node.aiBlastRadius.riskLevel === "MEDIUM"
-                            ? "riskMedium"
-                            : "riskHigh"
+                              ? "riskMedium"
+                              : "riskHigh"
                         }
                       >
                         {node.aiBlastRadius.riskLevel} ({node.aiBlastRadius.score}/100)
@@ -344,11 +338,10 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                   <div className="p-3 rounded-lg border border-[#1C1C21] bg-[#141418] text-center">
                     <div className="text-xs text-zinc-400">Failures / Errors</div>
                     <div
-                      className={`text-lg font-bold font-mono mt-0.5 ${
-                        node.verification.totalTests - node.verification.passedTests > 0
-                          ? "text-rose-400"
-                          : "text-zinc-400"
-                      }`}
+                      className={`text-lg font-bold font-mono mt-0.5 ${node.verification.totalTests - node.verification.passedTests > 0
+                        ? "text-rose-400"
+                        : "text-zinc-400"
+                        }`}
                     >
                       {node.verification.totalTests - node.verification.passedTests}
                     </div>
@@ -392,7 +385,7 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                   <div className="text-xs font-semibold text-zinc-300">Trace Correlation Signature</div>
                   <div className="font-mono text-[11px] text-zinc-300 break-all bg-[#141418] p-2.5 rounded border border-[#1C1C21]">
                     {hasCommit
-                      ? `00-${node.sourceControl.commitSha.padEnd(32, "0").substring(0, 32)}-${Date.now().toString(16).padStart(16, "0")}-01`
+                      ? `00-${node.sourceControl.commitSha.padEnd(32, "0").substring(0, 32)}-${node.sourceControl.commitSha.padEnd(16, "0").substring(0, 16)}-01`
                       : "00-00000000000000000000000000000000-0000000000000000-00"}
                   </div>
                   <p className="text-[11px] text-zinc-500">
@@ -407,11 +400,10 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
               <div className="space-y-5">
                 {/* Degradation / Outage Notification */}
                 {taskTrace && taskTrace.evidenceStatus !== "AVAILABLE" && (
-                  <div className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 ${
-                    taskTrace.evidenceStatus === "UNAVAILABLE"
-                      ? "border-rose-900/60 bg-rose-950/20 text-rose-300"
-                      : "border-amber-900/60 bg-amber-950/20 text-amber-300"
-                  }`}>
+                  <div className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 ${taskTrace.evidenceStatus === "UNAVAILABLE"
+                    ? "border-rose-900/60 bg-rose-950/20 text-rose-300"
+                    : "border-amber-900/60 bg-amber-950/20 text-amber-300"
+                    }`}>
                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                     <div>
                       <div className="font-semibold uppercase tracking-wider text-[11px]">
@@ -518,13 +510,12 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
                                 <div className="flex items-center gap-1.5">
                                   <Badge
                                     variant="outline"
-                                    className={`font-mono text-[10px] ${
-                                      link.linkOrigin === "REQUIREMENT_TASK_RELATION"
-                                        ? "text-zinc-300 border-zinc-700"
-                                        : link.linkOrigin === "EXPLICIT_USER_LINK"
+                                    className={`font-mono text-[10px] ${link.linkOrigin === "REQUIREMENT_TASK_RELATION"
+                                      ? "text-zinc-300 border-zinc-700"
+                                      : link.linkOrigin === "EXPLICIT_USER_LINK"
                                         ? "text-emerald-400 border-emerald-800"
                                         : "text-amber-400 border-amber-800"
-                                    }`}
+                                      }`}
                                   >
                                     {link.linkOrigin}
                                   </Badge>
@@ -659,5 +650,14 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
         </div>
       </div>
     </div>
+  );
+};
+<Button variant="outline" size="sm" onClick={onClose} className="h-7 text-xs border-[#26262C]">
+  Close Inspector
+</Button>
+          </div >
+        </div >
+      </div >
+    </div >
   );
 };

@@ -28,6 +28,8 @@ public class SourceControlOperationsController {
     private final SpringDataOutboxEventRepository outboxEventRepository;
     private final SourceControlMetrics metrics;
     private final AuditService auditService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.forgeai.sourcecontrol.infrastructure.persistence.repository.SpringDataWorkspaceRepository workspaceRepository;
 
     @GetMapping("/outbox/stats")
     public ResponseEntity<Map<String, Object>> getOutboxStats(
@@ -168,8 +170,22 @@ public class SourceControlOperationsController {
 
         // Privileged operation authorization check (requires operator or admin role/permission)
         boolean authorized = isAuthorizedOperatorOrAdmin(rolesHeader, permissionsHeader);
-        if (!authorized && organizationId == null && workspaceId != null && (userId != null || TenantContext.getUserId() != null)) {
-            authorized = true;
+        if (!authorized && organizationId == null && workspaceId != null) {
+            UUID resolvedUserId = null;
+            if (userId != null && !userId.isBlank()) {
+                try { resolvedUserId = UUID.fromString(userId.trim()); } catch (IllegalArgumentException ignored) {}
+            }
+            if (resolvedUserId == null) {
+                resolvedUserId = TenantContext.getUserId();
+            }
+            if (resolvedUserId != null && (workspaceRepository == null || workspaceRepository.findById(workspaceId)
+                    .map(ws -> "PERSONAL".equalsIgnoreCase(ws.getType()) && ws.getOwnerUserId() != null)
+                    .orElse(false))) {
+                UUID ownerMatchUser = resolvedUserId;
+                authorized = workspaceRepository == null || workspaceRepository.findById(workspaceId)
+                        .map(ws -> ownerMatchUser.equals(ws.getOwnerUserId()))
+                        .orElse(false);
+            }
         }
         if (!authorized) {
             log.warn("Unauthorized replay attempt: user {} lacks operator/admin privileges (roles={}, permissions={})",
@@ -350,7 +366,10 @@ public class SourceControlOperationsController {
 
         boolean authorized = isAuthorizedOperatorOrAdmin(rolesHeader, permissionsHeader);
         if (!authorized && organizationId == null && workspaceId != null && TenantContext.getUserId() != null) {
-            authorized = true;
+            UUID callerUserId = TenantContext.getUserId();
+            authorized = workspaceRepository == null || workspaceRepository.findById(workspaceId)
+                    .map(ws -> "PERSONAL".equalsIgnoreCase(ws.getType()) && callerUserId.equals(ws.getOwnerUserId()))
+                    .orElse(false);
         }
 
         if (!authorized) {

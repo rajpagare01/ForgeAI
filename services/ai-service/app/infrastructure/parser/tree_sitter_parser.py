@@ -189,7 +189,12 @@ class TreeSitterParser:
                 func_name = code_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8") if name_node else "anonymous"
                 full_func_name = f"{current_scope}.{func_name}" if current_scope else func_name
 
-                func_content = code_bytes[node.start_byte : node.end_byte].decode("utf-8")
+                func_start = (
+                    node.parent.start_byte
+                    if node.parent is not None and node.parent.type == "decorated_definition"
+                    else node.start_byte
+                )
+                func_content = code_bytes[func_start : node.end_byte].decode("utf-8")
                 symbols.append({
                     "symbol_name": full_func_name,
                     "symbol_type": "METHOD" if current_scope else "FUNCTION",

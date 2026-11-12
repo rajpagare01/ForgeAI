@@ -7,25 +7,29 @@
 const GATEWAY_URL =
   process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8080";
 
+let fallbackHexCounter = 0;
+
 function generateHex(length: number): string {
-  const bytes = new Uint8Array(length / 2);
-  if (typeof window !== "undefined" && window.crypto) {
-    window.crypto.getRandomValues(bytes);
+  const bytes = new Uint8Array(Math.ceil(length / 2));
+  const cryptoObj =
+    typeof globalThis !== "undefined" &&
+    typeof globalThis.crypto?.getRandomValues === "function"
+      ? globalThis.crypto
+      : null;
+  if (cryptoObj) {
+    cryptoObj.getRandomValues(bytes);
     return Array.from(bytes)
       .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+      .join("")
+      .slice(0, length);
   }
-  // Fallback for SSR
-  let result = "";
-  for (let i = 0; i < length; i++) {
-    result += Math.floor(Math.random() * 16).toString(16);
-  }
-  return result;
+  fallbackHexCounter = (fallbackHexCounter + 1) >>> 0;
+  return fallbackHexCounter.toString(16).padStart(length, "0").slice(0, length);
 }
 
 function generateCorrelationId(): string {
-  if (typeof window !== "undefined" && window.crypto && window.crypto.randomUUID) {
-    return window.crypto.randomUUID().replace(/-/g, "");
+  if (typeof globalThis !== "undefined" && globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID().replace(/-/g, "");
   }
   return generateHex(32);
 }
@@ -252,10 +256,26 @@ class ApiClient {
     return this.refreshPromise;
   }
 
+  public clearTenantAndAnalysisCaches() {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem("forgeai_org_id");
+    localStorage.removeItem("forgeai_workspace_id");
+    localStorage.removeItem("forgeai_workspace_type");
+    localStorage.removeItem("forgeai_selected_repo_id");
+    localStorage.removeItem("forgeai_last_analysis_global");
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("forgeai_last_analysis_") || key.startsWith("forgeai_selected_branch_")) {
+        localStorage.removeItem(key);
+      }
+    }
+  }
+
   private clearTokensAndRedirect() {
     this.setAccessToken(null);
     this.setRefreshToken(null);
+    this.clearTenantAndAnalysisCaches();
     if (typeof window !== "undefined") {
+      localStorage.removeItem("forgeai_user");
       const pathname = window.location.pathname;
       if (pathname.startsWith("/login") || pathname.startsWith("/auth/github/callback")) {
         return;
@@ -291,31 +311,43 @@ class ApiClient {
 
     // 2. Multi-Tenant Scoping Header
     // Do not attach X-Org-Id to user-scoped Identity routes (/api/v1/organizations, /api/v1/auth, /api/v1/users, etc.)
+    let path = endpoint;
+    if (endpoint.startsWith("http")) {
+      try {
+        path = new URL(endpoint).pathname;
+      } catch {
+        path = endpoint;
+      }
+    }
     const isUserScopedEndpoint =
-      endpoint.startsWith("/api/v1/organizations") ||
-      endpoint.startsWith("/api/v1/workspaces") ||
-      endpoint.startsWith("/api/v1/auth") ||
-      endpoint.startsWith("/api/v1/users") ||
-      endpoint.startsWith("/.well-known") ||
-      endpoint.startsWith("/actuator");
+      path.startsWith("/api/v1/organizations") ||
+      path.startsWith("/api/v1/workspaces") ||
+      path.startsWith("/api/v1/auth") ||
+      path.startsWith("/api/v1/users") ||
+      path.startsWith("/.well-known") ||
+      path.startsWith("/actuator");
 
     if (!isUserScopedEndpoint) {
-      const orgId = options.orgId || (this.getActiveWorkspaceType() === "ORGANIZATION" ? this.getActiveOrgId() : null);
+      const workspaceType = this.getActiveWorkspaceType();
+      const orgId = options.orgId || (workspaceType === "ORGANIZATION" ? this.getActiveOrgId() : null);
       const isValidUuid =
         typeof orgId === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId);
       if (isValidUuid && !headers.has("X-Org-Id")) {
         headers.set("X-Org-Id", orgId as string);
-      }
-
-      const wsId = this.getActiveWorkspaceId();
-      if (wsId && !headers.has("X-Workspace-Id")) {
-        const isValidWsUuid =
-          typeof wsId === "string" &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(wsId);
-        if (isValidWsUuid) {
-          headers.set("X-Workspace-Id", wsId);
-          headers.set("X-Workspace-Scope", this.getActiveWorkspaceType());
+        if (!headers.has("X-Workspace-Scope")) {
+          headers.set("X-Workspace-Scope", "ORGANIZATION");
+        }
+      } else {
+        const wsId = this.getActiveWorkspaceId();
+        if (wsId && !headers.has("X-Workspace-Id")) {
+          const isValidWsUuid =
+            typeof wsId === "string" &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(wsId);
+          if (isValidWsUuid) {
+            headers.set("X-Workspace-Id", wsId);
+            headers.set("X-Workspace-Scope", workspaceType);
+          }
         }
       }
     }
@@ -370,7 +402,7 @@ class ApiClient {
         response.status,
         typeof rawErrorMessage === "string" ? rawErrorMessage : ""
       );
-      const apiError: ApiError = new Error(rawErrorMessage || safeMessage) as ApiError;
+      const apiError: ApiError = new Error(safeMessage) as ApiError;
       apiError.status = response.status;
       apiError.statusText = response.statusText;
       apiError.data = errorData;

@@ -85,7 +85,7 @@ public class AuthService implements AuthenticationUseCase {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = {InvalidCredentialsException.class, AccountLockedException.class, InvalidUserStateException.class})
     public LoginResponse login(String identifier, String password) {
         User user = resolveUser(identifier);
 
@@ -132,7 +132,12 @@ public class AuthService implements AuthenticationUseCase {
                             "{\"failedAttempts\":" + newCount + "}");
                 }
             } else {
-                securityEventService.recordEvent(null, null, "LOGIN_FAILURE", ipAddress, userAgent, "{\"identifier\":\"" + identifier + "\"}");
+                String safeDetails = "{}";
+                try {
+                    safeDetails = new com.fasterxml.jackson.databind.ObjectMapper()
+                            .writeValueAsString(java.util.Map.of("identifier", identifier != null ? identifier : ""));
+                } catch (Exception ignored) {}
+                securityEventService.recordEvent(null, null, "LOGIN_FAILURE", ipAddress, userAgent, safeDetails);
             }
             throw new InvalidCredentialsException("Invalid credentials");
         }
@@ -244,15 +249,31 @@ public class AuthService implements AuthenticationUseCase {
     @Override
     @Transactional
     public void logout(UUID userId, String rawRefreshToken) {
+        logout(userId, rawRefreshToken, null);
+    }
+
+    @Override
+    @Transactional
+    public void logout(UUID userId, String rawRefreshToken, UUID sessionId) {
+        boolean revoked = false;
         if (rawRefreshToken != null && !rawRefreshToken.isBlank()) {
             String tokenHash = hashWithSHA256(rawRefreshToken);
-            refreshTokenRepository.findByTokenHash(tokenHash).ifPresent(refreshToken -> {
-                Session session = sessionService.getSession(refreshToken.getSessionId());
+            var tokenOpt = refreshTokenRepository.findByTokenHash(tokenHash);
+            if (tokenOpt.isPresent()) {
+                Session session = sessionService.getSession(tokenOpt.get().getSessionId());
                 if (session != null && session.getUserId().equals(userId)) {
                     sessionService.revokeSession(session.getId());
                     refreshTokenRepository.revokeBySessionId(session.getId());
+                    revoked = true;
                 }
-            });
+            }
+        }
+        if (!revoked && sessionId != null) {
+            Session session = sessionService.getSession(sessionId);
+            if (session != null && session.getUserId().equals(userId)) {
+                sessionService.revokeSession(session.getId());
+                refreshTokenRepository.revokeBySessionId(session.getId());
+            }
         }
         securityEventService.recordEvent(userId, null, "LOGOUT", null, null, "{}");
     }

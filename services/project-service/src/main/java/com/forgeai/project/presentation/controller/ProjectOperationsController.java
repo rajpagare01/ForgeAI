@@ -80,7 +80,12 @@ public class ProjectOperationsController {
             @RequestHeader(value = "X-Organization-Id", required = false) String orgHeader,
             @RequestHeader(value = "X-Org-Id", required = false) String altOrgHeader,
             @RequestHeader(value = "X-Workspace-Id", required = false) String wsHeader,
+            @RequestHeader(value = "X-ForgeAI-Internal", required = false) String internalHeader,
             @RequestParam(defaultValue = "50") int limit) {
+
+        if (!"attested".equals(internalHeader)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
 
         String rawOrg = orgHeader != null && !orgHeader.isBlank() ? orgHeader : altOrgHeader;
         if (rawOrg != null && !rawOrg.isBlank()) {

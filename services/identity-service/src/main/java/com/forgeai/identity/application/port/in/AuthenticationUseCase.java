@@ -8,5 +8,8 @@ public interface AuthenticationUseCase {
     LoginResponse login(String identifier, String password);
     com.forgeai.identity.api.dto.RefreshTokenResponse refresh(String rawRefreshToken);
     void logout(java.util.UUID userId, String rawRefreshToken);
+    default void logout(java.util.UUID userId, String rawRefreshToken, java.util.UUID sessionId) {
+        logout(userId, rawRefreshToken);
+    }
     void logoutAll(java.util.UUID userId);
 }

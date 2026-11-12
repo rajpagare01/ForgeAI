@@ -32,14 +32,15 @@ public class TestRunApplicationService {
     private final OutboxService outboxService;
 
     private UUID resolveWorkspace(UUID workspaceId, UUID organizationId) {
-        if (workspaceId != null) return workspaceId;
         if (organizationId != null) return organizationId;
+        if (workspaceId != null) return workspaceId;
         throw new IllegalArgumentException("Workspace ID or Organization ID must be provided via tenant context");
     }
 
     private String resolveScope(String scope, UUID organizationId) {
+        if (organizationId != null) return "ORGANIZATION";
         if (scope != null) return scope;
-        return organizationId != null ? "ORGANIZATION" : "PERSONAL";
+        return "PERSONAL";
     }
 
     @Transactional

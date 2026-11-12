@@ -69,6 +69,7 @@ public class PullRequestEventHandler {
         String title = prNode.path("title").asText("");
         String body = prNode.path("body").asText(null);
         String sourceBranch = prNode.path("head").path("ref").asText("unknown");
+        String headSha = prNode.path("head").path("sha").asText(null);
         String targetBranch = prNode.path("base").path("ref").asText("main");
         String authorGithubId = prNode.path("user").path("login").asText("unknown");
         boolean isMerged = prNode.path("merged").asBoolean(false);
@@ -97,6 +98,7 @@ public class PullRequestEventHandler {
                     .body(body)
                     .sourceBranch(sourceBranch)
                     .targetBranch(targetBranch)
+                    .headSha(headSha)
                     .status(status)
                     .authorGithubId(authorGithubId)
                     .createdAt(Instant.now())
@@ -108,6 +110,9 @@ public class PullRequestEventHandler {
             pullRequest.setBody(body);
             pullRequest.setSourceBranch(sourceBranch);
             pullRequest.setTargetBranch(targetBranch);
+            if (headSha != null && !headSha.isBlank()) {
+                pullRequest.setHeadSha(headSha);
+            }
             pullRequest.setStatus(status);
             pullRequest.setUpdatedAt(Instant.now());
         }

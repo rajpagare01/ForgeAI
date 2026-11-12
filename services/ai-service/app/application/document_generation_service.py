@@ -316,9 +316,17 @@ class DocumentGenerationService:
                     if len(parts) > 1:
                         clean_prev_content = parts[1]
 
+                clean_prev_content = re.sub(
+                    r"\[([^\]@]+)@[^\]\s]+\]",
+                    lambda m: f"[{m.group(1)}@{commit_sha}]",
+                    clean_prev_content,
+                )
                 content_md = banner + clean_prev_content
                 content_hash = hashlib.sha256(content_md.encode("utf-8")).hexdigest()
-                citations = prev_doc.citations or []
+                citations = [
+                    {**c, "commit_sha": commit_sha} if isinstance(c, dict) else c
+                    for c in (prev_doc.citations or [])
+                ]
                 provenance = {
                     **(prev_doc.provenance or {}),
                     "fallback_used": True,
@@ -469,8 +477,10 @@ Persistent entities are modeled to prevent orphan state transitions and cross-te
                 detail=f"Document '{document_id}' cannot be applied. Current status is '{doc.status}'. Explicit approval required before pull request creation.",
             )
 
-        # 2. Enforce Write Mode
-        active_mode = write_mode_override or self.write_mode
+        # 2. Enforce Write Mode (ignore caller override outside test runtime)
+        from app.core.config import settings
+        allow_override = settings.ENVIRONMENT == "test" or "pytest" in sys.modules
+        active_mode = (write_mode_override if allow_override else None) or self.write_mode
         if active_mode != "CONTROLLED_WRITE":
             raise HTTPException(
                 status_code=403,
@@ -579,7 +589,9 @@ Persistent entities are modeled to prevent orphan state transitions and cross-te
     async def _resolve_edges(self, organization_id: UUID, repository_id: UUID) -> List[GraphEdge]:
         if self.graph_edge_repo:
             try:
-                if hasattr(self.graph_edge_repo, "get_edges_for_repo"):
+                if hasattr(self.graph_edge_repo, "get_by_repository"):
+                    return await self.graph_edge_repo.get_by_repository(organization_id, repository_id)
+                elif hasattr(self.graph_edge_repo, "get_edges_for_repo"):
                     return await self.graph_edge_repo.get_edges_for_repo(organization_id, repository_id)
                 elif hasattr(self.graph_edge_repo, "edges"):
                     return [e for e in self.graph_edge_repo.edges if e.organization_id == organization_id and e.repository_id == repository_id]

@@ -135,7 +135,7 @@ export default function OperationsDashboardPage() {
         circuitRes,
         traceRes,
         aiMetricsRes,
-        ,
+        aiHealthRes,
         auditRes,
       ] = await Promise.allSettled([
         apiClient.get<OutboxStats>("/api/v1/operations/outbox/stats"),
@@ -147,6 +147,14 @@ export default function OperationsDashboardPage() {
         apiClient.get<any>("/api/v1/ai/health"),
         apiClient.get<AuditEventItem[]>("/api/v1/operations/audit-events"),
       ]);
+
+      const settledList = [outboxRes, deadLetterRes, githubRes, circuitRes, traceRes, aiMetricsRes, aiHealthRes, auditRes];
+      const rejectedCount = settledList.filter((r) => r.status === "rejected").length;
+      if (rejectedCount > 0) {
+        const firstRejected = settledList.find((r): r is PromiseRejectedResult => r.status === "rejected");
+        const reasonMsg = firstRejected?.reason?.message || "Some telemetry endpoints failed to respond.";
+        setErrorMsg(`Partial telemetry outage (${rejectedCount}/${settledList.length} feeds degraded): ${reasonMsg}`);
+      }
 
       if (outboxRes.status === "fulfilled" && outboxRes.value) {
         setOutboxStats(outboxRes.value);

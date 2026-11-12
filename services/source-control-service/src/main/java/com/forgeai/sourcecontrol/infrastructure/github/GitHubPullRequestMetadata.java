@@ -17,5 +17,22 @@ public record GitHubPullRequestMetadata(
         Instant createdAt,
         Instant updatedAt,
         Instant closedAt,
-        Instant mergedAt
-) {}
+        Instant mergedAt,
+        String headSha
+) {
+    public GitHubPullRequestMetadata(
+            Long githubPrId,
+            int number,
+            String title,
+            String body,
+            String state,
+            String sourceBranch,
+            String targetBranch,
+            String authorLogin,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant closedAt,
+            Instant mergedAt) {
+        this(githubPrId, number, title, body, state, sourceBranch, targetBranch, authorLogin, createdAt, updatedAt, closedAt, mergedAt, null);
+    }
+}

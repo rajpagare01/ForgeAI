@@ -33,14 +33,14 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const fetchWorkspacesAndOrgs = useCallback(async () => {
+  const fetchWorkspacesAndOrgs = useCallback(async (): Promise<{ workspaces: Workspace[]; orgs: Organization[] }> => {
     if (!apiClient.getAccessToken()) {
       setWorkspaces([]);
       setActiveWorkspace(null);
       setOrganizations([]);
       setCurrentOrgId(null);
       setIsLoading(false);
-      return;
+      return { workspaces: [], orgs: [] };
     }
 
     try {
@@ -119,19 +119,31 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           apiClient.setActiveOrgId(null);
         }
       } else {
-        setActiveWorkspace(null);
-        apiClient.setActiveWorkspaceId(null);
         if (loadedOrgs.length > 0) {
           const org = loadedOrgs[0];
+          const syntheticOrgWs: Workspace = {
+            id: org.id,
+            type: "ORGANIZATION",
+            name: org.name,
+            organizationId: org.id,
+            ownerUserId: user?.id || "",
+          };
+          setActiveWorkspace(syntheticOrgWs);
+          apiClient.setActiveWorkspaceId(org.id);
+          apiClient.setActiveWorkspaceType("ORGANIZATION");
           setCurrentOrgId(org.id);
           apiClient.setActiveOrgId(org.id);
         } else {
+          setActiveWorkspace(null);
+          apiClient.setActiveWorkspaceId(null);
           setCurrentOrgId(null);
           apiClient.setActiveOrgId(null);
         }
       }
+      return { workspaces: loadedWorkspaces, orgs: loadedOrgs };
     } catch (err) {
       console.warn("Error initializing tenant context:", err);
+      return { workspaces: [], orgs: [] };
     } finally {
       setIsLoading(false);
     }
@@ -169,18 +181,33 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [workspaces, switchWorkspace]);
 
   const switchOrganization = useCallback(
-    (orgId: string) => {
-      // Find matching workspace for this organization
-      const orgWs = workspaces.find((w) => w.type === "ORGANIZATION" && w.organizationId === orgId);
+    (orgId: string, overrideWorkspaces?: Workspace[], overrideOrgs?: Organization[]) => {
+      const wsSource = overrideWorkspaces || workspaces;
+      const orgSource = overrideOrgs || organizations;
+      const orgWs = wsSource.find((w) => w.type === "ORGANIZATION" && w.organizationId === orgId);
       if (orgWs) {
-        switchWorkspace(orgWs.id);
-      } else {
+        setActiveWorkspace(orgWs);
+        apiClient.setActiveWorkspaceId(orgWs.id);
+        apiClient.setActiveWorkspaceType(orgWs.type);
         setCurrentOrgId(orgId);
         apiClient.setActiveOrgId(orgId);
+      } else {
+        const matchedOrg = orgSource.find((o) => o.id === orgId);
+        const syntheticOrgWs: Workspace = {
+          id: orgId,
+          type: "ORGANIZATION",
+          name: matchedOrg?.name || "Organization Workspace",
+          organizationId: orgId,
+          ownerUserId: user?.id || "",
+        };
+        setActiveWorkspace(syntheticOrgWs);
+        apiClient.setActiveWorkspaceId(orgId);
         apiClient.setActiveWorkspaceType("ORGANIZATION");
+        setCurrentOrgId(orgId);
+        apiClient.setActiveOrgId(orgId);
       }
     },
-    [workspaces, switchWorkspace]
+    [workspaces, organizations]
   );
 
   const addOrganization = useCallback(
@@ -206,11 +233,13 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           projectsCount: 0,
         };
 
-        setOrganizations((prev) => [...prev, newOrg]);
-
         // Refresh workspaces so the newly created organization workspace is present
-        await fetchWorkspacesAndOrgs();
-        switchOrganization(newOrg.id);
+        const { workspaces: loadedWs, orgs: loadedOrgs } = await fetchWorkspacesAndOrgs();
+        const mergedOrgs = loadedOrgs.some((o) => o.id === newOrg.id)
+          ? loadedOrgs
+          : [...loadedOrgs, newOrg];
+        setOrganizations(mergedOrgs);
+        switchOrganization(newOrg.id, loadedWs, mergedOrgs);
       } catch (err) {
         console.error("Failed to create organization via API:", err);
         throw err;
@@ -233,13 +262,17 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isPersonalWorkspace,
         switchWorkspace,
         switchToPersonalWorkspace,
-        refreshWorkspaces: fetchWorkspacesAndOrgs,
+        refreshWorkspaces: async () => {
+          await fetchWorkspacesAndOrgs();
+        },
         currentOrg,
         organizations,
         isLoading,
         switchOrganization,
         addOrganization,
-        refreshOrganizations: fetchWorkspacesAndOrgs,
+        refreshOrganizations: async () => {
+          await fetchWorkspacesAndOrgs();
+        },
       }}
     >
       {children}

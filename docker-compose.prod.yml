@@ -60,8 +60,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: forgeai-rabbitmq-prod
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-forgeai}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-password}
@@ -93,6 +93,9 @@ services:
       SERVER_PORT: 8081
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      SECURITY_JWT_RSA_PRIVATE_KEY_PATH: /secrets/jwt-rsa-private.pem
+      SECURITY_JWT_RSA_PUBLIC_KEY_PATH: /secrets/jwt-rsa-public.pem
+      GITHUB_TOKEN_ENCRYPTION_KEY: ${GITHUB_TOKEN_ENCRYPTION_KEY:?GITHUB_TOKEN_ENCRYPTION_KEY must be set in production}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -100,6 +103,8 @@ services:
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-forgeai}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
       FORGEAI_RABBITMQ_ENABLED: "true"
+    volumes:
+      - ./secrets:/secrets:ro
     depends_on:
       postgres:
         condition: service_healthy

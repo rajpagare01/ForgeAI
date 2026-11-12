@@ -197,7 +197,12 @@ public class UserService {
                     .build(), null);
         }
         
-        securityEventService.recordEvent(savedUser.getId(), null, "EMAIL_CHANGE_REQUESTED", null, null, "{\"newEmail\": \"" + newEmail + "\"}");
+        String safeEmailPayload = "{}";
+        try {
+            safeEmailPayload = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(java.util.Map.of("newEmail", newEmail));
+        } catch (Exception ignored) {}
+        securityEventService.recordEvent(savedUser.getId(), null, "EMAIL_CHANGE_REQUESTED", null, null, safeEmailPayload);
 
         return savedUser;
     }

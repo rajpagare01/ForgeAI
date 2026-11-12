@@ -519,8 +519,12 @@ public class TraceabilityAggregationService {
         List<RemoteTestRunDto> relatedTestRuns = new ArrayList<>();
         if (parentChain != null && parentChain.testRuns() != null) {
             for (RemoteTestRunDto tr : parentChain.testRuns()) {
-                if (parentChain.testRuns().size() <= 2 ||
-                        (tr.getId() != null && commitShas.stream().anyMatch(sha -> sha.startsWith(tr.getId().toString().toLowerCase())))) {
+                String trSha = tr.getCommitSha() != null ? tr.getCommitSha().toLowerCase() : null;
+                boolean matchesCommit = trSha != null && commitShas.stream()
+                        .anyMatch(sha -> sha.equals(trSha) || sha.startsWith(trSha) || trSha.startsWith(sha));
+                boolean matchesPrHead = trSha != null && prHeadShas.stream()
+                        .anyMatch(sha -> sha.equals(trSha) || sha.startsWith(trSha) || trSha.startsWith(sha));
+                if (parentChain.testRuns().size() <= 2 || matchesCommit || matchesPrHead) {
                     relatedTestRuns.add(tr);
                 }
             }
@@ -969,9 +973,7 @@ public class TraceabilityAggregationService {
                 throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
             }
             if (organizationId == null) {
-                if (userId != null || com.forgeai.project.infrastructure.security.TenantContext.getUserId() != null || com.forgeai.project.infrastructure.security.TenantContext.getWorkspaceId() != null) {
-                    throw new AccessDeniedException("Access denied: Project belongs to an organization");
-                }
+                throw new AccessDeniedException("Access denied: Project belongs to an organization");
             }
         } else {
             if (organizationId != null) {

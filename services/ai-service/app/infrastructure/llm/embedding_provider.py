@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 from typing import List
@@ -62,19 +63,25 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             if not candidate:
                 continue
             try:
-                try:
-                    result = genai.embed_content(
-                        model=candidate,
-                        content=text,
-                        task_type="retrieval_document",
-                        output_dimensionality=self.dimension,
-                    )
-                except TypeError:
-                    result = genai.embed_content(
-                        model=candidate,
-                        content=text,
-                        task_type="retrieval_document",
-                    )
+                def _call_embed():
+                    try:
+                        return genai.embed_content(
+                            model=candidate,
+                            content=text,
+                            task_type="retrieval_document",
+                            output_dimensionality=self.dimension,
+                        )
+                    except TypeError:
+                        return genai.embed_content(
+                            model=candidate,
+                            content=text,
+                            task_type="retrieval_document",
+                        )
+
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(_call_embed),
+                    timeout=float(settings.PROVIDER_TIMEOUT_SECONDS),
+                )
                 embedding = list(result.get("embedding", [])) if isinstance(result, dict) else []
                 if not embedding:
                     continue

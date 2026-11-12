@@ -200,11 +200,12 @@ public class ProjectController {
             String message,
             String branch,
             Integer prNumber,
+            @jakarta.validation.constraints.NotNull(message = "repositoryId is required")
             UUID repositoryId
     ) {}
 
     public record SyncGitActivityRequest(
-            List<GitActivityItem> activities
+            List<@Valid GitActivityItem> activities
     ) {}
 
     @PostMapping("/{projectId}/sync-git-activity")

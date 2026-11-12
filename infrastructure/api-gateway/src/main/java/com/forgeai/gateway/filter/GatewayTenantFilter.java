@@ -153,6 +153,13 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                     // If JWT does not have org_id claim, but client requested a specific org context:
                     if (requestedClientOrgId != null && !requestedClientOrgId.isBlank()) {
                         String targetOrg = requestedClientOrgId.trim();
+                        try {
+                            java.util.UUID.fromString(targetOrg);
+                        } catch (IllegalArgumentException ex) {
+                            log.warn("Blocked malformed X-Org-Id header: {}", requestedClientOrgId);
+                            exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
+                            return exchange.getResponse().setComplete();
+                        }
                         return resolveUserOrgRole(userId, targetOrg, token)
                                 .defaultIfEmpty("")
                                 .flatMap(resolvedRole -> {
@@ -258,6 +265,7 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                             }
                             return response.releaseBody().thenReturn(Boolean.FALSE);
                         })
+                        .timeout(Duration.ofSeconds(5))
                         .onErrorResume(ex -> {
                             log.warn("Failed workspace {} verification for user {}: {}", workspaceId, userId, ex.getMessage());
                             return Mono.just(Boolean.FALSE);
@@ -323,6 +331,7 @@ public class GatewayTenantFilter implements GlobalFilter, Ordered {
                         return Mono.empty();
                     }
                 })
+                .timeout(Duration.ofSeconds(5))
                 .onErrorResume(ex -> {
                     log.error("Failed to fetch organization members from identity-service: {}", ex.getMessage());
                     return Mono.empty();

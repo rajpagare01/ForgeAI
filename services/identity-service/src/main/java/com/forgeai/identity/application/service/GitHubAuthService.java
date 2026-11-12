@@ -194,7 +194,7 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
 
         // Phase 3 (Short Transaction #2): Atomically consume state & provision user/identity/tokens
         CallbackProvisioningResult result = executeInTransaction(() -> {
-            markStateUsed(oauthState);
+            validateAndConsumeState(oauthState.getState(), null);
             return processUserAndIdentity(profile, email, encryptedAccessToken, token);
         });
 
@@ -225,6 +225,12 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
             user = userRepository.findById(identity.getUserId())
                     .orElseThrow(() -> new InvalidUserStateException("Associated user account not found"));
 
+            if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
+                securityEventService.recordEvent(user.getId(), null, "GITHUB_LOGIN_BLOCKED_LOCKED",
+                        getClientIp(), getUserAgent(), "{\"lockedUntil\":\"" + user.getLockedUntil() + "\"}");
+                throw new com.forgeai.identity.domain.exception.AccountLockedException(
+                        "Account is locked due to multiple failed login attempts. Please try again later.");
+            }
             if (user.getStatus() != UserStatus.ACTIVE) {
                 securityEventService.recordEvent(user.getId(), null, "GITHUB_LOGIN_BLOCKED",
                         getClientIp(), getUserAgent(), "{\"status\":\"" + user.getStatus().name() + "\"}");
@@ -252,6 +258,17 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
             Optional<User> existingUserOpt = userRepository.findByEmail(new Email(email));
             if (existingUserOpt.isPresent()) {
                 user = existingUserOpt.get();
+                if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
+                    securityEventService.recordEvent(user.getId(), null, "GITHUB_LOGIN_BLOCKED_LOCKED",
+                            getClientIp(), getUserAgent(), "{\"lockedUntil\":\"" + user.getLockedUntil() + "\"}");
+                    throw new com.forgeai.identity.domain.exception.AccountLockedException(
+                            "Account is locked due to multiple failed login attempts. Please try again later.");
+                }
+                if (user.getStatus() != UserStatus.ACTIVE) {
+                    securityEventService.recordEvent(user.getId(), null, "GITHUB_LOGIN_BLOCKED",
+                            getClientIp(), getUserAgent(), "{\"status\":\"" + user.getStatus().name() + "\"}");
+                    throw new InvalidUserStateException("User account is not active");
+                }
                 if (gitHubIdentityRepository.existsByUserId(user.getId())) {
                     throw new IllegalStateException("Your account is already linked to another GitHub identity.");
                 }
@@ -356,7 +373,7 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
 
         // Phase 3 (Short Transaction #2): Atomically consume state & link identity in DB
         return executeInTransaction(() -> {
-            markStateUsed(oauthState);
+            validateAndConsumeState(oauthState.getState(), userId);
             Optional<GitHubIdentity> existingOpt = gitHubIdentityRepository.findByGithubUserId(profile.id());
             if (existingOpt.isPresent() && !existingOpt.get().getUserId().equals(userId)) {
                 throw new IllegalStateException("This GitHub account is already linked to another ForgeAI user.");
@@ -507,12 +524,19 @@ public class GitHubAuthService implements GitHubAuthenticationUseCase {
     }
 
     private String generateUniqueUsername(String candidateLogin) {
-        String base = candidateLogin.replaceAll("[^a-zA-Z0-9_-]", "").toLowerCase();
-        if (base.length() < 3) {
-            base = "gh_" + base;
-        }
+        String raw = candidateLogin != null ? candidateLogin : "";
+        String base = raw.replaceAll("[^a-zA-Z0-9_-]", "")
+                .replaceAll("[_-]{2,}", "_")
+                .replaceAll("^[_-]+|[_-]+$", "")
+                .toLowerCase();
         if (base.length() > 25) {
-            base = base.substring(0, 25);
+            base = base.substring(0, 25).replaceAll("^[_-]+|[_-]+$", "");
+        }
+        if (base.length() < 3) {
+            base = ("gh" + (base.isEmpty() ? "user" : "_" + base)).replaceAll("[_-]+$", "");
+            if (base.length() < 3) {
+                base = "gh_user";
+            }
         }
 
         String username = base;

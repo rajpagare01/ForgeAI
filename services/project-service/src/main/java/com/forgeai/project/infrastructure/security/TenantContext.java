@@ -10,6 +10,7 @@ public final class TenantContext {
     private static final ThreadLocal<UUID> CURRENT_USER_ID = new ThreadLocal<>();
     private static final ThreadLocal<List<String>> CURRENT_PERMISSIONS = new ThreadLocal<>();
     private static final ThreadLocal<UUID> CURRENT_WORKSPACE_ID = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_WORKSPACE_SCOPE = new ThreadLocal<>();
 
     private TenantContext() {}
 
@@ -25,6 +26,14 @@ public final class TenantContext {
 
     public static UUID getWorkspaceId() {
         return CURRENT_WORKSPACE_ID.get();
+    }
+
+    public static void setWorkspaceScope(String scope) {
+        CURRENT_WORKSPACE_SCOPE.set(scope);
+    }
+
+    public static String getWorkspaceScope() {
+        return CURRENT_WORKSPACE_SCOPE.get();
     }
 
     public static UUID getOrganizationId() {
@@ -50,5 +59,6 @@ public final class TenantContext {
         CURRENT_USER_ID.remove();
         CURRENT_PERMISSIONS.remove();
         CURRENT_WORKSPACE_ID.remove();
+        CURRENT_WORKSPACE_SCOPE.remove();
     }
 }

@@ -191,7 +191,8 @@ export interface ReviewFindingItem {
 
 export interface RequiredCheckItem {
   name: string;
-  category: string;
+  category?: string;
+  source?: string;
   status: "PASSED" | "FAILED" | "MISSING" | "RUNNING" | "WARNING" | "SKIPPED" | string;
   evidence: string;
   detail: string;
@@ -201,16 +202,17 @@ export interface MergeReadinessDTO {
   decision: "READY" | "READY_WITH_WARNINGS" | "NOT_READY" | "BLOCKED_BY_MISSING_EVIDENCE" | string;
   readiness_score: number;
   policy_version: string;
-  summary: string;
+  summary?: string;
   reasons: string[];
-  blockers: string[];
+  blockers?: string[];
+  blocking_reasons?: string[];
   warnings: string[];
   required_checks: RequiredCheckItem[];
   completed_checks: (string | RequiredCheckItem)[];
   failed_checks: (string | RequiredCheckItem)[];
   missing_checks: (string | RequiredCheckItem)[];
   security_status: "NO_SECURITY_FINDINGS" | "SECURITY_WARNING" | "SECURITY_BLOCKER" | "SECURITY_EVIDENCE_UNAVAILABLE" | string;
-  evidence_summary: {
+  evidence_summary?: {
     ci_status: string;
     total_required_tests: number;
     executed_required_tests: number;
@@ -576,9 +578,10 @@ export interface DownstreamImpactItem {
   confidence: "HIGH" | "MEDIUM" | "LOW" | string;
   declared_contract_status: string;
   downstream_ci_status: "PASS" | "FAIL" | "NOT_FOUND" | "PENDING" | string;
-  risk_contribution: number;
+  risk_contribution?: number;
+  combined_risk?: number;
   affected_symbols: string[];
-  evidence_files: string[];
+  evidence_files?: string[];
 }
 
 export interface DistributedRiskAssessmentDTO {
@@ -663,6 +666,11 @@ export interface CommitAnalysisReportItem {
 function AiInsightsContent() {
   const searchParams = useSearchParams();
   const { currentOrg, activeWorkspace, isPersonalWorkspace } = useTenant();
+  const tenantScopeId = isPersonalWorkspace
+    ? (activeWorkspace?.id || "")
+    : (currentOrg?.id || activeWorkspace?.id || "");
+  const latestRestoreReqRef = React.useRef(0);
+  const latestActionReqRef = React.useRef(0);
   const workspaceDisplayName = isPersonalWorkspace ? "Personal Workspace" : currentOrg?.name || "Workspace";
   const [activeTab, setActiveTab] = useState<"pr" | "search" | "impact" | "dependencies" | "remediation" | "autodocs" | "commitguard">("pr");
 
@@ -920,17 +928,16 @@ function AiInsightsContent() {
   const triggerAiApiUnavailablePopup = useCallback((customErr?: string) => {
     let cached: any = null;
     try {
-      if (selectedRepoId && selectedPrNumber) {
-        const specificRaw = localStorage.getItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`);
-        if (specificRaw) cached = JSON.parse(specificRaw);
-      }
-      if (!cached && selectedRepoId) {
-        const repoRaw = localStorage.getItem(`forgeai_last_analysis_${selectedRepoId}`);
-        if (repoRaw) cached = JSON.parse(repoRaw);
-      }
-      if (!cached) {
-        const globalRaw = localStorage.getItem(`forgeai_last_analysis_global`);
-        if (globalRaw) cached = JSON.parse(globalRaw);
+      if (tenantScopeId && selectedRepoId && selectedPrNumber) {
+        const specificRaw = localStorage.getItem(
+          `forgeai_last_analysis_${tenantScopeId}_${selectedRepoId}_${selectedPrNumber}`
+        );
+        if (specificRaw) {
+          const parsed = JSON.parse(specificRaw);
+          if (parsed?.data?.organization_id === tenantScopeId) {
+            cached = parsed;
+          }
+        }
       }
     } catch (e) {
       console.warn("Could not read cached analysis from localStorage:", e);
@@ -959,29 +966,42 @@ function AiInsightsContent() {
         errorMessage: customErr || "The AI Service is currently unavailable or timed out.",
       });
     }
+  }, [tenantScopeId, selectedRepoId, selectedPrNumber]);
+
+  useEffect(() => {
+    setLocalActions([]);
+    setSelectedActionId(null);
   }, [selectedRepoId, selectedPrNumber]);
 
   useEffect(() => {
     if (prAnalysisResult?.engineering_actions && prAnalysisResult.engineering_actions.length > 0) {
       setLocalActions(prAnalysisResult.engineering_actions);
-      if (!selectedActionId) {
-        setSelectedActionId(prAnalysisResult.engineering_actions[0].action_id);
-      }
+      setSelectedActionId((prev) =>
+        prev && prAnalysisResult.engineering_actions!.some((a) => a.action_id === prev)
+          ? prev
+          : prAnalysisResult.engineering_actions![0].action_id
+      );
+    } else {
+      setLocalActions([]);
+      setSelectedActionId(null);
     }
-  }, [prAnalysisResult, selectedActionId]);
+  }, [prAnalysisResult]);
 
   const fetchActionDetails = useCallback(async (actionId: string) => {
     if (!actionId) return;
+    const reqId = ++latestActionReqRef.current;
     setIsLoadingActionDetails(true);
     try {
       const details = await apiClient.get<ActionDetailsDTO>(`/api/v1/ai/actions/${actionId}`);
-      if (details && typeof details === "object") {
+      if (reqId === latestActionReqRef.current && details && typeof details === "object") {
         setActionDetailsMap((prev) => ({ ...prev, [actionId]: details }));
       }
     } catch (err: any) {
       console.warn(`Could not fetch details for action ${actionId}:`, err);
     } finally {
-      setIsLoadingActionDetails(false);
+      if (reqId === latestActionReqRef.current) {
+        setIsLoadingActionDetails(false);
+      }
     }
   }, []);
 
@@ -1557,31 +1577,37 @@ function AiInsightsContent() {
 
   // Server-Sent Events (SSE) live telemetry stream
   useEffect(() => {
-    if (!selectedRepoId || typeof window === "undefined") return;
-    const controller = new AbortController();
+    if (!selectedRepoId || !tenantScopeId || typeof window === "undefined") return;
+    let controller = new AbortController();
     let isActive = true;
+    let reconnectAttempt = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     const connectStream = async () => {
+      if (!isActive) return;
+      controller = new AbortController();
       try {
         const token = apiClient.getAccessToken() || localStorage.getItem("forgeai_access_token");
-        const activeOrgId = apiClient.getActiveWorkspaceType() === "ORGANIZATION"
-          ? apiClient.getActiveOrgId()
-          : null;
-        const activeWsId = apiClient.getActiveWorkspaceId() || activeOrgId || "00000000-0000-0000-0000-000000000001";
+        const wsType = apiClient.getActiveWorkspaceType();
+        const activeOrgId = wsType === "ORGANIZATION" ? (currentOrg?.id || apiClient.getActiveOrgId() || tenantScopeId) : null;
+        const tenantParam = activeOrgId
+          ? `organizationId=${encodeURIComponent(activeOrgId)}`
+          : `workspaceId=${encodeURIComponent(tenantScopeId)}`;
         const baseUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
         const streamHeaders: Record<string, string> = {
           Accept: "text/event-stream",
-          "X-Workspace-Id": activeWsId,
-          "X-Workspace-Scope": apiClient.getActiveWorkspaceType(),
+          "X-Workspace-Scope": wsType,
         };
         if (token) {
           streamHeaders["Authorization"] = `Bearer ${token}`;
         }
         if (activeOrgId) {
           streamHeaders["X-Org-Id"] = activeOrgId;
+        } else {
+          streamHeaders["X-Workspace-Id"] = tenantScopeId;
         }
         const res = await fetch(
-          `${baseUrl}/api/v1/ai/events/stream?repository_id=${encodeURIComponent(selectedRepoId)}&workspaceId=${encodeURIComponent(activeWsId)}`,
+          `${baseUrl}/api/v1/ai/events/stream?repository_id=${encodeURIComponent(selectedRepoId)}&${tenantParam}`,
           {
             method: "GET",
             headers: streamHeaders,
@@ -1590,8 +1616,9 @@ function AiInsightsContent() {
         );
         if (!res.ok || !res.body) {
           setSseConnected(false);
-          return;
+          throw new Error(`SSE status ${res.status}`);
         }
+        reconnectAttempt = 0;
         setSseConnected(true);
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -1599,7 +1626,10 @@ function AiInsightsContent() {
 
         while (isActive) {
           const { value, done } = await reader.read();
-          if (done) break;
+          if (done) {
+            if (isActive) setSseConnected(false);
+            break;
+          }
           buffer += decoder.decode(value, { stream: true });
           const parts = buffer.split("\n\n");
           buffer = parts.pop() || "";
@@ -1636,18 +1666,26 @@ function AiInsightsContent() {
           }
         }
       } catch {
-        // Fallback 15s polling remains active
-        setSseConnected(false);
+        if (isActive) setSseConnected(false);
+      }
+
+      if (isActive) {
+        reconnectAttempt += 1;
+        const delayMs = Math.min(30000, 3000 * reconnectAttempt);
+        reconnectTimer = setTimeout(() => {
+          if (isActive) connectStream();
+        }, delayMs);
       }
     };
 
     connectStream();
     return () => {
       isActive = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       setSseConnected(false);
       controller.abort();
     };
-  }, [selectedRepoId, selectedBranch, addToast, fetchCommitReports, fetchDocuments]);
+  }, [selectedRepoId, tenantScopeId, currentOrg?.id, addToast, fetchCommitReports, fetchDocuments]);
 
   // 2. Fetch real pull requests when selected repository changes
   useEffect(() => {
@@ -1798,13 +1836,12 @@ function AiInsightsContent() {
             prNumber: selectedPrNumber,
             data: result,
           };
-          if (selectedRepoId && selectedPrNumber) {
-            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`, JSON.stringify(cacheObj));
+          if (tenantScopeId && selectedRepoId && selectedPrNumber) {
+            localStorage.setItem(
+              `forgeai_last_analysis_${tenantScopeId}_${selectedRepoId}_${selectedPrNumber}`,
+              JSON.stringify(cacheObj)
+            );
           }
-          if (selectedRepoId) {
-            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}`, JSON.stringify(cacheObj));
-          }
-          localStorage.setItem(`forgeai_last_analysis_global`, JSON.stringify(cacheObj));
         } catch (cacheErr) {
           console.warn("Failed to cache analysis to localStorage:", cacheErr);
         }
@@ -2086,7 +2123,8 @@ function AiInsightsContent() {
 
   // Restore saved full AnalysisResponseDTO when PR is selected / reloaded
   useEffect(() => {
-    if (!selectedRepoId || !selectedPrNumber) return;
+    if (!selectedRepoId || !selectedPrNumber || !tenantScopeId) return;
+    const reqId = ++latestRestoreReqRef.current;
 
     const restoreSavedAnalysis = async () => {
       try {
@@ -2094,13 +2132,18 @@ function AiInsightsContent() {
         let analyses = await apiClient.get<any[]>(
           `/api/v1/ai/analyses/PR/${encodeURIComponent(targetEntityId)}`
         );
+        if (reqId !== latestRestoreReqRef.current) return;
         if (!Array.isArray(analyses) || analyses.length === 0) {
           analyses = await apiClient.get<any[]>(
             `/api/v1/ai/analyses/PR/${selectedPrNumber}`
           );
         }
+        if (reqId !== latestRestoreReqRef.current) return;
         if (Array.isArray(analyses) && analyses.length > 0) {
           const latest = analyses[0];
+          if (latest?.entity_id && latest.entity_id !== targetEntityId && latest.entity_id !== String(selectedPrNumber)) {
+            return;
+          }
           setPrAnalysisResult((current: any) => {
             if (!current || current.entity_id !== latest.entity_id) {
               setLifecycleStep("complete");
@@ -2110,7 +2153,7 @@ function AiInsightsContent() {
           });
           setIsUsingLastAnalysis(false);
 
-          // Cache in localStorage
+          // Cache in localStorage scoped strictly by tenant + repo + PR
           try {
             const repoObj = repositories.find((r) => r.id === selectedRepoId);
             const cacheItem = {
@@ -2120,14 +2163,16 @@ function AiInsightsContent() {
               prNumber: selectedPrNumber,
               data: latest,
             };
-            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}_${selectedPrNumber}`, JSON.stringify(cacheItem));
-            localStorage.setItem(`forgeai_last_analysis_${selectedRepoId}`, JSON.stringify(cacheItem));
-            localStorage.setItem(`forgeai_last_analysis_global`, JSON.stringify(cacheItem));
+            localStorage.setItem(
+              `forgeai_last_analysis_${tenantScopeId}_${selectedRepoId}_${selectedPrNumber}`,
+              JSON.stringify(cacheItem)
+            );
           } catch (cacheErr) {
             console.warn("Failed to cache restored analysis:", cacheErr);
           }
         }
       } catch (err: any) {
+        if (reqId !== latestRestoreReqRef.current) return;
         console.warn("Could not restore saved PR analysis from AI Service:", err);
         // Fallback to cached analysis and notify user of AI API offline status
         triggerAiApiUnavailablePopup(err?.message);
@@ -2135,7 +2180,7 @@ function AiInsightsContent() {
     };
 
     restoreSavedAnalysis();
-  }, [selectedRepoId, selectedPrNumber]);
+  }, [selectedRepoId, selectedPrNumber, tenantScopeId]);
 
   // Filtered provenance chunks
   const filteredChunks = React.useMemo(() => {
@@ -2530,7 +2575,7 @@ function AiInsightsContent() {
 
         // 6. Merge Readiness Metrics
         const mergeDecisionText = merge?.decision || "NOT_READY";
-        const blockersCount = merge?.blockers?.length || 0;
+        const blockersCount = (merge?.blocking_reasons || merge?.blockers || []).length;
 
         const critFindingsCount = (sec?.critical_count ?? 0) + (rel?.critical_count ?? 0);
         const highFindingsCount = (sec?.high_count ?? 0) + (rel?.high_count ?? 0);
@@ -3546,24 +3591,32 @@ function AiInsightsContent() {
                       </div>
 
                       {/* Summary Banner */}
-                      <div className="text-xs text-zinc-300 leading-relaxed font-sans">
-                        {prAnalysisResult.merge_readiness.summary}
-                      </div>
-
-                      {/* Blocker Callouts if any */}
-                      {prAnalysisResult.merge_readiness.blockers && prAnalysisResult.merge_readiness.blockers.length > 0 && (
-                        <div className="p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs space-y-1.5">
-                          <div className="font-semibold text-rose-300 flex items-center gap-1.5">
-                            <XCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                            <span>Merge Blockers ({prAnalysisResult.merge_readiness.blockers.length})</span>
-                          </div>
-                          <ul className="list-disc list-inside space-y-1 text-rose-300/90 pl-1">
-                            {prAnalysisResult.merge_readiness.blockers.map((blocker, bIdx) => (
-                              <li key={bIdx} className="leading-snug">{blocker}</li>
-                            ))}
-                          </ul>
+                      {prAnalysisResult.merge_readiness.summary && (
+                        <div className="text-xs text-zinc-300 leading-relaxed font-sans">
+                          {prAnalysisResult.merge_readiness.summary}
                         </div>
                       )}
+
+                      {/* Blocker Callouts if any */}
+                      {(() => {
+                        const blockersList =
+                          prAnalysisResult.merge_readiness.blocking_reasons ||
+                          prAnalysisResult.merge_readiness.blockers ||
+                          [];
+                        return blockersList.length > 0 ? (
+                          <div className="p-3 rounded-md border border-rose-900/60 bg-rose-950/20 text-xs space-y-1.5">
+                            <div className="font-semibold text-rose-300 flex items-center gap-1.5">
+                              <XCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                              <span>Merge Blockers ({blockersList.length})</span>
+                            </div>
+                            <ul className="list-disc list-inside space-y-1 text-rose-300/90 pl-1">
+                              {blockersList.map((blocker, bIdx) => (
+                                <li key={bIdx} className="leading-snug">{blocker}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null;
+                      })()}
 
                       {/* Warning Callouts if any */}
                       {prAnalysisResult.merge_readiness.warnings && prAnalysisResult.merge_readiness.warnings.length > 0 && (
@@ -3614,7 +3667,7 @@ function AiInsightsContent() {
                                           {check.name}
                                         </td>
                                         <td className="px-3.5 py-2 text-zinc-400 text-[11px]">
-                                          {check.category}
+                                          {check.source || check.category || "—"}
                                         </td>
                                         <td className="px-3.5 py-2 whitespace-nowrap">
                                           {check.status === "PASSED" && (
@@ -4504,7 +4557,7 @@ function AiInsightsContent() {
                                       {dep.downstream_ci_status || (dep as any).ci_status || "NOT_FOUND"}
                                     </Badge>
                                     <span className="text-[11px] text-zinc-400 ml-1">
-                                      Risk +{dep.risk_contribution ?? 0}
+                                      Risk +{dep.combined_risk ?? dep.risk_contribution ?? 0}
                                     </span>
                                   </div>
                                 </div>
@@ -7643,7 +7696,8 @@ function AiInsightsContent() {
                 )}
 
                 <p className="text-xs text-zinc-400 font-mono bg-[#09090B] p-2.5 rounded-md border border-[#1C1C21]">
-                  {secretScanResult.summary}
+                  {secretScanResult.summary ||
+                    `Scan complete: ${secretScanResult.findings?.length ?? 0} potential secret exposure(s) detected across scanned files.`}
                 </p>
               </div>
             ) : null}

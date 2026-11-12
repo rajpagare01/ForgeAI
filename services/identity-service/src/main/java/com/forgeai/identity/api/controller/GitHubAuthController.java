@@ -155,42 +155,61 @@ public class GitHubAuthController {
 
     private UUID resolveOptionalUserId(Authentication authentication, String authHeader, String headerUserId,
             String internalAttestation) {
-        // 1. Only trust X-User-Id if attested by internal gateway marker, unless
-        // enforcement is disabled (e.g. tests/dev)
+        UUID authUserId = null;
+
+        // 1. Authenticated Spring Security JWT / principal always takes precedence
+        if (authentication != null && authentication.isAuthenticated()) {
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof UUID uuid) {
+                authUserId = uuid;
+            } else if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+                try {
+                    authUserId = UUID.fromString(jwt.getSubject());
+                } catch (IllegalArgumentException ignored) {
+                }
+            } else if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth
+                    && jwtAuth.getToken() != null) {
+                try {
+                    authUserId = UUID.fromString(jwtAuth.getToken().getSubject());
+                } catch (IllegalArgumentException ignored) {
+                }
+            } else if (principal instanceof String str && !str.equalsIgnoreCase("anonymousUser")) {
+                try {
+                    authUserId = UUID.fromString(str);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        }
+
+        // 2. Fallback: Parse Bearer token directly if SecurityContext was not populated
+        if (authUserId == null && authHeader != null && authHeader.startsWith("Bearer ") && jwtService != null) {
+            try {
+                String token = authHeader.substring(7).trim();
+                authUserId = jwtService.extractUserId(token);
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (authUserId != null) {
+            if (headerUserId != null && !headerUserId.isBlank()) {
+                try {
+                    UUID headerUuid = UUID.fromString(headerUserId.trim());
+                    if (!authUserId.equals(headerUuid)) {
+                        return null;
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    return null;
+                }
+            }
+            return authUserId;
+        }
+
+        // 3. Internal attested gateway / unit-test mode when no JWT principal is present
         boolean isAttested = "attested".equalsIgnoreCase(internalAttestation);
         if ((!enforceInternalMarker || isAttested) && headerUserId != null && !headerUserId.isBlank()) {
             try {
                 return UUID.fromString(headerUserId.trim());
             } catch (IllegalArgumentException ignored) {
-            }
-        }
-
-        // 2. Spring Security Authentication context
-        if (authentication != null && authentication.isAuthenticated()) {
-            Object principal = authentication.getPrincipal();
-            if (principal instanceof UUID uuid) {
-                return uuid;
-            }
-            if (principal instanceof String str && !str.equalsIgnoreCase("anonymousUser")) {
-                try {
-                    return UUID.fromString(str);
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
-            if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
-                try {
-                    return UUID.fromString(jwt.getSubject());
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
-        }
-
-        // 3. Fallback: Parse Bearer token directly if available
-        if (authHeader != null && authHeader.startsWith("Bearer ") && jwtService != null) {
-            try {
-                String token = authHeader.substring(7).trim();
-                return jwtService.extractUserId(token);
-            } catch (Exception ignored) {
             }
         }
 

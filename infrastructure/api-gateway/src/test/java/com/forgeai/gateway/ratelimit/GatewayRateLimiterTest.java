@@ -74,7 +74,7 @@ class GatewayRateLimiterTest {
     }
 
     @Test
-    @DisplayName("webhookKeyResolver resolves key from X-GitHub-Hook-ID header")
+    @DisplayName("webhookKeyResolver ignores spoofable X-GitHub-Hook-ID header and keys by client IP")
     void testWebhookKeyResolverFromHookId() {
         MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/webhooks/github")
                 .header("X-GitHub-Hook-ID", "12345678")
@@ -82,12 +82,12 @@ class GatewayRateLimiterTest {
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
         StepVerifier.create(rateLimiterConfig.webhookKeyResolver().resolve(exchange))
-                .expectNext("webhook:repo:12345678")
+                .expectNext("webhook:ip:github-ingress")
                 .verifyComplete();
     }
 
     @Test
-    @DisplayName("webhookKeyResolver resolves key from X-GitHub-Delivery header")
+    @DisplayName("webhookKeyResolver keys by client IP when X-GitHub-Delivery header is present")
     void testWebhookKeyResolverFromDelivery() {
         MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/webhooks/github")
                 .header("X-GitHub-Delivery", "deliv-uuid-999")
@@ -96,7 +96,7 @@ class GatewayRateLimiterTest {
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
         StepVerifier.create(rateLimiterConfig.webhookKeyResolver().resolve(exchange))
-                .expectNext("webhook:ingress:10.0.0.5")
+                .expectNext("webhook:ip:10.0.0.5")
                 .verifyComplete();
     }
 }

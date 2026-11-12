@@ -421,6 +421,32 @@ class AsyncpgGraphEdgeRepository(GraphEdgeRepository):
             except Exception:
                 return 0
 
+    async def get_by_repository(self, org_id: UUID, repo_id: UUID) -> List[GraphEdge]:
+        query = """
+            SELECT id, organization_id, workspace_id, repository_id, source_symbol,
+                   target_symbol, edge_type, valid_at_sha, is_current, created_at
+            FROM graph_edges
+            WHERE organization_id = $1 AND repository_id = $2 AND is_current = TRUE
+            ORDER BY created_at DESC;
+        """
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, org_id, repo_id)
+        return [
+            GraphEdge(
+                id=r["id"],
+                organization_id=r["organization_id"],
+                workspace_id=r["workspace_id"],
+                repository_id=r["repository_id"],
+                source_symbol=r["source_symbol"],
+                target_symbol=r["target_symbol"],
+                edge_type=r["edge_type"],
+                valid_at_sha=r["valid_at_sha"],
+                is_current=r["is_current"],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+
     async def find_impact_tree(
         self, org_id: UUID, repository_id: UUID, target_symbol: str, max_depth: int = 3, only_current: bool = True
     ) -> List[Dict[str, Any]]:
@@ -2288,21 +2314,25 @@ class AsyncpgGeneratedDocumentRepository(GeneratedDocumentRepository):
                 citations = EXCLUDED.citations,
                 provenance = EXCLUDED.provenance,
                 status = CASE
+                    WHEN EXCLUDED.status IN ('APPROVED', 'REJECTED', 'APPLIED') THEN EXCLUDED.status
                     WHEN generated_documents.content_hash = EXCLUDED.content_hash
                          AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.status
                     ELSE EXCLUDED.status
                 END,
                 approved_by = CASE
+                    WHEN EXCLUDED.status IN ('APPROVED', 'REJECTED', 'APPLIED') THEN EXCLUDED.approved_by
                     WHEN generated_documents.content_hash = EXCLUDED.content_hash
                          AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.approved_by
                     ELSE EXCLUDED.approved_by
                 END,
                 pr_url = CASE
+                    WHEN EXCLUDED.status IN ('APPROVED', 'REJECTED', 'APPLIED') THEN EXCLUDED.pr_url
                     WHEN generated_documents.content_hash = EXCLUDED.content_hash
                          AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.pr_url
                     ELSE EXCLUDED.pr_url
                 END,
                 branch_name = CASE
+                    WHEN EXCLUDED.status IN ('APPROVED', 'REJECTED', 'APPLIED') THEN EXCLUDED.branch_name
                     WHEN generated_documents.content_hash = EXCLUDED.content_hash
                          AND generated_documents.status IN ('APPROVED', 'APPLIED') THEN generated_documents.branch_name
                     ELSE EXCLUDED.branch_name

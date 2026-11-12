@@ -40,6 +40,8 @@ public class OutboxPublisherRelay {
     private final ObjectMapper objectMapper;
     private final ProjectMetrics projectMetrics;
     private final StructuredLogger structuredLogger;
+    @Autowired(required = false)
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     @Value("${outbox.publisher.batch-size:50}")
     private int batchSize = 50;
@@ -71,8 +73,22 @@ public class OutboxPublisherRelay {
         processBatchInternal();
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int processBatchInternal() {
+        if (transactionTemplate == null) {
+            return processBatchTransactional();
+        }
+        List<OutboxEventEntity> claimed = transactionTemplate.execute(status -> claimPendingBatch());
+        if (claimed == null || claimed.isEmpty()) {
+            return 0;
+        }
+        for (OutboxEventEntity eventEntity : claimed) {
+            publishSingleEvent(eventEntity);
+        }
+        return claimed.size();
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int processBatchTransactional() {
         List<OutboxEventEntity> pendingEvents;
         try {
             pendingEvents = outboxEventRepository.findUnprocessedEventsForUpdate(batchSize, maxAttempts);
@@ -95,6 +111,40 @@ public class OutboxPublisherRelay {
         }
 
         return pendingEvents.size();
+    }
+
+    private List<OutboxEventEntity> claimPendingBatch() {
+        List<OutboxEventEntity> pendingEvents;
+        try {
+            pendingEvents = outboxEventRepository.findUnprocessedEventsForUpdate(batchSize, maxAttempts);
+        } catch (Exception e) {
+            pendingEvents = outboxEventRepository.findTop100ByPublishedAtIsNullOrderByCreatedAtAsc();
+        }
+
+        if (projectMetrics != null) {
+            projectMetrics.updatePendingOutboxCount(pendingEvents.size());
+        }
+
+        if (pendingEvents.isEmpty()) {
+            return pendingEvents;
+        }
+
+        Instant claimUntil = Instant.now().plusSeconds(60);
+        for (OutboxEventEntity entity : pendingEvents) {
+            entity.setStatus("RETRYING");
+            entity.setNextRetryAt(claimUntil);
+        }
+        outboxEventRepository.saveAll(pendingEvents);
+        log.debug("Outbox worker claimed {} events for off-lock publishing", pendingEvents.size());
+        return pendingEvents;
+    }
+
+    private void saveEntityState(OutboxEventEntity eventEntity) {
+        if (transactionTemplate != null) {
+            transactionTemplate.executeWithoutResult(status -> outboxEventRepository.save(eventEntity));
+        } else {
+            outboxEventRepository.save(eventEntity);
+        }
     }
 
     private void publishSingleEvent(OutboxEventEntity eventEntity) {
@@ -144,7 +194,9 @@ public class OutboxPublisherRelay {
                         .payload(domainEvent)
                         .build();
             } else {
-                envelope = objectMapper.readValue(eventEntity.getPayload(), EventEnvelope.class);
+                envelope = rootNode != null
+                        ? objectMapper.treeToValue(rootNode, EventEnvelope.class)
+                        : objectMapper.readValue(eventEntity.getPayload(), EventEnvelope.class);
             }
 
             eventPublisher.publish(envelope);
@@ -152,8 +204,9 @@ public class OutboxPublisherRelay {
             long latency = System.currentTimeMillis() - start;
             eventEntity.setPublishedAt(Instant.now());
             eventEntity.setStatus("PUBLISHED");
+            eventEntity.setNextRetryAt(null);
             eventEntity.setLastError(null);
-            outboxEventRepository.save(eventEntity);
+            saveEntityState(eventEntity);
 
             if (projectMetrics != null) {
                 projectMetrics.recordOutboxSuccess(latency);
@@ -175,7 +228,8 @@ public class OutboxPublisherRelay {
             if (currentAttempts >= maxAttempts) {
                 eventEntity.setStatus("DEAD_LETTER");
                 eventEntity.setDeadLetterAt(Instant.now());
-                outboxEventRepository.save(eventEntity);
+                eventEntity.setNextRetryAt(null);
+                saveEntityState(eventEntity);
 
                 log.error("HIGH SEVERITY ALERT: Outbox event reached max retry attempts ({}/{}). Transitioned to DEAD_LETTER: id={}, type={}, error={}",
                         currentAttempts, maxAttempts, eventEntity.getId(), eventEntity.getEventType(), ex.getMessage());
@@ -193,7 +247,7 @@ public class OutboxPublisherRelay {
                 eventEntity.setStatus("RETRYING");
                 long backoffSeconds = (long) Math.min(300, Math.pow(2, currentAttempts));
                 eventEntity.setNextRetryAt(Instant.now().plusSeconds(backoffSeconds));
-                outboxEventRepository.save(eventEntity);
+                saveEntityState(eventEntity);
 
                 log.warn("Failed to dispatch outbox event (attempt {}/{}). Will retry with backoff: id={}, type={}, error={}",
                         currentAttempts, maxAttempts, eventEntity.getId(), eventEntity.getEventType(), ex.getMessage());

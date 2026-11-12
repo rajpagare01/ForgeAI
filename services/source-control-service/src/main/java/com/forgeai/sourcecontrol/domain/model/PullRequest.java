@@ -24,6 +24,7 @@ public class PullRequest {
     private String body;
     private String sourceBranch;
     private String targetBranch;
+    private String headSha;
     private PullRequestStatus status;
     private String authorGithubId;
     private Instant createdAt;

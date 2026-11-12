@@ -62,7 +62,25 @@ public class AuthController {
             org.springframework.security.core.Authentication authentication) {
         if (authentication != null && authentication.getPrincipal() instanceof java.util.UUID userId) {
             String refreshToken = request != null ? request.refreshToken() : null;
-            authenticationUseCase.logout(userId, refreshToken);
+            java.util.UUID sessionId = null;
+            if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth
+                    && jwtAuth.getToken() != null) {
+                String sidClaim = jwtAuth.getToken().getClaimAsString("session_id");
+                if (sidClaim == null || sidClaim.isBlank()) {
+                    sidClaim = jwtAuth.getToken().getClaimAsString("sid");
+                }
+                if (sidClaim != null && !sidClaim.isBlank()) {
+                    try {
+                        sessionId = java.util.UUID.fromString(sidClaim.trim());
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+            if (sessionId != null) {
+                authenticationUseCase.logout(userId, refreshToken, sessionId);
+            } else {
+                authenticationUseCase.logout(userId, refreshToken);
+            }
         }
         return ResponseEntity.ok(new com.forgeai.identity.api.dto.LogoutResponse("Successfully logged out"));
     }

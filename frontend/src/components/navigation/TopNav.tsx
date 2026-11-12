@@ -119,6 +119,9 @@ export const TopNav: React.FC = () => {
         `/api/v1/auth/github/start?redirectUri=${encodeURIComponent(callbackUri)}`
       );
       if (res?.authorizationUrl) {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("forgeai_github_oauth_action", "link");
+        }
         window.location.href = res.authorizationUrl;
       } else {
         setActionError("Unable to start GitHub linking session.");

@@ -29,6 +29,7 @@ public class PullRequestRepositoryAdapter implements PullRequestRepository {
                 entity.setBody(pullRequest.getBody());
                 entity.setSourceBranch(pullRequest.getSourceBranch());
                 entity.setTargetBranch(pullRequest.getTargetBranch());
+                entity.setHeadSha(pullRequest.getHeadSha());
                 entity.setStatus(pullRequest.getStatus() != null ? pullRequest.getStatus().name() : entity.getStatus());
                 entity.setUpdatedAt(Instant.now());
                 return mapper.toDomain(jpaRepository.saveAndFlush(entity));

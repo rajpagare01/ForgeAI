@@ -219,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     apiClient.setAccessToken(null);
     apiClient.setRefreshToken(null);
+    apiClient.clearTenantAndAnalysisCaches();
     localStorage.removeItem("forgeai_user");
     setUser(null);
     setAccessToken(null);

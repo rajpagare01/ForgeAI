@@ -406,6 +406,9 @@ public class RepositoryApplicationService {
                 pr.setBody(ghPr.body());
                 pr.setSourceBranch(ghPr.sourceBranch());
                 pr.setTargetBranch(ghPr.targetBranch());
+                if (ghPr.headSha() != null && !ghPr.headSha().isBlank()) {
+                    pr.setHeadSha(ghPr.headSha());
+                }
                 pr.setStatus(status);
                 pr.setUpdatedAt(Instant.now());
                 var savedPr = pullRequestRepository.save(pr);
@@ -439,6 +442,7 @@ public class RepositoryApplicationService {
                         .body(ghPr.body())
                         .sourceBranch(ghPr.sourceBranch())
                         .targetBranch(ghPr.targetBranch())
+                        .headSha(ghPr.headSha())
                         .status(status)
                         .authorGithubId(ghPr.authorLogin())
                         .createdAt(ghPr.createdAt() != null ? ghPr.createdAt() : Instant.now())
@@ -544,6 +548,9 @@ public class RepositoryApplicationService {
                     pr.setBody(detail.body());
                     pr.setSourceBranch(detail.sourceBranch());
                     pr.setTargetBranch(detail.targetBranch());
+                    if (detail.headSha() != null && !detail.headSha().isBlank()) {
+                        pr.setHeadSha(detail.headSha());
+                    }
                     pr.setStatus(status);
                     pr.setUpdatedAt(Instant.now());
                     pullRequestRepository.save(pr);
@@ -558,6 +565,7 @@ public class RepositoryApplicationService {
                             .body(detail.body())
                             .sourceBranch(detail.sourceBranch())
                             .targetBranch(detail.targetBranch())
+                            .headSha(detail.headSha())
                             .status(status)
                             .authorGithubId(detail.authorLogin())
                             .createdAt(detail.createdAt() != null ? detail.createdAt() : Instant.now())
@@ -608,7 +616,7 @@ public class RepositoryApplicationService {
                 .sourceBranch(pr.getSourceBranch())
                 .targetBranch(pr.getTargetBranch())
                 .baseSha("")
-                .headSha("")
+                .headSha(pr.getHeadSha() != null ? pr.getHeadSha() : "")
                 .author(pr.getAuthorGithubId())
                 .additions(0)
                 .deletions(0)
@@ -920,7 +928,8 @@ public class RepositoryApplicationService {
         RepositoryConnectedEvent event = RepositoryConnectedEvent.builder()
                 .repositoryId(saved.getId())
                 .organizationId(organizationId)
-                .workspaceId(targetWorkspaceId)
+                .workspaceId(organizationId != null ? organizationId : targetWorkspaceId)
+                .scope(organizationId != null ? "ORGANIZATION" : "PERSONAL")
                 .githubRepoId(saved.getGithubRepoId())
                 .fullName(saved.getFullName())
                 .defaultBranch(saved.getDefaultBranch())
@@ -1017,9 +1026,6 @@ public class RepositoryApplicationService {
                                 }
                             }
                         }
-                    }
-                    if (matched == null && organizationId != null && !appInstalls.isEmpty()) {
-                        matched = appInstalls.get(0);
                     }
                     if (matched != null && discoveryService != null) {
                         GitHubInstallation claimed = discoveryService.validateAndAssociate(callerUserId, effectiveWsId,
@@ -1405,8 +1411,8 @@ public class RepositoryApplicationService {
             return;
         }
         workspaceRepository.findById(workspaceId).ifPresent(ws -> {
-            if ("PERSONAL".equalsIgnoreCase(ws.getType())) {
-                if (callerUserId != null && !callerUserId.equals(ws.getOwnerUserId())) {
+            if ("PERSONAL".equalsIgnoreCase(ws.getType()) || organizationId == null) {
+                if (callerUserId == null || !callerUserId.equals(ws.getOwnerUserId())) {
                     throw new GitHubAccessDeniedException("Access denied: You do not own this personal workspace");
                 }
             }

@@ -271,9 +271,7 @@ public class TaskApplicationService {
                 throw new ResourceNotFoundException("Project not found: id=" + projectId + " in org=" + organizationId);
             }
             if (organizationId == null) {
-                if (userId != null || com.forgeai.project.infrastructure.security.TenantContext.getUserId() != null || com.forgeai.project.infrastructure.security.TenantContext.getWorkspaceId() != null) {
-                    throw new AccessDeniedException("Access denied: Project belongs to an organization");
-                }
+                throw new AccessDeniedException("Access denied: Project belongs to an organization");
             }
         } else {
             if (organizationId != null) {

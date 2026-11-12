@@ -16,11 +16,13 @@ import java.time.Instant;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler({UserAlreadyExistsException.class, org.springframework.dao.DataIntegrityViolationException.class})
+    @ExceptionHandler({DuplicateMembershipException.class, UserAlreadyExistsException.class, org.springframework.dao.DataIntegrityViolationException.class})
     public ResponseEntity<ApiErrorResponse> handleUserAlreadyExists(Exception ex, WebRequest request) {
         log.warn("Identity conflict / integrity violation: {}", ex.getMessage());
         String msg = (ex instanceof org.springframework.dao.DataIntegrityViolationException)
                 ? "A record with this identifier already exists"
+                : (ex instanceof DuplicateMembershipException)
+                ? sanitizeClientMessage(ex.getMessage(), "User is already a member of this organization.")
                 : "An account or workspace with this identifier already exists.";
         return buildErrorResponse(HttpStatus.CONFLICT, "CONFLICT", msg, request);
     }
@@ -38,6 +40,8 @@ public class GlobalExceptionHandler {
             OrganizationNotFoundException.class,
             RoleNotFoundException.class,
             TeamNotFoundException.class,
+            MembershipNotFoundException.class,
+            PermissionNotFoundException.class,
             org.springframework.web.servlet.resource.NoResourceFoundException.class
     })
     public ResponseEntity<ApiErrorResponse> handleNotFound(Exception ex, WebRequest request) {
@@ -64,7 +68,15 @@ public class GlobalExceptionHandler {
     }
 
 
-    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class, MethodArgumentNotValidException.class, org.springframework.http.converter.HttpMessageNotReadableException.class})
+    @ExceptionHandler({
+            InvalidOwnershipOperationException.class,
+            InvalidMembershipRoleException.class,
+            InvalidRoleScopeException.class,
+            IllegalArgumentException.class,
+            IllegalStateException.class,
+            MethodArgumentNotValidException.class,
+            org.springframework.http.converter.HttpMessageNotReadableException.class
+    })
     public ResponseEntity<ApiErrorResponse> handleBadRequest(Exception ex, WebRequest request) {
         log.warn("Bad request in identity-service: {}", ex.getMessage());
         String message = ex instanceof MethodArgumentNotValidException ? "Validation failed: please check your submitted fields." : 

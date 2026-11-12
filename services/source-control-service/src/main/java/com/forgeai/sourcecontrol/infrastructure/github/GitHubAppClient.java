@@ -718,13 +718,14 @@ public class GitHubAppClient {
                 String prBody = p.path("body").asText(null);
                 String state = p.path("state").asText("open");
                 String source = p.path("head").path("ref").asText("unknown");
+                String headSha = p.path("head").path("sha").asText(null);
                 String target = p.path("base").path("ref").asText("main");
                 String author = p.path("user").path("login").asText("unknown");
                 Instant createdAt = parseInstant(p.path("created_at").asText(null));
                 Instant updatedAt = parseInstant(p.path("updated_at").asText(null));
                 Instant closedAt = parseInstant(p.path("closed_at").asText(null));
                 Instant mergedAt = parseInstant(p.path("merged_at").asText(null));
-                list.add(new GitHubPullRequestMetadata(prId, number, title, prBody, state, source, target, author, createdAt, updatedAt, closedAt, mergedAt));
+                list.add(new GitHubPullRequestMetadata(prId, number, title, prBody, state, source, target, author, createdAt, updatedAt, closedAt, mergedAt, headSha));
             }
         }
         return list;
@@ -809,7 +810,10 @@ public class GitHubAppClient {
         config.requireConfigured();
         String token = getInstallationToken(installationId);
         String encodedPath = java.net.URLEncoder.encode(path, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20").replace("%2F", "/");
-        String url = GITHUB_API + "/repos/" + fullName + "/contents/" + encodedPath + (ref != null && !ref.isBlank() ? "?ref=" + ref : "");
+        String encodedRef = (ref != null && !ref.isBlank())
+                ? java.net.URLEncoder.encode(ref, java.nio.charset.StandardCharsets.UTF_8)
+                : null;
+        String url = GITHUB_API + "/repos/" + fullName + "/contents/" + encodedPath + (encodedRef != null ? "?ref=" + encodedRef : "");
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))

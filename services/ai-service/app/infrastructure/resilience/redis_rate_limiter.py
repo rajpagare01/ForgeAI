@@ -1,5 +1,7 @@
 import time
+import uuid
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 from uuid import UUID
 import redis.asyncio as aioredis
@@ -21,6 +23,7 @@ class RedisAiRateLimiter:
         self._redis: Optional[aioredis.Redis] = None
         self._local_sliding_window: dict[str, list[float]] = {}
         self._local_daily_tokens: dict[str, int] = {}
+        self._local_daily_dates: dict[str, str] = {}
         self._local_window_reset: dict[str, float] = {}
 
     async def get_redis(self) -> aioredis.Redis:
@@ -60,35 +63,32 @@ class RedisAiRateLimiter:
             r = await self.get_redis()
             one_minute_ago = now - 60.0
 
-            # 1. Sliding window request limit per minute using Redis ZSET
+            # 1. Check sliding window cardinality & daily quota BEFORE admitting request
             pipe = r.pipeline()
             pipe.zremrangebyscore(rate_key, 0, one_minute_ago)
             pipe.zcard(rate_key)
-            pipe.zadd(rate_key, {f"{now}": now})
-            pipe.expire(rate_key, 120)
-            
-            # 2. Daily token consumption
             pipe.get(quota_key)
             results = await pipe.execute()
 
             current_requests = results[1]
             if current_requests >= max_requests_per_minute:
-                # Exceeded rate limit per minute
                 retry_after = 60 - int(now % 60)
-                logger.warn(f"Org {org_id} exceeded RPM limit ({current_requests}/{max_requests_per_minute})")
+                logger.warning(f"Org {org_id} exceeded RPM limit ({current_requests}/{max_requests_per_minute})")
                 return False, max(1, retry_after)
 
             # Check daily quota
-            daily_used_str = results[4]
+            daily_used_str = results[-1]
             daily_used = int(daily_used_str) if daily_used_str else 0
 
             if daily_used + estimated_tokens > daily_token_limit:
                 retry_after = 86400 - int(now % 86400)
-                logger.warn(f"Org {org_id} exceeded daily token limit ({daily_used}/{daily_token_limit})")
+                logger.warning(f"Org {org_id} exceeded daily token limit ({daily_used}/{daily_token_limit})")
                 return False, max(60, retry_after)
 
-            # Increment daily quota atomically
+            # Record request + increment daily quota atomically
             pipe2 = r.pipeline()
+            pipe2.zadd(rate_key, {f"{now}:{uuid.uuid4().hex[:8]}": now})
+            pipe2.expire(rate_key, 120)
             pipe2.incrby(quota_key, estimated_tokens)
             pipe2.expire(quota_key, 86400)
             await pipe2.execute()
@@ -117,13 +117,17 @@ class RedisAiRateLimiter:
         if len(valid_timestamps) >= max_rpm:
             return False, 60
 
-        valid_timestamps.append(now)
-        self._local_sliding_window[org_key] = valid_timestamps
+        # Daily token counter (reset automatically on UTC date rollover)
+        today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if self._local_daily_dates.get(org_key) != today_utc:
+            self._local_daily_dates[org_key] = today_utc
+            self._local_daily_tokens[org_key] = 0
 
-        # Daily token counter
         used = self._local_daily_tokens.get(org_key, 0)
         if used + estimated_tokens > daily_limit:
             return False, 3600
 
+        valid_timestamps.append(now)
+        self._local_sliding_window[org_key] = valid_timestamps
         self._local_daily_tokens[org_key] = used + estimated_tokens
         return True, None

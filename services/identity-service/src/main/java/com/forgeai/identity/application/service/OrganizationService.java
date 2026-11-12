@@ -211,6 +211,9 @@ public class OrganizationService {
         org.setUpdatedAt(Instant.now());
         organizationRepository.save(org);
 
+        membershipRepository.findByOrganizationId(organizationId)
+                .forEach(m -> evictRoleCache(m.getUserId(), organizationId));
+
         securityEventService.recordEvent(currentUserId, organizationId, "ORGANIZATION_DEACTIVATED", null, null, "{\"message\": \"Organization deactivated\"}");
     }
 
@@ -257,7 +260,8 @@ public class OrganizationService {
         findActiveOrganization(organizationId);
         verifyAuthority(currentUserId, organizationId, "OWNER");
 
-        if (membershipRepository.findByUserIdAndOrganizationId(targetUserId, organizationId).isPresent()) {
+        var existingOpt = membershipRepository.findByUserIdAndOrganizationId(targetUserId, organizationId);
+        if (existingOpt.isPresent() && existingOpt.get().getStatus() == MembershipStatus.ACTIVE) {
             throw new DuplicateMembershipException("User is already a member of this organization");
         }
 
@@ -271,13 +275,21 @@ public class OrganizationService {
             throw new InvalidMembershipRoleException("Cannot directly assign OWNER role. Use ownership transfer.");
         }
 
-        OrganizationMembership membership = new OrganizationMembership();
-        membership.setUserId(targetUserId);
-        membership.setOrganizationId(organizationId);
-        membership.setRoleId(targetRole.getId());
-        membership.setStatus(MembershipStatus.ACTIVE);
-        membership.setCreatedAt(Instant.now());
-        membership.setUpdatedAt(Instant.now());
+        OrganizationMembership membership;
+        if (existingOpt.isPresent()) {
+            membership = existingOpt.get();
+            membership.setRoleId(targetRole.getId());
+            membership.setStatus(MembershipStatus.ACTIVE);
+            membership.setUpdatedAt(Instant.now());
+        } else {
+            membership = new OrganizationMembership();
+            membership.setUserId(targetUserId);
+            membership.setOrganizationId(organizationId);
+            membership.setRoleId(targetRole.getId());
+            membership.setStatus(MembershipStatus.ACTIVE);
+            membership.setCreatedAt(Instant.now());
+            membership.setUpdatedAt(Instant.now());
+        }
 
         OrganizationMembership saved = membershipRepository.save(membership);
 

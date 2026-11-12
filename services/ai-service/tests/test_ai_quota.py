@@ -66,9 +66,9 @@ async def test_redis_quota_exceeded():
     mock_pipeline = MagicMock()
     mock_redis.pipeline.return_value = mock_pipeline
 
-    # Pipeline 1: [zremrangebyscore, zcard, zadd, expire, get_daily]
+    # Pipeline 1: [zremrangebyscore, zcard, get_daily]
     # Simulate 10 requests out of 60 limit, but daily quota used is 99,500 / 100,000
-    mock_pipeline.execute = AsyncMock(return_value=[0, 10, True, True, "99500"])
+    mock_pipeline.execute = AsyncMock(return_value=[0, 10, "99500"])
     limiter.get_redis = AsyncMock(return_value=mock_redis)
 
     # Request with 1000 tokens exceeds 100,000 daily limit (99,500 + 1,000 = 100,500)

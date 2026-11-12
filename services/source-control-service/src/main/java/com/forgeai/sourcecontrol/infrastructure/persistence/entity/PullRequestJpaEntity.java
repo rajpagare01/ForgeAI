@@ -51,6 +51,9 @@ public class PullRequestJpaEntity {
     @Column(name = "target_branch", nullable = false, length = 255)
     private String targetBranch;
 
+    @Column(name = "head_sha", length = 64)
+    private String headSha;
+
     @Column(name = "status", nullable = false, length = 32)
     private String status;
 

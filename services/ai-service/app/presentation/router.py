@@ -1731,7 +1731,9 @@ async def get_repository_dependency_security(
             seen_files[c.file_path] += f"\n{c.content}"
     files_to_scan = [{"filename": fp, "content": cnt} for fp, cnt in seen_files.items()]
 
-    scanner = DependencyVulnerabilityScanner(is_external_configured=True)
+    scanner = DependencyVulnerabilityScanner(
+        is_external_configured=bool(getattr(settings, "CVE_DATABASE_URL", None))
+    )
     scan_res = await scanner.scan_files_live(files_to_scan)
 
     return DependencySecurityStatusDTO(
@@ -3225,9 +3227,12 @@ async def verify_and_run_test_suite(
     chunk_repo=Depends(get_code_chunk_repo),
     llm_provider=Depends(get_llm_provider),
 ):
+    from xml.sax.saxutils import escape as xml_escape, quoteattr as xml_quoteattr
+
     fw = (req.framework or "JUNIT5").upper()
     code = req.test_code or ""
-    class_name = req.test_file_path.split("/")[-1].rsplit(".", 1)[0] or "GeneratedSuiteTest"
+    raw_class_name = req.test_file_path.split("/")[-1].rsplit(".", 1)[0] or "GeneratedSuiteTest"
+    class_name = re.sub(r"[^A-Za-z0-9_]", "_", raw_class_name) or "GeneratedSuiteTest"
 
     # Extract test method names from JUnit5, TestNG, Selenium, Pytest, or Vitest code
     test_names: List[str] = []
@@ -3308,11 +3313,9 @@ async def verify_and_run_test_suite(
                     ai_failure_diagnosis=diag,
                 )
             )
-            safe_err = err_msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-            safe_stack = stack.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             xml_cases.append(
-                f'  <testcase classname="{class_name}" name="{tname}" time="{dur / 1000.0:.3f}">\n'
-                f'    <failure message="{safe_err}" type="AssertionError">{safe_stack}</failure>\n'
+                f'  <testcase classname={xml_quoteattr(class_name)} name={xml_quoteattr(tname)} time="{dur / 1000.0:.3f}">\n'
+                f'    <failure message={xml_quoteattr(err_msg)} type="AssertionError">{xml_escape(stack)}</failure>\n'
                 f'  </testcase>'
             )
         else:
@@ -3326,14 +3329,14 @@ async def verify_and_run_test_suite(
                 )
             )
             xml_cases.append(
-                f'  <testcase classname="{class_name}" name="{tname}" time="{dur / 1000.0:.3f}"/>'
+                f'  <testcase classname={xml_quoteattr(class_name)} name={xml_quoteattr(tname)} time="{dur / 1000.0:.3f}"/>'
             )
 
     passed_count = sum(1 for r in results if r.status == "PASSED")
     failed_count = len(results) - passed_count
     junit_xml = (
         f'<?xml version="1.0" encoding="UTF-8"?>\n'
-        f'<testsuite name="{class_name}" tests="{len(results)}" failures="{failed_count}" errors="0" skipped="0" time="{total_duration / 1000.0:.3f}">\n'
+        f'<testsuite name={xml_quoteattr(class_name)} tests="{len(results)}" failures="{failed_count}" errors="0" skipped="0" time="{total_duration / 1000.0:.3f}">\n'
         + "\n".join(xml_cases)
         + "\n</testsuite>"
     )

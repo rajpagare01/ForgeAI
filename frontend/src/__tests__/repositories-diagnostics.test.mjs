@@ -48,7 +48,8 @@ test("B & C: ApiClient attaches status and data on HTTP error", async () => {
       (err) => {
         assert.equal(err.status, 503);
         assert.equal(err.statusText, "Service Unavailable");
-        assert.equal(err.message, "GitHub service is down");
+        assert.equal(err.data?.detail, "GitHub service is down");
+        assert.equal(err.message, "This service is temporarily unavailable. Please try again in a few moments.");
         return true;
       }
     );

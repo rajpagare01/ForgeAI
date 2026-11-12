@@ -54,7 +54,7 @@ public class TokenRotationService {
         }
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED)
+    @Transactional(isolation = Isolation.READ_COMMITTED, noRollbackFor = {CompromisedTokenException.class, InvalidCredentialsException.class})
     public RefreshTokenResponse rotateToken(String rawRefreshToken) {
         String tokenHash = hashWithSHA256(rawRefreshToken);
 
