@@ -652,12 +652,3 @@ export const TraceabilityInspectionSheet: React.FC<TraceabilityInspectionSheetPr
     </div>
   );
 };
-<Button variant="outline" size="sm" onClick={onClose} className="h-7 text-xs border-[#26262C]">
-  Close Inspector
-</Button>
-          </div >
-        </div >
-      </div >
-    </div >
-  );
-};

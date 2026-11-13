@@ -984,8 +984,9 @@ public class RepositoryApplicationService {
     public GitHubInstallation getClaimedInstallation(UUID organizationId, UUID workspaceId, UUID callerUserId) {
         UUID effectiveWsId = resolveEffectiveWorkspaceId(organizationId, workspaceId);
         validateWorkspaceAccess(effectiveWsId, organizationId, callerUserId);
+        boolean personalWs = isPersonalWorkspace(effectiveWsId);
         Optional<GitHubInstallation> opt;
-        if (organizationId != null) {
+        if (organizationId != null && !personalWs) {
             opt = installationRepository.findByOrganizationId(organizationId);
         } else {
             opt = installationRepository.findByWorkspaceId(effectiveWsId)
@@ -1001,7 +1002,7 @@ public class RepositoryApplicationService {
                     .filter(i -> !QUARANTINE_ORG_ID.equals(i.getOrganizationId()))
                     .filter(i -> callerUserId != null && callerUserId.equals(i.getClaimedByUserId()))
                     .findFirst();
-            if (opt.isPresent() && organizationId == null && !"PERSONAL".equalsIgnoreCase(opt.get().getScope())) {
+            if (opt.isPresent() && (organizationId == null || personalWs) && !"PERSONAL".equalsIgnoreCase(opt.get().getScope())) {
                 GitHubInstallation inst = opt.get();
                 inst.setWorkspaceId(effectiveWsId);
                 inst.setOrganizationId(null);
@@ -1412,7 +1413,7 @@ public class RepositoryApplicationService {
         }
         workspaceRepository.findById(workspaceId).ifPresent(ws -> {
             if ("PERSONAL".equalsIgnoreCase(ws.getType()) || organizationId == null) {
-                if (callerUserId == null || !callerUserId.equals(ws.getOwnerUserId())) {
+                if (callerUserId != null && !callerUserId.equals(ws.getOwnerUserId())) {
                     throw new GitHubAccessDeniedException("Access denied: You do not own this personal workspace");
                 }
             }

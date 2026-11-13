@@ -24,6 +24,7 @@ import java.util.function.Supplier;
 final class WebhookRepositoryResolver {
 
     static final UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+    private static final int MAX_MAP_ENTRIES = 10_000;
     private static final ConcurrentHashMap<String, Object> LOCKS = new ConcurrentHashMap<>();
 
     private WebhookRepositoryResolver() {
@@ -82,6 +83,9 @@ final class WebhookRepositoryResolver {
         final String finalScope = scope;
         final Long finalInstId = installationId;
 
+        if (LOCKS.size() > MAX_MAP_ENTRIES) {
+            LOCKS.clear();
+        }
         synchronized (LOCKS.computeIfAbsent("repo:" + githubRepoId, k -> new Object())) {
             return repositoryRepository.findByGithubRepoId(githubRepoId).orElseGet(() -> {
                 Repository repo = Repository.builder()
@@ -112,6 +116,9 @@ final class WebhookRepositoryResolver {
             long effectiveInstId,
             String fullName) {
 
+        if (LOCKS.size() > MAX_MAP_ENTRIES) {
+            LOCKS.clear();
+        }
         synchronized (LOCKS.computeIfAbsent("inst:" + effectiveInstId, k -> new Object())) {
             if (installationRepository.findByInstallationId(effectiveInstId).isPresent()) {
                 return;

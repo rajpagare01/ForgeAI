@@ -104,7 +104,13 @@ public class InvitationService {
         return toResponse(saved, rawToken);
     }
 
-    @Transactional(noRollbackFor = {IllegalArgumentException.class})
+    public static class InvitationExpiredException extends IllegalArgumentException {
+        public InvitationExpiredException(String message) {
+            super(message);
+        }
+    }
+
+    @Transactional(noRollbackFor = {InvitationExpiredException.class})
     public OrganizationMembership acceptInvitation(String rawToken, UUID authenticatedUserId) {
         String tokenHash = hashSha256(rawToken);
 
@@ -121,7 +127,7 @@ public class InvitationService {
             invitation.setStatus(InvitationStatus.EXPIRED.name());
             invitation.setUpdatedAt(Instant.now());
             invitationRepository.save(invitation);
-            throw new IllegalArgumentException("Invitation token has expired");
+            throw new InvitationExpiredException("Invitation token has expired");
         }
 
         User user = userRepository.findById(authenticatedUserId)

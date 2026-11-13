@@ -24,6 +24,8 @@ import java.util.*;
 @RequiredArgsConstructor
 public class TestIngestionService {
 
+    private static final int MAX_MAP_ENTRIES = 10_000;
+
     private final TestRunRepository testRunRepository;
     private final TestSuiteRepository testSuiteRepository;
     private final TestCaseRepository testCaseRepository;
@@ -144,6 +146,9 @@ public class TestIngestionService {
     private TestSuite resolveOrCreateSuite(UUID effectiveWsId, UUID organizationId, String effectiveScope,
                                            UUID repositoryId, String name, Instant now) {
         String lockKey = "suite:" + effectiveWsId + ":" + repositoryId + ":" + name;
+        if (upsertLocks.size() > MAX_MAP_ENTRIES) {
+            upsertLocks.clear();
+        }
         synchronized (upsertLocks.computeIfAbsent(lockKey, k -> new Object())) {
             return testSuiteRepository.findByWorkspaceIdAndRepositoryIdAndName(effectiveWsId, repositoryId, name)
                     .orElseGet(() -> {
@@ -182,6 +187,9 @@ public class TestIngestionService {
                                              UUID suiteId, String effectiveTestName, String classname,
                                              String requirementKey, Instant now) {
         String lockKey = "case:" + suiteId + ":" + effectiveTestName + ":" + (classname != null ? classname : "");
+        if (upsertLocks.size() > MAX_MAP_ENTRIES) {
+            upsertLocks.clear();
+        }
         synchronized (upsertLocks.computeIfAbsent(lockKey, k -> new Object())) {
             Optional<TestCase> existingOpt = testCaseRepository.findBySuiteIdAndNameAndClassname(suiteId, effectiveTestName, classname);
             if (existingOpt.isPresent()) {

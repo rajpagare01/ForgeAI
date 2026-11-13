@@ -58,6 +58,7 @@ class FailoverLLMOrchestrator(LLMProvider):
             response = await self.primary_provider.generate_text(
                 prompt=prompt,
                 system_instruction=system_instruction,
+                **kwargs,
             )
             elapsed_ms = (time.time() - start_time) * 1000.0
             ai_metrics.record_analysis(success=True, latency_ms=elapsed_ms, fallback_used=False, provider_failed=False)
@@ -75,6 +76,7 @@ class FailoverLLMOrchestrator(LLMProvider):
             response = await self.fallback_provider.generate_text(
                 prompt=prompt,
                 system_instruction=system_instruction,
+                **kwargs,
             )
             elapsed_ms = (time.time() - start_time) * 1000.0
             ai_metrics.record_analysis(success=True, latency_ms=elapsed_ms, fallback_used=True, provider_failed=False)

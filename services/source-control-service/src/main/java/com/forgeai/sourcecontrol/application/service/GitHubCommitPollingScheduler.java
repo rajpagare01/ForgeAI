@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GitHubCommitPollingScheduler {
 
     private static final UUID QUARANTINE_ORG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+    private static final int MAX_MAP_ENTRIES = 10_000;
 
     private final RepositoryRepository repositoryRepository;
     private final RepositoryApplicationService repositoryApplicationService;
@@ -142,6 +143,9 @@ public class GitHubCommitPollingScheduler {
                                 com.forgeai.sourcecontrol.domain.event.EventEnvelope.from(
                                         event, "poll-" + r.id(), "WorkflowRun", String.valueOf(r.id()))
                         );
+                        if (forwardedWorkflowRunStates.size() > MAX_MAP_ENTRIES) {
+                            forwardedWorkflowRunStates.clear();
+                        }
                         forwardedWorkflowRunStates.put(r.id(), stateKey);
                     }
                 }

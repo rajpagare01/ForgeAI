@@ -216,19 +216,29 @@ class TestIntelligenceEngine:
         # 2. Runtime CI Workflow Execution History
         if runtime_test_runs and isinstance(runtime_test_runs, list):
             for run in runtime_test_runs[:10]:
-                run_status = run.get("status") or run.get("github_run_status", "UNKNOWN")
-                run_conclusion = run.get("conclusion", "UNKNOWN")
-                wf_name = run.get("workflow_name") or f"Run #{run.get('workflow_run_id', 'CI')}"
+                run_status = (
+                    run.get("status")
+                    or run.get("github_run_status")
+                    or run.get("githubRunStatus")
+                    or "UNKNOWN"
+                )
+                run_conclusion = run.get("conclusion") or "UNKNOWN"
+                wf_run_id = run.get("workflow_run_id") or run.get("workflowRunId")
+                wf_name = (
+                    run.get("workflow_name")
+                    or run.get("workflowName")
+                    or f"Run #{wf_run_id or 'CI'}"
+                )
                 runtime_evidence.append({
                     "evidence_type": TestEvidenceType.RUNTIME_CI.value,
                     "workflow": wf_name,
-                    "workflow_run_id": run.get("workflow_run_id"),
+                    "workflow_run_id": wf_run_id,
                     "status": run_status,
                     "conclusion": run_conclusion,
-                    "commit_sha": run.get("commit_sha"),
-                    "duration_ms": run.get("duration_ms", 0),
-                    "passed_tests": run.get("passed_tests", 0),
-                    "failed_tests": run.get("failed_tests", 0),
+                    "commit_sha": run.get("commit_sha") or run.get("commitSha"),
+                    "duration_ms": run.get("duration_ms") if run.get("duration_ms") is not None else run.get("durationMs", 0),
+                    "passed_tests": run.get("passed_tests") if run.get("passed_tests") is not None else run.get("passedTests", 0),
+                    "failed_tests": run.get("failed_tests") if run.get("failed_tests") is not None else run.get("failedTests", 0),
                 })
 
         # ----------------------------------------------------------------------

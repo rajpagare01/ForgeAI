@@ -1,6 +1,6 @@
 import re
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from uuid import UUID
 
 from app.domain.models import (
@@ -244,6 +244,29 @@ class SecurityIntelligenceEngine:
         prefix = clean[:4]
         return f"{prefix}***[REDACTED_LEN_{len(clean)}]"
 
+    @staticmethod
+    def _extract_scannable_lines(patch: str, content: str) -> List[Tuple[int, str]]:
+        """
+        Returns list of (line_number, line_text) without shifting line indices
+        or skipping non-indented content lines.
+        """
+        scannable: List[Tuple[int, str]] = []
+        seen_texts = set()
+        if content and content.strip():
+            for idx, line in enumerate(content.splitlines(), start=1):
+                scannable.append((idx, line))
+                seen_texts.add(line.strip())
+        if patch and patch.strip():
+            for idx, raw_line in enumerate(patch.splitlines(), start=1):
+                if raw_line.startswith("+++") or raw_line.startswith("---") or raw_line.startswith("@@"):
+                    continue
+                if raw_line.startswith("+") or (not content.strip() and raw_line.startswith(" ")):
+                    clean_line = raw_line[1:] if (raw_line.startswith("+") or raw_line.startswith(" ")) else raw_line
+                    if not content.strip() or clean_line.strip() not in seen_texts:
+                        scannable.append((idx, clean_line))
+                        seen_texts.add(clean_line.strip())
+        return scannable
+
     @classmethod
     def analyze_security(
         cls,
@@ -266,30 +289,25 @@ class SecurityIntelligenceEngine:
         findings: List[SecurityFinding] = []
         target_files = changed_files if changed_files is not None else (files or [])
         target_deps = downstream_deps if downstream_deps is not None else (downstream_dependents or [])
+        seen_text_keys = set()
+        seen_chunk_keys = set()
 
         for f in target_files:
             file_path = f.get("filename") or f.get("file_path") or ""
             patch = f.get("patch") or ""
             content = f.get("content") or ""
-            if patch and content:
-                combined_text = f"{patch}\n{content}"
-            else:
-                combined_text = patch or content
-
-            if not combined_text.strip():
+            scannable_lines = cls._extract_scannable_lines(patch, content)
+            if not scannable_lines:
                 continue
-
-            lines = combined_text.splitlines()
 
             # 1. Secret Exposure Scanning
             for rule in cls._SECRET_RULES:
-                for line_idx, line in enumerate(lines, start=1):
-                    # Only scan added/modified lines in patches or whole content
-                    if patch and not (line.startswith("+") or line.startswith(" ")):
-                        continue
-
+                for line_idx, line in scannable_lines:
                     match = rule["pattern"].search(line)
                     if match:
+                        dedup_key = (rule["rule_id"], file_path, line.strip())
+                        if dedup_key in seen_text_keys:
+                            continue
                         matched_str = match.group(1) if match.groups() else match.group(0)
                         val_lower = (matched_str or "").lower()
                         if val_lower in cls._SAFE_PLACEHOLDERS or any(w in val_lower for w in ("example", "dummy", "placeholder", "changeme", "mock_key")):
@@ -301,6 +319,8 @@ class SecurityIntelligenceEngine:
                         else:
                             redacted = cls._redact_value(matched_str)
 
+                        seen_text_keys.add(dedup_key)
+                        seen_chunk_keys.add((rule["rule_id"], file_path, line_idx))
                         findings.append(
                             SecurityFinding(
                                 organization_id=organization_id,
@@ -323,10 +343,13 @@ class SecurityIntelligenceEngine:
 
             # 2. Insecure Configuration Scanning
             for rule in cls._CONFIG_RULES:
-                for line_idx, line in enumerate(lines, start=1):
-                    if patch and not (line.startswith("+") or line.startswith(" ")):
-                        continue
+                for line_idx, line in scannable_lines:
                     if rule["pattern"].search(line):
+                        dedup_key = (rule["rule_id"], file_path, line.strip())
+                        if dedup_key in seen_text_keys:
+                            continue
+                        seen_text_keys.add(dedup_key)
+                        seen_chunk_keys.add((rule["rule_id"], file_path, line_idx))
                         findings.append(
                             SecurityFinding(
                                 organization_id=organization_id,
@@ -349,10 +372,13 @@ class SecurityIntelligenceEngine:
 
             # 3. Code-Level Security Scanning
             for rule in cls._CODE_RULES:
-                for line_idx, line in enumerate(lines, start=1):
-                    if patch and not (line.startswith("+") or line.startswith(" ")):
-                        continue
+                for line_idx, line in scannable_lines:
                     if rule["pattern"].search(line):
+                        dedup_key = (rule["rule_id"], file_path, line.strip())
+                        if dedup_key in seen_text_keys:
+                            continue
+                        seen_text_keys.add(dedup_key)
+                        seen_chunk_keys.add((rule["rule_id"], file_path, line_idx))
                         findings.append(
                             SecurityFinding(
                                 organization_id=organization_id,
@@ -368,6 +394,57 @@ class SecurityIntelligenceEngine:
                                 file_path=file_path,
                                 line_number=line_idx,
                                 redacted_evidence=f"Line {line_idx}: {line.strip()[:160]}",
+                                remediation=rule["remediation"],
+                                is_blocker=rule["is_blocker"],
+                            )
+                        )
+
+        # 3b. Scan retrieved repository chunks individually to preserve per-chunk paths & line numbers
+        if retrieved_chunks:
+            for c in retrieved_chunks:
+                c_path = (c.get("file_path") if isinstance(c, dict) else getattr(c, "file_path", None)) or "retrieved_context"
+                c_content = (c.get("content") if isinstance(c, dict) else getattr(c, "content", None)) or ""
+                if not c_content.strip():
+                    continue
+                for line_idx, line in enumerate(c_content.splitlines(), start=1):
+                    for rule in cls._SECRET_RULES + cls._CONFIG_RULES + cls._CODE_RULES:
+                        match = rule["pattern"].search(line)
+                        if not match:
+                            continue
+                        chunk_key = (rule["rule_id"], c_path, line_idx)
+                        text_key = (rule["rule_id"], c_path, line.strip())
+                        if chunk_key in seen_chunk_keys or text_key in seen_text_keys:
+                            continue
+                        if rule in cls._SECRET_RULES:
+                            matched_str = match.group(1) if match.groups() else match.group(0)
+                            val_lower = (matched_str or "").lower()
+                            if val_lower in cls._SAFE_PLACEHOLDERS or any(w in val_lower for w in ("example", "dummy", "placeholder", "changeme", "mock_key")):
+                                continue
+                            if rule["rule_id"] == "SEC_SECRET_PRIVATE_KEY":
+                                key_type = (match.group(1) or "").upper() if match.groups() else ""
+                                redacted = f"[REDACTED_{key_type}_KEY]" if key_type else "[REDACTED_RSA_KEY]"
+                            else:
+                                redacted = cls._redact_value(matched_str)
+                            evidence = f"Line {line_idx}: matched pattern {rule['rule_id']}: {redacted}"
+                        else:
+                            evidence = f"Line {line_idx}: {line.strip()[:160]}"
+                        seen_chunk_keys.add(chunk_key)
+                        seen_text_keys.add(text_key)
+                        findings.append(
+                            SecurityFinding(
+                                organization_id=organization_id,
+                                repository_id=repository_id,
+                                pr_number=pr_number,
+                                commit_sha=commit_sha,
+                                category=rule["category"],
+                                rule_id=rule["rule_id"],
+                                severity=rule["severity"],
+                                confidence=rule["confidence"],
+                                title=rule["title"],
+                                description=rule["description"],
+                                file_path=c_path,
+                                line_number=line_idx,
+                                redacted_evidence=evidence,
                                 remediation=rule["remediation"],
                                 is_blocker=rule["is_blocker"],
                             )

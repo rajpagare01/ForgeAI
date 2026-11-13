@@ -43,7 +43,19 @@ public class RepositoryController {
     }
 
     private UUID resolveWorkspaceId(UUID workspaceId) {
-        return workspaceId != null ? workspaceId : TenantContext.getWorkspaceId();
+        UUID contextWsId = TenantContext.getWorkspaceId();
+        if (contextWsId != null) {
+            if (workspaceId != null && !workspaceId.equals(contextWsId)) {
+                throw new com.forgeai.sourcecontrol.infrastructure.github.GitHubAccessDeniedException(
+                        "Access denied: Requested workspaceId does not match authenticated workspace context");
+            }
+            return contextWsId;
+        }
+        if (workspaceId != null && TenantContext.getOrganizationId() == null && TenantContext.getUserId() == null) {
+            throw new com.forgeai.sourcecontrol.infrastructure.github.GitHubAccessDeniedException(
+                    "Access denied: Authenticated workspace context is required");
+        }
+        return workspaceId;
     }
 
     @GetMapping

@@ -1,6 +1,6 @@
 import re
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from uuid import UUID
 
 from app.domain.models import (
@@ -170,6 +170,29 @@ class ReliabilityIntelligenceEngine:
         },
     ]
 
+    @staticmethod
+    def _extract_scannable_lines(patch: str, content: str) -> List[Tuple[int, str]]:
+        """
+        Returns list of (line_number, line_text) without shifting line indices
+        or skipping non-indented content lines.
+        """
+        scannable: List[Tuple[int, str]] = []
+        seen_texts = set()
+        if content and content.strip():
+            for idx, line in enumerate(content.splitlines(), start=1):
+                scannable.append((idx, line))
+                seen_texts.add(line.strip())
+        if patch and patch.strip():
+            for idx, raw_line in enumerate(patch.splitlines(), start=1):
+                if raw_line.startswith("+++") or raw_line.startswith("---") or raw_line.startswith("@@"):
+                    continue
+                if raw_line.startswith("+") or (not content.strip() and raw_line.startswith(" ")):
+                    clean_line = raw_line[1:] if (raw_line.startswith("+") or raw_line.startswith(" ")) else raw_line
+                    if not content.strip() or clean_line.strip() not in seen_texts:
+                        scannable.append((idx, clean_line))
+                        seen_texts.add(clean_line.strip())
+        return scannable
+
     @classmethod
     def analyze_reliability(
         cls,
@@ -192,50 +215,58 @@ class ReliabilityIntelligenceEngine:
         findings: List[ReliabilityFinding] = []
         historical_signals = historical_signals or []
         target_files = changed_files if changed_files is not None else (files or [])
+        seen_keys = set()
 
         for f in target_files:
             file_path = f.get("filename") or f.get("file_path") or ""
             patch = f.get("patch") or ""
             content = f.get("content") or ""
-            combined_text = f"{patch}\n{content}"
+            scannable_lines = cls._extract_scannable_lines(patch, content)
 
-            if not combined_text.strip():
+            if not (content.strip() or patch.strip()):
                 continue
-
-            lines = combined_text.splitlines()
 
             for rule in cls._RELIABILITY_RULES:
                 detection_status = rule.get("detection_status", "DETECTED")
                 if rule["rule_id"] in cls._MULTILINE_RULES:
-                    m = rule["pattern"].search(combined_text)
+                    target_text = content if content.strip() else patch
+                    m = rule["pattern"].search(target_text)
+                    if not m and content.strip() and patch.strip():
+                        target_text = patch
+                        m = rule["pattern"].search(target_text)
                     if m:
-                        line_idx = combined_text[:m.start()].count("\n") + 1
+                        line_idx = target_text[:m.start()].count("\n") + 1
                         matched_snippet = m.group(0).strip().replace("\n", " ")[:120]
-                        findings.append(
-                            ReliabilityFinding(
-                                organization_id=organization_id,
-                                repository_id=repository_id,
-                                pr_number=pr_number,
-                                commit_sha=commit_sha,
-                                category=rule["category"],
-                                rule_id=rule["rule_id"],
-                                severity=rule["severity"],
-                                confidence=rule["confidence"],
-                                title=rule["title"],
-                                description=rule["description"],
-                                file_path=file_path,
-                                line_number=line_idx,
-                                evidence=f"Line {line_idx}: [{detection_status}] {matched_snippet}",
-                                remediation=rule["remediation"],
-                                is_blocker=rule["is_blocker"],
-                                metadata={"detection_status": detection_status},
+                        dedup_key = (rule["rule_id"], file_path, line_idx)
+                        if dedup_key not in seen_keys:
+                            seen_keys.add(dedup_key)
+                            findings.append(
+                                ReliabilityFinding(
+                                    organization_id=organization_id,
+                                    repository_id=repository_id,
+                                    pr_number=pr_number,
+                                    commit_sha=commit_sha,
+                                    category=rule["category"],
+                                    rule_id=rule["rule_id"],
+                                    severity=rule["severity"],
+                                    confidence=rule["confidence"],
+                                    title=rule["title"],
+                                    description=rule["description"],
+                                    file_path=file_path,
+                                    line_number=line_idx,
+                                    evidence=f"Line {line_idx}: [{detection_status}] {matched_snippet}",
+                                    remediation=rule["remediation"],
+                                    is_blocker=rule["is_blocker"],
+                                    metadata={"detection_status": detection_status},
+                                )
                             )
-                        )
                 else:
-                    for line_idx, line in enumerate(lines, start=1):
-                        if patch and not (line.startswith("+") or line.startswith(" ")):
-                            continue
+                    for line_idx, line in scannable_lines:
                         if rule["pattern"].search(line):
+                            dedup_key = (rule["rule_id"], file_path, line.strip())
+                            if dedup_key in seen_keys:
+                                continue
+                            seen_keys.add(dedup_key)
                             findings.append(
                                 ReliabilityFinding(
                                     organization_id=organization_id,

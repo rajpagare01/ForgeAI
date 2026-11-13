@@ -56,6 +56,21 @@ class DataModelCollector:
                     tname = jpa_table["name"]
                     if tname not in tables:
                         tables[tname] = jpa_table
+                    else:
+                        tables[tname]["columns"].extend(jpa_table["columns"])
+                    cited_files.add(fp)
+
+            elif (
+                (fp.endswith(".py") and ("BaseModel" in content or "__tablename__" in content))
+                or ((fp.endswith(".ts") or fp.endswith(".tsx")) and (re.search(r'\binterface\s+[A-Za-z0-9_]+', content) or re.search(r'\btype\s+[A-Za-z0-9_]+\s*=\s*\{', content)))
+            ):
+                extracted_models = self._parse_python_or_ts_model(content, fp, c.symbol_name)
+                for m_table in extracted_models:
+                    tname = m_table["name"]
+                    if tname not in tables:
+                        tables[tname] = m_table
+                    else:
+                        tables[tname]["columns"].extend(m_table["columns"])
                     cited_files.add(fp)
 
         # Sort tables and their columns deterministically
@@ -224,24 +239,38 @@ class DataModelCollector:
         match = re.search(r'@Table\s*\(\s*name\s*=\s*["\']([^"\']+)["\']', content)
         if match:
             table_name = match.group(1).lower()
-        elif symbol_name:
-            # Fallback to snake_case of class name
-            table_name = re.sub(r'(?<!^)(?=[A-Z])', '_', symbol_name).lower()
         else:
-            return None
+            effective_symbol = symbol_name
+            if not effective_symbol:
+                cls_match = re.search(r'\bclass\s+([A-Za-z0-9_]+)', content)
+                effective_symbol = cls_match.group(1) if cls_match else None
+            if effective_symbol:
+                table_name = re.sub(r'(?<!^)(?=[A-Z])', '_', effective_symbol).lower()
+            else:
+                return None
 
         columns = []
-        field_matches = re.finditer(r'(?:@Column\s*\([^)]*\)\s*)?(?:@Id\s+)?(?:private|protected)\s+([A-Za-z0-9_<>]+)\s+([a-zA-Z0-9_]+);', content)
+        field_matches = re.finditer(
+            r'(?:private|protected)\s+([A-Za-z0-9_<>\[\],\s]+?)\s+([a-zA-Z0-9_]+)\s*(?:=[^;]*)?;',
+            content,
+            re.DOTALL,
+        )
         for fm in field_matches:
-            ftype = fm.group(1)
+            ftype = re.sub(r'\s+', ' ', fm.group(1).strip())
             fname = fm.group(2)
-            is_pk = "@Id" in content[max(0, fm.start() - 50):fm.start()]
+            raw_prefix = content[max(0, fm.start() - 200):fm.start()]
+            # Isolate annotations belonging only to this field (after previous ; or {)
+            last_delim = max(raw_prefix.rfind(";"), raw_prefix.rfind("{"))
+            prefix = raw_prefix[last_delim + 1:] if last_delim != -1 else raw_prefix
+            is_pk = "@Id" in prefix
+            is_fk = "@ManyToOne" in prefix or "@JoinColumn" in prefix
+            not_nullable = bool(re.search(r'nullable\s*=\s*false', prefix))
             columns.append({
                 "name": fname,
                 "type": ftype,
                 "is_pk": is_pk,
-                "is_fk": False,
-                "nullable": not is_pk,
+                "is_fk": is_fk,
+                "nullable": not (is_pk or not_nullable),
             })
 
         return {
@@ -249,4 +278,77 @@ class DataModelCollector:
             "file_path": file_path,
             "columns": columns,
         }
+
+    def _parse_python_or_ts_model(
+        self, content: str, file_path: str, symbol_name: str | None
+    ) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        if file_path.endswith(".py"):
+            class_matches = list(re.finditer(r'^class\s+([A-Za-z0-9_]+)\s*(?:\(([^)]*)\))?\s*:', content, re.MULTILINE))
+            for idx, cm in enumerate(class_matches):
+                cls_name = cm.group(1)
+                bases = cm.group(2) or ""
+                end_pos = class_matches[idx + 1].start() if idx + 1 < len(class_matches) else len(content)
+                body = content[cm.end():end_pos]
+                tablename_match = re.search(r'__tablename__\s*=\s*["\']([^"\']+)["\']', body)
+                if "BaseModel" not in bases and not tablename_match:
+                    continue
+                tname = tablename_match.group(1).lower() if tablename_match else re.sub(r'(?<!^)(?=[A-Z])', '_', cls_name).lower()
+                columns = []
+                # Annotated fields (Pydantic / SQLAlchemy 2.0 Mapped)
+                for line in body.splitlines():
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("#") or stripped.startswith("def ") or stripped.startswith("async def ") or stripped.startswith("@"):
+                        continue
+                    # Column(...) style
+                    sa_col = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:mapped_)?[Cc]olumn\(([^)]*)\)', stripped)
+                    if sa_col:
+                        cname = sa_col.group(1)
+                        args = sa_col.group(2)
+                        ctype = args.split(",")[0].strip() if args else "Any"
+                        columns.append({
+                            "name": cname,
+                            "type": ctype[:40],
+                            "is_pk": "primary_key=True" in args,
+                            "is_fk": "ForeignKey" in args,
+                            "nullable": "nullable=False" not in args and "primary_key=True" not in args,
+                        })
+                        continue
+                    ann_match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([^=#\n]+)', stripped)
+                    if ann_match and ann_match.group(1) not in ("model_config", "__tablename__"):
+                        cname = ann_match.group(1)
+                        ctype = ann_match.group(2).strip()
+                        is_opt = ctype.startswith("Optional[") or "| None" in ctype or "None |" in ctype
+                        is_pk = cname == "id"
+                        is_fk = cname.endswith("_id") and not is_pk
+                        columns.append({
+                            "name": cname,
+                            "type": ctype[:40],
+                            "is_pk": is_pk,
+                            "is_fk": is_fk,
+                            "nullable": is_opt and not is_pk,
+                        })
+                results.append({"name": tname, "file_path": file_path, "columns": columns})
+        elif file_path.endswith(".ts") or file_path.endswith(".tsx"):
+            ts_blocks = re.finditer(r'(?:export\s+)?(?:interface|type)\s+([A-Za-z0-9_]+)\s*(?:=\s*)?\{([^}]*)\}', content, re.DOTALL)
+            for bm in ts_blocks:
+                tname = re.sub(r'(?<!^)(?=[A-Z])', '_', bm.group(1)).lower()
+                columns = []
+                for line in bm.group(2).splitlines():
+                    fm = re.match(r'^\s*([a-zA-Z_][a-zA-Z0-9_]*)(\?)?\s*:\s*([^;\n]+)', line)
+                    if fm:
+                        cname = fm.group(1)
+                        is_opt = fm.group(2) == "?"
+                        ctype = fm.group(3).strip().rstrip(";")
+                        is_pk = cname == "id"
+                        is_fk = cname.endswith("Id") and not is_pk
+                        columns.append({
+                            "name": cname,
+                            "type": ctype[:40],
+                            "is_pk": is_pk,
+                            "is_fk": is_fk,
+                            "nullable": is_opt and not is_pk,
+                        })
+                results.append({"name": tname, "file_path": file_path, "columns": columns})
+        return results
 

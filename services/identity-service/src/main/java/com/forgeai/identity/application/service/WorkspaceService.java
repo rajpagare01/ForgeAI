@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 @Service
 public class WorkspaceService {
 
+    private static final int MAX_MAP_ENTRIES = 10_000;
+
     private final WorkspaceRepository workspaceRepository;
     private final OrganizationMembershipRepository organizationMembershipRepository;
     private final OrganizationRepository organizationRepository;
@@ -50,6 +52,9 @@ public class WorkspaceService {
             throw new IllegalArgumentException("User ID is required to get or create a personal workspace");
         }
 
+        if (userLocks.size() > MAX_MAP_ENTRIES) {
+            userLocks.clear();
+        }
         synchronized (userLocks.computeIfAbsent(userId, k -> new Object())) {
             Optional<Workspace> existing = workspaceRepository.findByTypeAndOwnerUserId(WorkspaceType.PERSONAL, userId);
             if (existing.isPresent()) {
@@ -97,6 +102,9 @@ public class WorkspaceService {
             throw new IllegalArgumentException("Organization ID is required to get or create an organization workspace");
         }
 
+        if (orgLocks.size() > MAX_MAP_ENTRIES) {
+            orgLocks.clear();
+        }
         synchronized (orgLocks.computeIfAbsent(organizationId, k -> new Object())) {
             Optional<Workspace> existing = workspaceRepository.findByTypeAndOrganizationId(WorkspaceType.ORGANIZATION, organizationId);
             if (existing.isPresent()) {

@@ -47,6 +47,12 @@ class DependencyMapCollector:
                 pair = (src_mod, tgt_mod)
                 module_links[pair] = module_links.get(pair, 0) + 1
 
+            edge_fp = getattr(e, "file_path", None)
+            if not edge_fp and isinstance(getattr(e, "metadata", None), dict):
+                edge_fp = e.metadata.get("file_path")
+            if edge_fp:
+                cited_files.add(edge_fp)
+
             edge_details.append({
                 "source": src,
                 "target": tgt,
@@ -57,15 +63,29 @@ class DependencyMapCollector:
         sorted_deps = sorted(
             cross_repo_deps,
             key=lambda d: (
-                getattr(d, "target_repository_name", None) or str(getattr(d, "target_repository_id", "")),
+                getattr(d, "target_repository_name", None)
+                or (d.metadata.get("target_repository_name") if isinstance(getattr(d, "metadata", None), dict) else None)
+                or getattr(d, "target_reference", None)
+                or str(getattr(d, "target_repository_id", "")),
                 getattr(d, "dependency_type", "") or "",
                 str(getattr(d, "id", "")),
             )
         )
 
         for d in sorted_deps:
-            if hasattr(d, "manifest_path") and d.manifest_path:
-                cited_files.add(d.manifest_path)
+            manifest = getattr(d, "manifest_path", None)
+            if manifest:
+                cited_files.add(manifest)
+            meta = getattr(d, "metadata", None)
+            if isinstance(meta, dict):
+                meta_path = meta.get("manifest_path") or meta.get("file_path")
+                if meta_path:
+                    cited_files.add(meta_path)
+            src_ref = getattr(d, "source_reference", None)
+            if isinstance(src_ref, str) and src_ref.strip():
+                candidate_path = src_ref.split(":")[0].strip() if ":" in src_ref else src_ref.strip()
+                if "/" in candidate_path or "." in candidate_path:
+                    cited_files.add(candidate_path)
 
         citations = [
             {"file_path": fp, "commit_sha": commit_sha}
@@ -106,10 +126,21 @@ class DependencyMapCollector:
 
         if sorted_deps:
             for d in sorted_deps:
-                target_name = getattr(d, "target_repository_name", None) or "External Service"
+                meta = d.metadata if isinstance(getattr(d, "metadata", None), dict) else {}
+                target_name = (
+                    getattr(d, "target_repository_name", None)
+                    or meta.get("target_repository_name")
+                    or getattr(d, "target_reference", None)
+                    or getattr(d, "source_reference", None)
+                    or str(getattr(d, "target_repository_id", "External Service"))
+                )
                 dep_type = getattr(d, "dependency_type", "RUNTIME")
-                scope = getattr(d, "scope", "ORGANIZATION")
-                version = getattr(d, "version_spec", "latest") or "unspecified"
+                scope = getattr(d, "scope", None) or getattr(d, "confidence", None) or "ORGANIZATION"
+                version = (
+                    getattr(d, "version_spec", None)
+                    or meta.get("version")
+                    or getattr(d, "evidence_type", "DISCOVERED")
+                )
                 lines.append(f"| **{target_name}** | `{dep_type}` | `{scope}` | `{version}` |")
         else:
             lines.append("| No external repository dependencies declared | `STANDALONE` | `INTERNAL` | `N/A` |")
