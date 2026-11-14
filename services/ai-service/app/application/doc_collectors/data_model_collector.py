@@ -114,11 +114,13 @@ class DataModelCollector:
         if sorted_table_names:
             for tname in sorted_table_names:
                 cols = tables[tname]["columns"]
-                lines.append(f"    {tname} {{")
+                safe_tname = re.sub(r"[^A-Za-z0-9_]", "_", tname).strip("_") or "entity"
+                lines.append(f"    {safe_tname} {{")
                 for c in cols[:10]:  # Limit diagram fields to prevent Mermaid overload
-                    ctype = c["type"].replace(" ", "_").replace("(", "_").replace(")", "")
+                    ctype = re.sub(r"[^A-Za-z0-9_]", "_", str(c["type"])).strip("_") or "string"
+                    cname = re.sub(r"[^A-Za-z0-9_]", "_", str(c["name"])).strip("_") or "field"
                     col_marker = "PK" if c.get("is_pk") else ("FK" if c.get("is_fk") else "")
-                    lines.append(f"        {ctype} {c['name']} {col_marker}".strip())
+                    lines.append(f"        {ctype} {cname} {col_marker}".strip())
                 lines.append("    }")
 
             for rel in unique_rels:

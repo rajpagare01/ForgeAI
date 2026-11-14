@@ -1007,6 +1007,18 @@ If no defects or risks are detected, provide positive validation findings with s
             sanitized_summary,
             flags=re.IGNORECASE,
         )
+        # Strip SECTION 4 header and raw JSON findings block (already parsed into structured_review_findings)
+        sanitized_summary = re.sub(
+            r"(?im)^[ \t]*#{0,4}[ \t]*\*?\*?SECTION\s*4\s*:.*?$",
+            "",
+            sanitized_summary,
+        )
+        sanitized_summary = re.sub(
+            r"```(?:json)?\s*\[\s*\{.*?\}\s*\]\s*`{0,3}",
+            "",
+            sanitized_summary,
+            flags=re.DOTALL,
+        ).strip()
 
         analysis = Analysis(
             organization_id=organization_id,
