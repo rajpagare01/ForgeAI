@@ -134,4 +134,5 @@ jobs:
       - name: Validate Prod Compose Config
         env:
           POSTGRES_PASSWORD: ci-prod-validation-password
+          GITHUB_TOKEN_ENCRYPTION_KEY: ${{ secrets.GITHUB_TOKEN_ENCRYPTION_KEY || 'ci-prod-validation-encryption-key-32b' }}
         run: docker compose -f docker-compose.prod.yml config -q
